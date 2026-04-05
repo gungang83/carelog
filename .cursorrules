@@ -1,0 +1,47 @@
+Carelog Project: Dental OQ Rules
+
+1. Project Context
+
+Project Name: 덴탈 오큐 (Carelog Record)
+
+Goal: 치과 진료실 상담 기록 디지털화 및 환자 리포트 생성.
+
+Tone & Manner: Clean Blue & White (Medical style).
+
+2. Technical Stack
+
+Framework: Next.js (App Router)
+
+Database: Supabase (PostgreSQL)
+
+UI: Tailwind CSS, shadcn/ui
+
+Storage: Supabase Storage ('consultation-images' bucket)
+
+3. Database Schema (IMPORTANT)
+
+모든 테이블 이름은 소문자로 작성합니다.
+
+Table: patient
+
+Columns: id, name, chart_no, phone, org_id, created_at
+
+Table: consultation
+
+Columns: id, patient_id, content, image_urls (jsonb), prescriptions (jsonb), created_at
+
+4. Coding Standards
+
+API 연동 시 app/actions/ 경로에 Server Actions를 작성하여 관리합니다.
+
+Supabase 클라이언트는 lib/supabase/ 경로에 설정된 것을 재사용합니다.
+
+이미지 업로드 시 파일명 중복 방지를 위해 Date.now() 또는 UUID를 활용합니다.
+
+에러 발생 시 사용자 친화적인 메시지를 UI에 노출합니다.
+
+5. Collaboration Policy
+
+새로운 기능을 구현하기 전 project_status.md를 먼저 읽어 현재 진행 상황을 파악하세요.
+
+기능 구현 완료 후 project_status.md의 진행 상황을 업데이트하도록 사용자에게 제안하세요.
