@@ -1,44 +1,50 @@
-🦷 프로젝트명: 덴탈 오큐 (Carelog Record)
+🦷 프로젝트명: carelog
 
-마지막 업데이트: 2026-04-03 (최종 해결 완료)
+마지막 업데이트: 2026-04-05
 담당: 송정현 대표님 & 구비서(Gemini)
 
-1. 프로젝트 개요
+1. 프로젝트 현황 (Current Status)
 
-치과 진료실에서 상담 내용을 기록하고, 사진 및 제품 처방을 포함하여 환자에게 디지털 리포트를 전달하는 서비스.
+배포 주소: https://carelog-tau.vercel.app
 
-2. 현재 기술 스택
+최근 작업: 모바일 환경에서 고화질 이미지 업로드 시 발생하는 Vercel 서버 타임아웃(10초) 해결을 위해 클라이언트 단(브라우저) 이미지 압축 및 리사이징 로직 적용.
 
-Frontend: Next.js (App Router), Tailwind CSS
+2. 기술 스택 (Tech Stack)
 
-Database: Supabase (Table: patient, consultation)
+Frontend: Next.js (App Router), Tailwind CSS, shadcn/ui
+
+Backend/DB: Supabase (Table: patient, consultation)
 
 Storage: Supabase Storage (Bucket: consultation-images)
 
-3. 구현된 기능 (Completed)
+Deployment: GitHub + Vercel (CI/CD 자동화 완료)
 
-[x] 환자 검색 및 신규 등록: 소문자 patient 테이블 연동 완료.
+3. 구현 완료 사항 (Completed)
 
-[x] 상담 내용 및 이미지 업로드: consultation 테이블 및 Storage 연동 완료.
+[x] 환자 관리: 이름 검색 및 신규 환자 등록 기능 (ID 타입 불일치 및 404 에러 해결).
 
-[x] 결함 해결 (CRITICAL): 검색 결과 클릭 시 undefined ID 전달 및 404 에러 완벽 해결.
+[x] 상담 기록: 텍스트 및 다중 이미지 업로드 기능.
 
-[x] 처방 UI 구현: 칫솔, 치약 등 판매 제품 클릭형 선택 인터페이스 구현 및 prescriptions 필드 저장 로직 완료.
+[x] 제품 처방(Prescription): 칫솔, 치약 등 관리 용품 클릭 선택 및 jsonb 데이터 저장 UI.
 
-[x] 데이터 타입 정밀 점검: Supabase bigint와 URL params 간의 타입 매칭 성공.
+[x] 모바일 최적화: Safari 등 모바일 브라우저 대응 및 업로드 전 이미지 압축 로직 추가.
+
+[x] 배포 환경: Vercel을 통한 실시간 웹 서비스 배포 및 환경 변수(ENV) 설정 완료.
 
 4. 진행 예정 사항 (Backlog)
 
-[ ] 과거 내역 타임라인: 환자 상세 페이지 하단에 이전 상담 이력을 시간순으로 출력.
+[ ] 상담 이력 타임라인: 환자 상세 페이지 하단에 과거 상담 기록을 날짜순으로 나열.
 
-[ ] 환자용 모바일 뷰어: 전용 링크 생성 및 리포트 페이지 (/view/[id]).
+[ ] 환자용 리포트 뷰어: 환자가 카톡 링크로 접속했을 때 보는 깔끔한 전용 결과 페이지 (/view/[id]).
 
-[ ] 알림 전송 기능: 카카오 알림톡/문자 API 연동하여 상담 리포트 링크 발송.
+[ ] 알림톡/문자 연동: 상담 완료 시 자동으로 환자에게 리포트 링크 발송 기능.
 
-🤖 구비서(AI)를 위한 작업 가이드
+🤖 구비서(AI) 가이드
 
-데이터 정합성: 모든 테이블 명은 소문자(patient, consultation)를 고수할 것.
+모든 파일 수정 및 기능 추가 시 carelog라는 프로젝트 명칭을 고수할 것.
 
-Next.js 15+ 대응: params는 항상 await를 사용하는 최신 컨벤션을 유지할 것.
+DB 테이블명은 항상 소문자(patient, consultation)를 사용할 것.
 
-UI 디자인: 예미안치과의 신뢰감을 주는 'Clean Blue & White' 테마를 유지하며, 태블릿 터치 환경을 최우선으로 고려할 것.
+새로운 코드를 push하면 Vercel에서 자동으로 배포되므로, 빌드 에러가 없는지 항상 확인할 것.
+
+디자인은 'Clean Blue & White' 테마를 유지하며 태블릿/모바일 터치 편의성을 최우선으로 할 것.
