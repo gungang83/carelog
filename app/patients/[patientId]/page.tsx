@@ -2,6 +2,7 @@ import Link from "next/link";
 import { getPatientById } from "@/app/actions/patients";
 import { getConsultationsByPatientId } from "@/app/actions/consultations";
 import { ConsultationForm } from "@/components/consultation-form";
+import { ConsultationHistory } from "@/components/consultation-history";
 
 type PageProps = { params: Promise<{ patientId: string }> };
 
@@ -104,105 +105,7 @@ export default async function PatientConsultationPage({ params }: PageProps) {
           </div>
         </div>
 
-        {consultations.length === 0 ? (
-          <p className="mt-6 text-sm text-slate-600">
-            아직 저장된 상담 기록이 없습니다.
-          </p>
-        ) : (
-          <ol className="mt-6 space-y-4">
-            {consultations.map((c) => {
-              const created = new Date(c.created_at);
-              const createdLabel = Number.isNaN(created.getTime())
-                ? c.created_at
-                : created.toLocaleString("ko-KR", {
-                    year: "numeric",
-                    month: "2-digit",
-                    day: "2-digit",
-                    hour: "2-digit",
-                    minute: "2-digit",
-                  });
-
-              const urls = c.image_urls ?? [];
-              const prescriptions = c.prescriptions ?? [];
-
-              const getIconLabel = (name: string) => {
-                const map: Record<string, string> = {
-                  "미세모 칫솔": "칫솔",
-                  "고불소 치약": "치약",
-                  "치간 칫솔": "치간",
-                  "무알콜 가글": "가글",
-                };
-                const label = map[name] ?? name;
-                return label.length > 3 ? label.slice(0, 3) : label;
-              };
-              return (
-                <li
-                  key={c.id}
-                  className="rounded-2xl border border-sky-100 bg-white p-4 shadow-sm"
-                >
-                  <div className="flex flex-col gap-1">
-                    <div className="text-xs font-semibold text-slate-500">
-                      {createdLabel}
-                    </div>
-                  </div>
-
-                  <p className="mt-3 whitespace-pre-wrap text-sm leading-6 text-slate-800">
-                    {c.content}
-                  </p>
-
-                  {urls.length ? (
-                    <div className="mt-4">
-                      <div className="text-xs font-semibold text-slate-600">
-                        이미지 ({urls.length})
-                      </div>
-                      <div className="mt-2 grid grid-cols-2 gap-3 sm:grid-cols-3">
-                        {urls.map((url, idx) => (
-                          // eslint-disable-next-line @next/next/no-img-element
-                          <img
-                            key={`${c.id}-${idx}`}
-                            src={url}
-                            alt={`consultation-${c.id}-img-${idx}`}
-                            className="h-28 w-full rounded-xl border border-sky-100 object-cover shadow-sm"
-                          />
-                        ))}
-                      </div>
-                    </div>
-                  ) : null}
-
-                  {prescriptions.length ? (
-                    <div className="mt-4">
-                      <div className="text-xs font-semibold text-slate-600">
-                        처방된 제품
-                      </div>
-                      <div className="mt-2 flex flex-wrap gap-2">
-                        {prescriptions.map((name) => (
-                          <div
-                            key={`${c.id}-${name}`}
-                            className="inline-flex items-center gap-2 rounded-full border border-sky-100 bg-sky-50 px-3 py-2"
-                          >
-                            <span className="flex h-7 w-7 items-center justify-center rounded-full bg-white text-xs font-bold text-sky-700 shadow-sm">
-                              {getIconLabel(name)}
-                            </span>
-                            <span className="text-xs font-semibold text-slate-800">
-                              {name}
-                            </span>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  ) : null}
-
-                  <div className="mt-4 text-xs text-slate-500">
-                    환자 뷰어 링크:{" "}
-                    <span className="font-mono text-slate-600">
-                      /view/{c.id}
-                    </span>
-                  </div>
-                </li>
-              );
-            })}
-          </ol>
-        )}
+        <ConsultationHistory consultations={consultations} />
       </section>
     </div>
   );

@@ -6,15 +6,13 @@ import {
   consultationTable,
 } from "@/lib/supabase/config";
 import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
 
 export async function saveConsultation(
   patientId: string,
   content: string,
   formData: FormData,
-): Promise<
-  | { ok: true; consultationId: string }
-  | { ok: false; message: string }
-> {
+): Promise<{ ok: false; message: string } | never> {
   const trimmed = content.trim();
   if (!trimmed) {
     return { ok: false, message: "상담 내용을 입력해 주세요." };
@@ -87,13 +85,13 @@ export async function saveConsultation(
     if (!inserted?.id) {
       return { ok: false, message: "DB 저장 실패: consultation id가 없습니다." };
     }
-
-    revalidatePath(`/patients/${patientId}`);
-    return { ok: true, consultationId: inserted.id };
   } catch (e) {
     const message = e instanceof Error ? e.message : "저장에 실패했습니다.";
     return { ok: false, message };
   }
+
+  revalidatePath(`/patients/${patientId}`);
+  redirect(`/patients/${patientId}`);
 }
 
 export async function getConsultationsByPatientId(

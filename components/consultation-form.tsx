@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { saveConsultation } from "@/app/actions/consultations";
-import { useRouter } from "next/navigation";
+import { isRedirectError } from "next/dist/client/components/redirect-error";
 
 type Props = { patientId: string; patientName: string };
 
@@ -13,7 +13,6 @@ type Preview = {
 };
 
 export function ConsultationForm({ patientId, patientName }: Props) {
-  const router = useRouter();
   const [content, setContent] = useState("");
   const [message, setMessage] = useState<string | null>(null);
   const [ok, setOk] = useState(false);
@@ -114,28 +113,22 @@ export function ConsultationForm({ patientId, patientName }: Props) {
             return;
           }
 
-          const res = await saveConsultation(patientId, content, fd);
-          if (!res.ok) {
-            setOk(false);
-            setMessage(res.message);
-            return;
+          try {
+            const res = await saveConsultation(patientId, content, fd);
+            if (!res.ok) {
+              setOk(false);
+              setMessage(res.message);
+              return;
+            }
+          } catch (err) {
+            if (isRedirectError(err)) {
+              setContent("");
+              clearFiles();
+              setSelectedProducts([]);
+              return;
+            }
+            throw err;
           }
-          setOk(true);
-          const isSend = mode === "send";
-          setMessage(
-            isSend
-              ? "전송용 링크가 생성되었습니다."
-              : "상담 내용이 저장되었습니다.",
-          );
-          setContent("");
-          clearFiles();
-          setSelectedProducts([]);
-          window.alert(
-            isSend
-              ? "전송용 링크가 생성되었습니다."
-              : "상담 내용이 저장되었습니다.",
-          );
-          router.push("/");
         });
       }}
     >
