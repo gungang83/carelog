@@ -3,14 +3,14 @@
 import { useEffect, useId, useState } from "react";
 import {
   CARELOG_STATION_STORAGE_KEY,
-  STATION_PRESETS,
+  STATION_OPTIONS,
 } from "@/lib/station-storage";
 
-const PRESET_SET = new Set<string>(STATION_PRESETS);
+const OPTION_SET = new Set<string>(STATION_OPTIONS.map((o) => o.value));
 
 export function StationManager() {
   const labelId = useId();
-  const [station, setStation] = useState<string>(STATION_PRESETS[0]);
+  const [station, setStation] = useState<string>(STATION_OPTIONS[0]?.value ?? "");
   const [hydrated, setHydrated] = useState(false);
 
   useEffect(() => {
@@ -50,12 +50,12 @@ export function StationManager() {
         onChange={(e) => setStation(e.target.value)}
         className="min-h-12 w-full min-w-0 rounded-xl border border-sky-200 bg-white px-4 py-3 text-base font-medium text-slate-900 shadow-sm outline-none ring-sky-400/25 focus:border-sky-500 focus:ring-2 sm:min-w-[200px] sm:text-sm"
       >
-        {!PRESET_SET.has(station) ? (
+        {!OPTION_SET.has(station) ? (
           <option value={station}>{station}</option>
         ) : null}
-        {STATION_PRESETS.map((name) => (
-          <option key={name} value={name}>
-            {name}
+        {STATION_OPTIONS.map((option) => (
+          <option key={option.value || "unset"} value={option.value}>
+            {option.label}
           </option>
         ))}
       </select>
