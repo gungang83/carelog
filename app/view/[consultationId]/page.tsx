@@ -1,12 +1,12 @@
 import Link from "next/link";
 import { getConsultationById } from "@/app/actions/consultations";
 
-type PageProps = { params: { consultationId: string } };
+type PageProps = { params: Promise<{ consultationId: string }> };
 
 export default async function ConsultationViewPage({
   params,
 }: PageProps) {
-  const { consultationId } = params;
+  const { consultationId } = await params;
   const res = await getConsultationById(consultationId);
 
   if (!res.ok) {
@@ -83,6 +83,13 @@ export default async function ConsultationViewPage({
             <p className="mt-1 text-xs font-semibold text-slate-500">
               작성일: {createdLabel}
             </p>
+            {c.station_name ? (
+              <p className="mt-2">
+                <span className="inline-flex min-h-9 items-center rounded-full bg-sky-100 px-3 py-1.5 text-xs font-semibold text-sky-800">
+                  위치: {c.station_name}
+                </span>
+              </p>
+            ) : null}
           </div>
           <div className="text-right text-xs text-slate-500">
             ID:{" "}

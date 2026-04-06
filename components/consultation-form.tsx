@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { saveConsultation } from "@/app/actions/consultations";
+import { CARELOG_STATION_STORAGE_KEY } from "@/lib/station-storage";
 import { isRedirectError } from "next/dist/client/components/redirect-error";
 
 type Props = { patientId: string; patientName: string };
@@ -112,6 +113,16 @@ export function ConsultationForm({ patientId, patientName }: Props) {
             setMessage("개인정보 활용 및 전송 동의가 필요합니다.");
             return;
           }
+
+          let stationName = "";
+          try {
+            stationName = (
+              window.localStorage.getItem(CARELOG_STATION_STORAGE_KEY) ?? ""
+            ).trim();
+          } catch {
+            stationName = "";
+          }
+          fd.set("stationName", stationName);
 
           try {
             const res = await saveConsultation(patientId, content, fd);

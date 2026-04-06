@@ -7,6 +7,7 @@ export type ConsultationHistoryItem = {
   content: string;
   image_urls: string[] | null;
   prescriptions: string[] | null;
+  station_name: string | null;
   created_at: string;
 };
 
@@ -71,8 +72,23 @@ export function ConsultationHistory({ consultations }: Props) {
               key={c.id}
               className="rounded-2xl border border-sky-100 bg-white p-4 shadow-sm"
             >
-              <div className="text-xs font-semibold text-slate-500">
-                {createdLabel}
+              <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
+                <time
+                  dateTime={c.created_at}
+                  className="text-xs font-semibold text-slate-500"
+                >
+                  {createdLabel}
+                </time>
+                {c.station_name ? (
+                  <>
+                    <span className="text-[11px] text-sky-200" aria-hidden>
+                      ·
+                    </span>
+                    <span className="text-[11px] font-medium tracking-tight text-sky-700">
+                      {c.station_name}
+                    </span>
+                  </>
+                ) : null}
               </div>
 
               <p className="mt-3 whitespace-pre-wrap text-sm leading-6 text-slate-800">

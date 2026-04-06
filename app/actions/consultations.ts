@@ -18,6 +18,11 @@ export async function saveConsultation(
     return { ok: false, message: "상담 내용을 입력해 주세요." };
   }
 
+  const stationRaw =
+    formData.get("stationName") ?? formData.get("station_name");
+  const station_name =
+    typeof stationRaw === "string" && stationRaw.trim() ? stationRaw.trim() : null;
+
   const prescriptionsRaw = formData.get("prescriptions");
   let prescriptions: string[] = [];
   if (typeof prescriptionsRaw === "string" && prescriptionsRaw.trim()) {
@@ -75,6 +80,7 @@ export async function saveConsultation(
         content: trimmed,
         image_urls,
         prescriptions,
+        station_name,
       })
       .select("id")
       .single();
@@ -104,6 +110,7 @@ export async function getConsultationsByPatientId(
         content: string;
         image_urls: string[] | null;
         prescriptions: string[] | null;
+        station_name: string | null;
         created_at: string;
       }>;
     }
@@ -113,7 +120,9 @@ export async function getConsultationsByPatientId(
     const supabase = await createServerSupabaseClient();
     const { data, error } = await supabase
       .from(consultationTable)
-      .select("id, patient_id, content, image_urls, prescriptions, created_at")
+      .select(
+        "id, patient_id, content, image_urls, prescriptions, station_name, created_at",
+      )
       .eq("patient_id", patientId)
       .order("created_at", { ascending: false })
       .limit(50);
@@ -129,6 +138,7 @@ export async function getConsultationsByPatientId(
         content: string;
         image_urls: string[] | null;
         prescriptions: string[] | null;
+        station_name: string | null;
         created_at: string;
       }>,
     };
@@ -149,6 +159,7 @@ export async function getConsultationById(
         content: string;
         image_urls: string[] | null;
         prescriptions: string[] | null;
+        station_name: string | null;
         created_at: string;
       };
     }
@@ -158,7 +169,9 @@ export async function getConsultationById(
     const supabase = await createServerSupabaseClient();
     const { data, error } = await supabase
       .from(consultationTable)
-      .select("id, patient_id, content, image_urls, prescriptions, created_at")
+      .select(
+        "id, patient_id, content, image_urls, prescriptions, station_name, created_at",
+      )
       .eq("id", consultationId)
       .maybeSingle();
 

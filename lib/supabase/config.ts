@@ -3,6 +3,8 @@ export const patientTable =
   (process.env.NEXT_PUBLIC_SUPABASE_PATIENT_TABLE ?? "patient").toLowerCase();
 export const consultationTable =
   (process.env.NEXT_PUBLIC_SUPABASE_CONSULTATION_TABLE ?? "consultation").toLowerCase();
+export const usersTable =
+  (process.env.NEXT_PUBLIC_SUPABASE_USERS_TABLE ?? "users").toLowerCase();
 
 export const consultationBucket =
   process.env.NEXT_PUBLIC_SUPABASE_CONSULTATION_BUCKET ?? "consultation-images";
