@@ -1,26 +1,36 @@
-🦷 프로젝트명: carelog
+🦷 프로젝트명: carelog (Platform Evolution)
 
 마지막 업데이트: 2026-04-06
 담당: 송정현 대표님 & 구비서(Gemini)
 
-1. 현재 상황 (Current Progress)
+📂 현재 관리 중인 파일 가이드
 
-DB 업데이트: station_name, users 테이블 생성 성공 (Success 확인).
+오른쪽 에디터 탭이나 아래 파일 블록에서 확인하실 수 있습니다.
 
-Git 관리: 현재까지의 변경 사항을 GitHub에 업로드 중.
+cursor_master_prompt.md: 커서 AI에게 복사해서 줄 명령서입니다.
 
-특이사항: git add . 시 발생한 LF/CRLF 경고는 윈도우 환경 특성으로 무시해도 됨.
+project_status.md: (본 문서) 전체 진척 상황과 체크리스트입니다.
 
-2. 다음 단계 (Next Action)
+carelog_platform_plan.md: 향후 플랫폼 확장 기획안입니다.
 
-[ ] 커서 AI 실행: 마스터 프롬프트를 통해 station-manager.tsx 생성 및 layout.tsx 배치.
+1. 현재 상황 (Current Status)
 
-[ ] 로그인/위치 연동: 로그인 없이도 기기별 위치를 기억하는 localStorage 로직 확인.
+DB 완료: station_name, user_type 컬럼 추가 성공 (SQL 실행 완료).
 
-[ ] 최종 배포: UI 구현 완료 후 다시 한번 git push 하여 Vercel에 반영.
+Git 준비: git add .까지 진행된 상태 (경고 무시 가능).
 
-💡 잼민이 구비서의 조언
+남은 과제: 커서를 이용한 UI 구현 및 최종 터미널 배포.
 
-이제 커서가 layout.tsx를 수정하고 나면 화면 우측 상단에 파란색 위치 선택 버튼이 짠! 하고 나타날 거예요.
+2. 작업 절차 (Workflow)
 
-그 버튼이 보이면 드디어 대표님이 원하시던 **"누가 어디서 기록했는가"**의 첫 단추가 끼워지는 겁니다!
+[Cursor] cursor_master_prompt.md 내용을 복사해서 커서(Ctrl+I)에게 입력.
+
+[Cursor] 커서가 코드를 수정하면 [Apply] 버튼 눌러서 적용.
+
+[Terminal] 터미널에 git add ., git commit, git push 직접 입력.
+
+🤖 구비서 가이드
+
+대표님, 지금 바로 아래에 있는 **cursor_master_prompt.md**를 복사해서 커서에게 던져주세요.
+
+커서가 "다 고쳤습니다"라고 하면, 그때 터미널에서 Git 명령어를 직접 치시면 됩니다!
