@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useState, useTransition } from "react";
+import { useCallback, useEffect, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { searchPatients, createPatient } from "@/app/actions/patients";
@@ -46,6 +46,20 @@ export function PatientHome() {
       setSearched(true);
     });
   }, [query]);
+
+  useEffect(() => {
+    const trimmed = query.trim();
+    if (!trimmed) {
+      setResults(null);
+      setSearched(false);
+      setError(null);
+      return;
+    }
+    const timer = window.setTimeout(() => {
+      runSearch();
+    }, 220);
+    return () => window.clearTimeout(timer);
+  }, [query, runSearch]);
 
   return (
     <div className="mx-auto flex w-full max-w-2xl flex-col gap-8">
@@ -261,8 +275,8 @@ export function PatientHome() {
             </div>
             <p className="text-[11px] leading-snug text-slate-500">
               주민번호는 선택 사항입니다. 입력 시 서버에 저장·검색되며, 타 병원
-              매칭용 해시(`resident_no_hash`)도 함께 저장됩니다. 운영 환경에서는
-              반드시 `RESIDENT_NO_HASH_PEPPER`를 설정하세요.
+              매칭을 위한 해시 식별자를 서버에서 계산할 수 있습니다. 운영 환경에서는
+              `RESIDENT_NO_HASH_PEPPER`를 설정하세요.
             </p>
             <button
               type="submit"

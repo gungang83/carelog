@@ -44,15 +44,11 @@ export async function resolveResidentMatchHashForPatient(
     const supabase = await createServerSupabaseClient();
     const { data, error } = await supabase
       .from(patientTable)
-      .select("resident_no_hash, resident_no")
+      .select("resident_no")
       .eq("id", idBigint as unknown as number)
       .maybeSingle();
     if (error || !data) return null;
-    const row = data as {
-      resident_no_hash: string | null;
-      resident_no: string | null;
-    };
-    if (row.resident_no_hash?.trim()) return row.resident_no_hash.trim();
+    const row = data as { resident_no: string | null };
     const n = row.resident_no
       ? normalizeFullResidentNo(row.resident_no)
       : null;
@@ -165,7 +161,6 @@ export async function createPatient(formData: FormData): Promise<
   const chartNo = chart_no || null;
 
   let resident_no: string | null = null;
-  let resident_no_hash: string | null = null;
   if (rrnFront || rrnBack) {
     const merged = mergeResidentNoParts(rrnFront, rrnBack);
     if (!merged) {
@@ -175,7 +170,6 @@ export async function createPatient(formData: FormData): Promise<
       };
     }
     resident_no = merged;
-    resident_no_hash = hashResidentNoForMatching(merged);
   }
 
   try {
@@ -187,7 +181,6 @@ export async function createPatient(formData: FormData): Promise<
         chart_no: chartNo,
         phone,
         resident_no,
-        resident_no_hash,
       })
       .select(PATIENT_SELECT_PUBLIC)
       .single();
@@ -236,7 +229,6 @@ export async function updatePatient(formData: FormData): Promise<
   const chartNo = chart_no || null;
 
   let resident_no: string | null = null;
-  let resident_no_hash: string | null = null;
   if (rrnFront || rrnBack) {
     const merged = mergeResidentNoParts(rrnFront, rrnBack);
     if (!merged) {
@@ -246,7 +238,6 @@ export async function updatePatient(formData: FormData): Promise<
       };
     }
     resident_no = merged;
-    resident_no_hash = hashResidentNoForMatching(merged);
   }
 
   try {
@@ -258,10 +249,8 @@ export async function updatePatient(formData: FormData): Promise<
     };
     if (rrnFront || rrnBack) {
       patch.resident_no = resident_no;
-      patch.resident_no_hash = resident_no_hash;
     } else {
       patch.resident_no = null;
-      patch.resident_no_hash = null;
     }
 
     const { error } = await supabase
