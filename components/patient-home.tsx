@@ -51,6 +51,7 @@ export function PatientHome() {
   const [registerMessage, setRegisterMessage] = useState<string | null>(null);
   const [pendingSearch, startSearch] = useTransition();
   const [pendingRegister, startRegister] = useTransition();
+  const [registerOpen, setRegisterOpen] = useState(false);
   const prefill = deriveRegisterPrefill(query);
 
   const runSearch = useCallback(() => {
@@ -115,6 +116,13 @@ export function PatientHome() {
             className="inline-flex min-h-11 shrink-0 items-center justify-center rounded-xl bg-sky-600 px-6 text-sm font-semibold text-white shadow-sm shadow-sky-200 transition hover:bg-sky-700 disabled:opacity-60"
           >
             {pendingSearch ? "검색 중..." : "검색"}
+          </button>
+          <button
+            type="button"
+            onClick={() => setRegisterOpen((v) => !v)}
+            className="inline-flex min-h-11 shrink-0 items-center justify-center rounded-xl border border-sky-200 bg-white px-6 text-sm font-semibold text-sky-800 shadow-sm transition hover:bg-sky-50"
+          >
+            {registerOpen ? "등록 폼 닫기" : "새 환자 등록"}
           </button>
         </div>
         {error ? (
@@ -197,6 +205,22 @@ export function PatientHome() {
           <h2 className="text-sm font-semibold text-slate-800">
             검색 결과가 없습니다
           </h2>
+          <p className="mt-1 text-sm text-slate-600">
+            아래 정보로 새 환자를 등록할 수 있습니다.
+          </p>
+          <button
+            type="button"
+            onClick={() => setRegisterOpen(true)}
+            className="mt-4 inline-flex min-h-11 items-center justify-center rounded-xl border border-sky-200 bg-white px-5 text-sm font-semibold text-sky-800 shadow-sm hover:bg-sky-50"
+          >
+            새 환자 등록
+          </button>
+        </section>
+      ) : null}
+
+      {registerOpen ? (
+        <section className="rounded-2xl border border-dashed border-sky-200 bg-white/80 p-6 shadow-sm">
+          <h2 className="text-sm font-semibold text-slate-800">새 환자 등록</h2>
           <p className="mt-1 text-sm text-slate-600">
             아래 정보로 새 환자를 등록할 수 있습니다.
           </p>

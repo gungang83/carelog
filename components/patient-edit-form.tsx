@@ -12,18 +12,29 @@ export function PatientEditForm({ patient }: Props) {
   const router = useRouter();
   const [message, setMessage] = useState<string | null>(null);
   const [pending, start] = useTransition();
+  const [open, setOpen] = useState(false);
   const rrn = patient.resident_no;
   const defaultFront = rrn && rrn.length === 13 ? rrn.slice(0, 6) : "";
   const defaultBack = rrn && rrn.length === 13 ? rrn.slice(6) : "";
 
   return (
     <section className="rounded-2xl border border-sky-100 bg-white p-6 shadow-sm">
-      <h2 className="text-sm font-semibold text-slate-800">환자 정보 수정</h2>
+      <div className="flex items-center justify-between gap-3">
+        <h2 className="text-sm font-semibold text-slate-800">환자 정보 수정</h2>
+        <button
+          type="button"
+          onClick={() => setOpen((v) => !v)}
+          className="min-h-11 rounded-xl border border-sky-200 bg-sky-50 px-4 text-sm font-semibold text-sky-800 shadow-sm hover:bg-sky-100"
+        >
+          {open ? "수정 닫기" : "정보 수정"}
+        </button>
+      </div>
       <p className="mt-1 text-xs text-slate-500">
         주민등록번호는 앞·뒤 각각 정확히 입력해야 저장됩니다. 비우면 저장 시
         주민번호 항목은 삭제됩니다.
       </p>
-      <form
+      {open ? (
+        <form
         className="mt-4 grid gap-4"
         action={(fd) => {
           setMessage(null);
@@ -132,7 +143,12 @@ export function PatientEditForm({ patient }: Props) {
             {message}
           </p>
         ) : null}
-      </form>
+        </form>
+      ) : (
+        <p className="mt-4 text-sm text-slate-500">
+          이름, 연락처, 차트번호, 주민번호를 수정하려면 `정보 수정` 버튼을 눌러주세요.
+        </p>
+      )}
     </section>
   );
 }
