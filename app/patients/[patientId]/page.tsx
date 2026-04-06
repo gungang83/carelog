@@ -3,14 +3,14 @@ import { getPatientById } from "@/app/actions/patients";
 import { getConsultationsByPatientId } from "@/app/actions/consultations";
 import { ConsultationForm } from "@/components/consultation-form";
 import { ConsultationHistory } from "@/components/consultation-history";
+import { PatientEditForm } from "@/components/patient-edit-form";
+import { formatPhoneForList } from "@/lib/patient-search";
+import { formatResidentNoForList } from "@/lib/rrn-core";
 
 type PageProps = { params: Promise<{ patientId: string }> };
 
 export default async function PatientConsultationPage({ params }: PageProps) {
   const { patientId } = await params;
-
-  // eslint-disable-next-line no-console
-  console.log("[patient page] 전달받은 ID:", patientId);
 
   if (!patientId || patientId.trim() === "" || patientId === "undefined") {
     return (
@@ -58,6 +58,8 @@ export default async function PatientConsultationPage({ params }: PageProps) {
   const consultRes = await getConsultationsByPatientId(patient.id);
 
   const consultations = consultRes.ok ? consultRes.consultations : [];
+  const phoneMasked = formatPhoneForList(patient.phone);
+  const rrnMasked = formatResidentNoForList(patient.resident_no);
 
   return (
     <div className="mx-auto flex w-full max-w-2xl flex-col gap-8 pb-16">
@@ -79,9 +81,12 @@ export default async function PatientConsultationPage({ params }: PageProps) {
         </h1>
         <p className="mt-1 text-sm text-slate-600">
           {patient.chart_no ? `차트번호 ${patient.chart_no}` : "차트번호 없음"}
-          {patient.phone ? ` · ${patient.phone}` : " · 연락처 없음"}
+          {phoneMasked ? ` · ${phoneMasked}` : " · 연락처 없음"}
+          {rrnMasked ? ` · 주민번호: ${rrnMasked}` : ""}
         </p>
       </header>
+
+      <PatientEditForm patient={patient} />
 
       <section className="rounded-2xl border border-sky-100 bg-white p-6 shadow-sm shadow-sky-100/60">
         <ConsultationForm

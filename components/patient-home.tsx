@@ -5,6 +5,21 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { searchPatients, createPatient } from "@/app/actions/patients";
 import type { PatientRow } from "@/lib/types/database";
+import { formatPhoneForList } from "@/lib/patient-search";
+import { formatResidentNoForList } from "@/lib/rrn-core";
+
+function patientMetaSubtitle(p: PatientRow) {
+  const phoneLabel = formatPhoneForList(p.phone);
+  const rrnMasked = formatResidentNoForList(p.resident_no);
+  const rrnLabel = rrnMasked ? `주민번호: ${rrnMasked}` : null;
+  const chartLabel =
+    p.chart_no != null && String(p.chart_no).trim()
+      ? `차트: ${String(p.chart_no).trim()}`
+      : null;
+  const parts = [phoneLabel, rrnLabel, chartLabel].filter(Boolean);
+  if (!parts.length) return null;
+  return `(${parts.join(" / ")})`;
+}
 
 export function PatientHome() {
   const router = useRouter();
@@ -42,7 +57,8 @@ export function PatientHome() {
           환자 검색
         </label>
         <p className="mt-1 text-xs text-slate-500">
-          이름 또는 연락처로 검색하세요.
+          이름, 연락처(뒤 4자리·전체·하이픈 무관), 차트번호(포함), 주민번호
+          앞자리·뒷자리 첫 숫자 등으로 검색할 수 있어요.
         </p>
         <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-center">
           <input
@@ -53,7 +69,7 @@ export function PatientHome() {
             onKeyDown={(e) => {
               if (e.key === "Enter") runSearch();
             }}
-            placeholder="예: 홍길동, 010..."
+            placeholder="이름 · 전화 · 차트 · 생년월일(주민앞) 등"
             className="min-h-11 flex-1 rounded-xl border border-sky-200 bg-sky-50/50 px-4 text-slate-900 outline-none ring-sky-400/40 placeholder:text-slate-400 focus:border-sky-400 focus:ring-2"
           />
           <button
@@ -91,17 +107,9 @@ export function PatientHome() {
               const patientId =
                 patientIdRaw == null ? null : patientIdRaw.trim();
 
-              // 디버깅: 실제로 환자 ID가 Link로 전달되는지 확인
-              // eslint-disable-next-line no-console
-              console.log("[patient-home] search result row:", {
-                name: p.name,
-                rawId,
-                patientId,
-                row: p,
-              });
-
               // bigint(id)는 URL로 전달되면 숫자 문자열이어야 합니다.
               const isValid = !!patientId && /^\d+$/.test(patientId);
+              const meta = patientMetaSubtitle(p);
 
               return (
                 <li
@@ -111,14 +119,24 @@ export function PatientHome() {
                   {isValid ? (
                     <Link
                       href={`/patients/${patientId}`}
-                      className="group flex flex-col gap-0.5 rounded-lg px-2 py-2 transition hover:bg-sky-50 sm:flex-row sm:items-center sm:justify-between"
+                      className="group flex min-h-[3rem] flex-col gap-1 rounded-xl px-2 py-3 transition hover:bg-sky-50 sm:flex-row sm:items-center sm:justify-between sm:gap-4"
                     >
-                      <span className="font-medium text-slate-900 group-hover:text-sky-800">
-                        {p.name}
-                      </span>
-                      <span className="text-sm text-slate-500">
-                        {p.chart_no ? `차트번호 ${p.chart_no}` : "차트번호 없음"}
-                        {p.phone ? ` · ${p.phone}` : ""}
+                      <div className="min-w-0 flex-1">
+                        <span className="font-semibold text-slate-900 group-hover:text-sky-800">
+                          {p.name}
+                        </span>
+                        {meta ? (
+                          <div className="mt-1 text-xs leading-snug text-slate-500 sm:text-sm">
+                            {meta}
+                          </div>
+                        ) : (
+                          <div className="mt-1 text-xs text-slate-400">
+                            연락처·주민번호·차트 없음
+                          </div>
+                        )}
+                      </div>
+                      <span className="shrink-0 text-xs font-semibold text-sky-600 group-hover:text-sky-700 sm:text-sm">
+                        상담 기록 →
                       </span>
                     </Link>
                   ) : (
@@ -206,6 +224,46 @@ export function PatientHome() {
                 className="mt-1 w-full min-h-11 rounded-xl border border-sky-200 px-3 text-slate-900 outline-none focus:border-sky-400 focus:ring-2 focus:ring-sky-400/30"
               />
             </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label
+                  htmlFor="resident_no_front"
+                  className="text-xs font-medium text-slate-600"
+                >
+                  주민등록번호 앞 6자리
+                </label>
+                <input
+                  id="resident_no_front"
+                  name="resident_no_front"
+                  inputMode="numeric"
+                  maxLength={6}
+                  autoComplete="off"
+                  placeholder="YYMMDD"
+                  className="mt-1 w-full min-h-11 rounded-xl border border-sky-200 px-3 font-mono text-slate-900 outline-none focus:border-sky-400 focus:ring-2 focus:ring-sky-400/30"
+                />
+              </div>
+              <div>
+                <label
+                  htmlFor="resident_no_back"
+                  className="text-xs font-medium text-slate-600"
+                >
+                  뒤 7자리
+                </label>
+                <input
+                  id="resident_no_back"
+                  name="resident_no_back"
+                  inputMode="numeric"
+                  maxLength={7}
+                  autoComplete="off"
+                  className="mt-1 w-full min-h-11 rounded-xl border border-sky-200 px-3 font-mono text-slate-900 outline-none focus:border-sky-400 focus:ring-2 focus:ring-sky-400/30"
+                />
+              </div>
+            </div>
+            <p className="text-[11px] leading-snug text-slate-500">
+              주민번호는 선택 사항입니다. 입력 시 서버에 저장·검색되며, 타 병원
+              매칭용 해시(`resident_no_hash`)도 함께 저장됩니다. 운영 환경에서는
+              반드시 `RESIDENT_NO_HASH_PEPPER`를 설정하세요.
+            </p>
             <button
               type="submit"
               disabled={pendingRegister}

@@ -3,10 +3,63 @@
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { patientTable } from "@/lib/supabase/config";
 import type { PatientRow } from "@/lib/types/database";
+import {
+  escapeIlike,
+  ilikeOrFragment,
+  phoneSearchFragments,
+} from "@/lib/patient-search";
+import {
+  mergeResidentNoParts,
+  normalizeFullResidentNo,
+  residentNoSearchPatterns,
+} from "@/lib/rrn-core";
+import { hashResidentNoForMatching } from "@/lib/rrn-hash";
 import { revalidatePath } from "next/cache";
 
-function escapeIlike(q: string) {
-  return q.replace(/\\/g, "\\\\").replace(/%/g, "\\%").replace(/_/g, "\\_");
+const PATIENT_SELECT_PUBLIC =
+  "id, name, chart_no, phone, resident_no, created_at";
+
+function mapPatientRow(row: unknown): PatientRow | null {
+  const r = row as Record<string, unknown>;
+  const rawId = r?.id ?? r?.ID ?? r?.patient_id ?? r?.patientId;
+  if (rawId == null) return null;
+  const id = String(rawId).trim();
+  if (!/^\d+$/.test(id)) return null;
+  return {
+    id,
+    name: String(r.name ?? ""),
+    chart_no: r.chart_no != null ? String(r.chart_no) : null,
+    phone: r.phone != null ? String(r.phone) : null,
+    resident_no: r.resident_no != null ? String(r.resident_no) : null,
+    created_at: String(r.created_at ?? ""),
+  };
+}
+
+/** 상담 저장·외부 매칭 연동 시 환자 단위 고유 해시(주민번호 기반). */
+export async function resolveResidentMatchHashForPatient(
+  patientId: string,
+): Promise<string | null> {
+  try {
+    const idBigint = BigInt(patientId);
+    const supabase = await createServerSupabaseClient();
+    const { data, error } = await supabase
+      .from(patientTable)
+      .select("resident_no_hash, resident_no")
+      .eq("id", idBigint as unknown as number)
+      .maybeSingle();
+    if (error || !data) return null;
+    const row = data as {
+      resident_no_hash: string | null;
+      resident_no: string | null;
+    };
+    if (row.resident_no_hash?.trim()) return row.resident_no_hash.trim();
+    const n = row.resident_no
+      ? normalizeFullResidentNo(row.resident_no)
+      : null;
+    return n ? hashResidentNoForMatching(n) : null;
+  } catch {
+    return null;
+  }
 }
 
 export async function searchPatients(
@@ -17,14 +70,25 @@ export async function searchPatients(
     return { ok: true, patients: [] };
   }
   try {
-    // 검색은 name, chart_no, phone 필드를 대상으로 수행
     const supabase = await createServerSupabaseClient();
     const term = `%${escapeIlike(q)}%`;
-    const quoted = `"${term.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`;
+    const orParts = new Set<string>([
+      `name.${ilikeOrFragment(term)}`,
+      `chart_no.${ilikeOrFragment(term)}`,
+      `phone.${ilikeOrFragment(term)}`,
+    ]);
+    for (const frag of phoneSearchFragments(q)) {
+      const phonePat = `%${escapeIlike(frag)}%`;
+      orParts.add(`phone.${ilikeOrFragment(phonePat)}`);
+    }
+    for (const frag of residentNoSearchPatterns(q)) {
+      const rrnPat = `%${escapeIlike(frag)}%`;
+      orParts.add(`resident_no.${ilikeOrFragment(rrnPat)}`);
+    }
     const { data, error } = await supabase
       .from(patientTable)
-      .select("id, name, chart_no, phone, created_at")
-      .or(`name.ilike.${quoted},chart_no.ilike.${quoted},phone.ilike.${quoted}`)
+      .select(PATIENT_SELECT_PUBLIC)
+      .or([...orParts].join(","))
       .order("name", { ascending: true })
       .limit(50);
 
@@ -32,21 +96,7 @@ export async function searchPatients(
       return { ok: false, message: error.message };
     }
     const patients = (data ?? [])
-      .map((row) => {
-        const r = row as any;
-        // PK 컬럼명이 환경에 따라 조금 다를 수 있어(예: "ID" vs "id") 최대한 안전하게 추출합니다.
-        const rawId = r?.id ?? r?.ID ?? r?.patient_id ?? r?.patientId;
-        if (rawId == null) return null;
-        const id = String(rawId).trim();
-        // bigint(id)는 URL/쿼리로 전달되기 전에 숫자 문자열인지 강제합니다.
-        if (!/^\d+$/.test(id)) return null;
-        return {
-          ...r,
-          id,
-          chart_no: r?.chart_no ?? null,
-          phone: r?.phone ?? null,
-        } as PatientRow;
-      })
+      .map((row) => mapPatientRow(row))
       .filter(Boolean) as PatientRow[];
 
     return { ok: true, patients };
@@ -76,9 +126,8 @@ export async function getPatientById(
     const supabase = await createServerSupabaseClient();
     const { data, error } = await supabase
       .from(patientTable)
-      .select("id, name, chart_no, phone, created_at")
-      // bigint 컬럼일 경우 number로 명시적으로 맞춰줍니다.
-      .eq("id", idBigint as any)
+      .select(PATIENT_SELECT_PUBLIC)
+      .eq("id", idBigint as unknown as number)
       .maybeSingle();
 
     if (error) {
@@ -87,19 +136,11 @@ export async function getPatientById(
     if (!data) {
       return { ok: false, message: "환자를 찾을 수 없습니다." };
     }
-    return {
-      ok: true,
-      patient: {
-        ...(data as any),
-        id: (() => {
-          const r = data as any;
-          const rawId = r?.id ?? r?.ID ?? r?.patient_id ?? r?.patientId;
-          return rawId == null ? "" : String(rawId);
-        })(),
-        chart_no: (data as any).chart_no ?? null,
-        phone: (data as any).phone ?? null,
-      } as PatientRow,
-    };
+    const patient = mapPatientRow(data);
+    if (!patient) {
+      return { ok: false, message: "환자를 찾을 수 없습니다." };
+    }
+    return { ok: true, patient };
   } catch (e) {
     const message = e instanceof Error ? e.message : "조회에 실패했습니다.";
     return { ok: false, message };
@@ -113,6 +154,8 @@ export async function createPatient(formData: FormData): Promise<
   const name = String(formData.get("name") ?? "").trim();
   const chart_no = String(formData.get("chart_no") ?? "").trim();
   const phoneRaw = String(formData.get("phone") ?? "").trim();
+  const rrnFront = String(formData.get("resident_no_front") ?? "").trim();
+  const rrnBack = String(formData.get("resident_no_back") ?? "").trim();
 
   if (!name) {
     return { ok: false, message: "이름을 입력해 주세요." };
@@ -121,12 +164,32 @@ export async function createPatient(formData: FormData): Promise<
   const phone = phoneRaw || null;
   const chartNo = chart_no || null;
 
+  let resident_no: string | null = null;
+  let resident_no_hash: string | null = null;
+  if (rrnFront || rrnBack) {
+    const merged = mergeResidentNoParts(rrnFront, rrnBack);
+    if (!merged) {
+      return {
+        ok: false,
+        message: "주민등록번호는 앞 6자리와 뒤 7자리를 모두 올바르게 입력해 주세요.",
+      };
+    }
+    resident_no = merged;
+    resident_no_hash = hashResidentNoForMatching(merged);
+  }
+
   try {
     const supabase = await createServerSupabaseClient();
     const { data, error } = await supabase
       .from(patientTable)
-      .insert({ name, chart_no: chartNo, phone })
-      .select("id, name, chart_no, phone, created_at")
+      .insert({
+        name,
+        chart_no: chartNo,
+        phone,
+        resident_no,
+        resident_no_hash,
+      })
+      .select(PATIENT_SELECT_PUBLIC)
       .single();
 
     if (error) {
@@ -134,9 +197,87 @@ export async function createPatient(formData: FormData): Promise<
     }
 
     revalidatePath("/");
-    return { ok: true, patient: data as PatientRow };
+    const patient = mapPatientRow(data);
+    if (!patient) {
+      return { ok: false, message: "등록 응답을 해석할 수 없습니다." };
+    }
+    return { ok: true, patient };
   } catch (e) {
     const message = e instanceof Error ? e.message : "등록에 실패했습니다.";
+    return { ok: false, message };
+  }
+}
+
+export async function updatePatient(formData: FormData): Promise<
+  { ok: true } | { ok: false; message: string }
+> {
+  const patientId = String(formData.get("patient_id") ?? "").trim();
+  const name = String(formData.get("name") ?? "").trim();
+  const chart_no = String(formData.get("chart_no") ?? "").trim();
+  const phoneRaw = String(formData.get("phone") ?? "").trim();
+  const rrnFront = String(formData.get("resident_no_front") ?? "").trim();
+  const rrnBack = String(formData.get("resident_no_back") ?? "").trim();
+
+  if (!patientId) {
+    return { ok: false, message: "환자 ID가 없습니다." };
+  }
+  if (!name) {
+    return { ok: false, message: "이름을 입력해 주세요." };
+  }
+
+  let idBigint: bigint;
+  try {
+    idBigint = BigInt(patientId);
+  } catch {
+    return { ok: false, message: "환자 ID가 올바르지 않습니다." };
+  }
+
+  const phone = phoneRaw || null;
+  const chartNo = chart_no || null;
+
+  let resident_no: string | null = null;
+  let resident_no_hash: string | null = null;
+  if (rrnFront || rrnBack) {
+    const merged = mergeResidentNoParts(rrnFront, rrnBack);
+    if (!merged) {
+      return {
+        ok: false,
+        message: "주민등록번호는 앞 6자리와 뒤 7자리를 모두 올바르게 입력해 주세요.",
+      };
+    }
+    resident_no = merged;
+    resident_no_hash = hashResidentNoForMatching(merged);
+  }
+
+  try {
+    const supabase = await createServerSupabaseClient();
+    const patch: Record<string, unknown> = {
+      name,
+      chart_no: chartNo,
+      phone,
+    };
+    if (rrnFront || rrnBack) {
+      patch.resident_no = resident_no;
+      patch.resident_no_hash = resident_no_hash;
+    } else {
+      patch.resident_no = null;
+      patch.resident_no_hash = null;
+    }
+
+    const { error } = await supabase
+      .from(patientTable)
+      .update(patch)
+      .eq("id", idBigint as unknown as number);
+
+    if (error) {
+      return { ok: false, message: error.message };
+    }
+
+    revalidatePath("/");
+    revalidatePath(`/patients/${patientId}`);
+    return { ok: true };
+  } catch (e) {
+    const message = e instanceof Error ? e.message : "저장에 실패했습니다.";
     return { ok: false, message };
   }
 }

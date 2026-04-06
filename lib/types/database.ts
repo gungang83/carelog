@@ -4,6 +4,8 @@ export type PatientRow = {
   name: string;
   chart_no: string | null;
   phone: string | null;
+  /** 13자리 숫자 문자열(하이픈 없음). 클라이언트 표시는 반드시 마스킹. */
+  resident_no: string | null;
   created_at: string;
 };
 

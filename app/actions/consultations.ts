@@ -5,6 +5,7 @@ import {
   consultationBucket,
   consultationTable,
 } from "@/lib/supabase/config";
+import { resolveResidentMatchHashForPatient } from "@/app/actions/patients";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
@@ -91,6 +92,9 @@ export async function saveConsultation(
     if (!inserted?.id) {
       return { ok: false, message: "DB 저장 실패: consultation id가 없습니다." };
     }
+
+    /* 타 기관·내부 매칭 확장: 주민번호 기반 해시 — 필요 시 consultation·로그에 연동 */
+    void (await resolveResidentMatchHashForPatient(patientId));
   } catch (e) {
     const message = e instanceof Error ? e.message : "저장에 실패했습니다.";
     return { ok: false, message };

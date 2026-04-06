@@ -7,8 +7,18 @@ create table if not exists public.patient (
   name text not null,
   chart_no text,
   phone text,
+  resident_no text,
+  resident_no_hash text,
   created_at timestamptz not null default now()
 );
+
+-- 기존 patient 테이블(앱은 bigint id를 쓰는 경우 등)에 컬럼만 붙일 때
+alter table public.patient add column if not exists resident_no text;
+alter table public.patient add column if not exists resident_no_hash text;
+
+create unique index if not exists patient_resident_no_hash_uidx
+  on public.patient (resident_no_hash)
+  where resident_no_hash is not null;
 
 -- 상담
 create table if not exists public.consultation (
