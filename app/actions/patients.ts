@@ -91,11 +91,45 @@ export async function searchPatients(
     if (error) {
       return { ok: false, message: error.message };
     }
+    const normalizedQuery = q.toLowerCase();
+    const queryDigits = q.replace(/\D/g, "");
     const patients = (data ?? [])
       .map((row) => mapPatientRow(row))
-      .filter(Boolean) as PatientRow[];
+      .filter((p): p is PatientRow => p !== null)
+      .filter((p) => {
+        const name = p.name.toLowerCase();
+        const phoneRaw = (p.phone ?? "").toLowerCase();
+        const phoneDigits = phoneRaw.replace(/\D/g, "");
+        const chart = (p.chart_no ?? "").toLowerCase();
+        const resident = p.resident_no ?? "";
+        const residentDigits = resident.replace(/\D/g, "");
 
-    return { ok: true, patients };
+        const byName = name.includes(normalizedQuery);
+        const byPhone = phoneRaw.includes(normalizedQuery)
+          || (queryDigits.length > 0 && phoneDigits.includes(queryDigits));
+        const byChart = chart.includes(normalizedQuery);
+        const byResident = residentDigits.startsWith(queryDigits || normalizedQuery);
+
+        return byName || byPhone || byChart || byResident;
+      });
+
+    const ranked = patients
+      .map((p) => {
+        const residentDigits = (p.resident_no ?? "").replace(/\D/g, "");
+        const name = p.name.toLowerCase();
+        const phoneDigits = (p.phone ?? "").replace(/\D/g, "");
+        const chart = (p.chart_no ?? "").toLowerCase();
+        let score = 0;
+        if (queryDigits.length >= 6 && residentDigits.startsWith(queryDigits)) score += 100;
+        if (queryDigits.length > 0 && phoneDigits.includes(queryDigits)) score += 30;
+        if (chart.includes(normalizedQuery)) score += 20;
+        if (name.includes(normalizedQuery)) score += 10;
+        return { p, score };
+      })
+      .sort((a, b) => b.score - a.score || a.p.name.localeCompare(b.p.name, "ko"))
+      .map((x) => x.p);
+
+    return { ok: true, patients: ranked };
   } catch (e) {
     const message = e instanceof Error ? e.message : "검색에 실패했습니다.";
     return { ok: false, message };

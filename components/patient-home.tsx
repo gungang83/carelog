@@ -21,6 +21,27 @@ function patientMetaSubtitle(p: PatientRow) {
   return `(${parts.join(" / ")})`;
 }
 
+function deriveRegisterPrefill(query: string) {
+  const trimmed = query.trim();
+  const digits = trimmed.replace(/\D/g, "");
+  const hasNumber = /\d/.test(trimmed);
+  const looksLikeName = /^[\p{L}\s]{2,}$/u.test(trimmed) && !hasNumber;
+
+  const name = looksLikeName ? trimmed : "";
+  let phone = "";
+  let residentFront = "";
+
+  if (!looksLikeName && digits.length > 0) {
+    if (digits.length >= 9 && digits.length <= 11) {
+      phone = digits;
+    } else if (digits.length >= 6) {
+      residentFront = digits.slice(0, 6);
+    }
+  }
+
+  return { name, phone, residentFront };
+}
+
 export function PatientHome() {
   const router = useRouter();
   const [query, setQuery] = useState("");
@@ -30,6 +51,7 @@ export function PatientHome() {
   const [registerMessage, setRegisterMessage] = useState<string | null>(null);
   const [pendingSearch, startSearch] = useTransition();
   const [pendingRegister, startRegister] = useTransition();
+  const prefill = deriveRegisterPrefill(query);
 
   const runSearch = useCallback(() => {
     setError(null);
@@ -179,6 +201,7 @@ export function PatientHome() {
             아래 정보로 새 환자를 등록할 수 있습니다.
           </p>
           <form
+            key={`register-${query}`}
             className="mt-5 grid gap-4"
             action={(fd) => {
               setRegisterMessage(null);
@@ -204,7 +227,7 @@ export function PatientHome() {
                 id="name"
                 name="name"
                 required
-                defaultValue={query}
+                defaultValue={prefill.name}
                 className="mt-1 w-full min-h-11 rounded-xl border border-sky-200 px-3 text-slate-900 outline-none focus:border-sky-400 focus:ring-2 focus:ring-sky-400/30"
               />
             </div>
@@ -235,6 +258,7 @@ export function PatientHome() {
                 id="phone"
                 name="phone"
                 type="tel"
+                defaultValue={prefill.phone}
                 className="mt-1 w-full min-h-11 rounded-xl border border-sky-200 px-3 text-slate-900 outline-none focus:border-sky-400 focus:ring-2 focus:ring-sky-400/30"
               />
             </div>
@@ -252,6 +276,7 @@ export function PatientHome() {
                   inputMode="numeric"
                   maxLength={6}
                   autoComplete="off"
+                  defaultValue={prefill.residentFront}
                   placeholder="YYMMDD"
                   className="mt-1 w-full min-h-11 rounded-xl border border-sky-200 px-3 font-mono text-slate-900 outline-none focus:border-sky-400 focus:ring-2 focus:ring-sky-400/30"
                 />
