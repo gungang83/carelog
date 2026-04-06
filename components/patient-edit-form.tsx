@@ -41,6 +41,9 @@ export function PatientEditForm({ patient, initialOpen = false }: EditProps) {
           action={(fd) => {
             setMessage(null);
             fd.set("patient_id", patient.id);
+            const front = String(fd.get("resident_no_front") ?? "").replace(/\D/g, "");
+            const back = String(fd.get("resident_no_back") ?? "").replace(/\D/g, "");
+            fd.set("resident_no", front && back ? `${front}${back}` : "");
             start(async () => {
               const res = await updatePatient(fd);
               if (res.ok) {

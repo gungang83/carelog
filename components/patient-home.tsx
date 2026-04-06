@@ -87,6 +87,9 @@ export function PatientHome() {
 
   const handleRegister = (fd: FormData) => {
     setRegisterMessage(null);
+    const front = String(fd.get("resident_no_front") ?? "").replace(/\D/g, "");
+    const back = String(fd.get("resident_no_back") ?? "").replace(/\D/g, "");
+    fd.set("resident_no", front && back ? `${front}${back}` : "");
     startRegister(async () => {
       const res = await createPatient(fd);
       if (!res.ok) {

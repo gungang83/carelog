@@ -184,6 +184,7 @@ export async function createPatient(formData: FormData): Promise<
   const name = String(formData.get("name") ?? "").trim();
   const chart_no = String(formData.get("chart_no") ?? "").trim();
   const phoneRaw = String(formData.get("phone") ?? "").trim();
+  const residentNoRaw = String(formData.get("resident_no") ?? "").trim();
   const rrnFront = String(formData.get("resident_no_front") ?? "").trim();
   const rrnBack = String(formData.get("resident_no_back") ?? "").trim();
 
@@ -195,7 +196,13 @@ export async function createPatient(formData: FormData): Promise<
   const chartNo = chart_no || null;
 
   let resident_no: string | null = null;
-  if (rrnFront || rrnBack) {
+  if (residentNoRaw) {
+    const normalized = normalizeFullResidentNo(residentNoRaw);
+    if (!normalized) {
+      return { ok: false, message: "주민등록번호 형식이 올바르지 않습니다." };
+    }
+    resident_no = normalized;
+  } else if (rrnFront || rrnBack) {
     const merged = mergeResidentNoParts(rrnFront, rrnBack);
     if (!merged) {
       return {
@@ -242,6 +249,7 @@ export async function updatePatient(formData: FormData): Promise<
   const name = String(formData.get("name") ?? "").trim();
   const chart_no = String(formData.get("chart_no") ?? "").trim();
   const phoneRaw = String(formData.get("phone") ?? "").trim();
+  const residentNoRaw = String(formData.get("resident_no") ?? "").trim();
   const rrnFront = String(formData.get("resident_no_front") ?? "").trim();
   const rrnBack = String(formData.get("resident_no_back") ?? "").trim();
 
@@ -263,7 +271,13 @@ export async function updatePatient(formData: FormData): Promise<
   const chartNo = chart_no || null;
 
   let resident_no: string | null = null;
-  if (rrnFront || rrnBack) {
+  if (residentNoRaw) {
+    const normalized = normalizeFullResidentNo(residentNoRaw);
+    if (!normalized) {
+      return { ok: false, message: "주민등록번호 형식이 올바르지 않습니다." };
+    }
+    resident_no = normalized;
+  } else if (rrnFront || rrnBack) {
     const merged = mergeResidentNoParts(rrnFront, rrnBack);
     if (!merged) {
       return {
@@ -297,6 +311,8 @@ export async function updatePatient(formData: FormData): Promise<
     }
 
     revalidatePath("/");
+    revalidatePath("/patients");
+    revalidatePath("/patients/[patientId]");
     revalidatePath(`/patients/${patientId}`);
     return { ok: true };
   } catch (e) {
