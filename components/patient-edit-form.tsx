@@ -8,11 +8,13 @@ import { formatResidentNoForList } from "@/lib/rrn-core";
 
 type Props = { patient: PatientRow };
 
-export function PatientEditForm({ patient }: Props) {
+type EditProps = Props & { initialOpen?: boolean };
+
+export function PatientEditForm({ patient, initialOpen = false }: EditProps) {
   const router = useRouter();
   const [message, setMessage] = useState<string | null>(null);
   const [pending, start] = useTransition();
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(initialOpen);
   const rrn = patient.resident_no;
   const defaultFront = rrn && rrn.length === 13 ? rrn.slice(0, 6) : "";
   const defaultBack = rrn && rrn.length === 13 ? rrn.slice(6) : "";
@@ -35,21 +37,21 @@ export function PatientEditForm({ patient }: Props) {
       </p>
       {open ? (
         <form
-        className="mt-4 grid gap-4"
-        action={(fd) => {
-          setMessage(null);
-          fd.set("patient_id", patient.id);
-          start(async () => {
-            const res = await updatePatient(fd);
-            if (res.ok) {
-              router.refresh();
-              setMessage("저장되었습니다.");
-            } else {
-              setMessage(res.message);
-            }
-          });
-        }}
-      >
+          className="mt-4 grid gap-4"
+          action={(fd) => {
+            setMessage(null);
+            fd.set("patient_id", patient.id);
+            start(async () => {
+              const res = await updatePatient(fd);
+              if (res.ok) {
+                router.refresh();
+                setMessage("저장되었습니다.");
+              } else {
+                setMessage(res.message);
+              }
+            });
+          }}
+        >
         <div>
           <label htmlFor="edit_name" className="text-xs font-medium text-slate-600">
             이름 <span className="text-red-500">*</span>

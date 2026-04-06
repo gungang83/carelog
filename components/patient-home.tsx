@@ -7,6 +7,7 @@ import { searchPatients, createPatient } from "@/app/actions/patients";
 import type { PatientRow } from "@/lib/types/database";
 import { formatPhoneForList } from "@/lib/patient-search";
 import { formatResidentNoForList } from "@/lib/rrn-core";
+import { PatientForm } from "@/components/patient-form";
 
 function patientMetaSubtitle(p: PatientRow) {
   const phoneLabel = formatPhoneForList(p.phone);
@@ -83,6 +84,19 @@ export function PatientHome() {
     }, 220);
     return () => window.clearTimeout(timer);
   }, [query, runSearch]);
+
+  const handleRegister = (fd: FormData) => {
+    setRegisterMessage(null);
+    startRegister(async () => {
+      const res = await createPatient(fd);
+      if (!res.ok) {
+        setRegisterMessage(res.message);
+        return;
+      }
+      setRegisterMessage("등록되었습니다. 상담 기록으로 이동합니다.");
+      router.push(`/patients/${res.patient.id}`);
+    });
+  };
 
   return (
     <div className="mx-auto flex w-full max-w-2xl flex-col gap-8">
@@ -161,12 +175,9 @@ export function PatientHome() {
                   className="py-3 first:pt-0 last:pb-0"
                 >
                   {isValid ? (
-                    <Link
-                      href={`/patients/${patientId}`}
-                      className="group flex min-h-[3rem] flex-col gap-1 rounded-xl px-2 py-3 transition hover:bg-sky-50 sm:flex-row sm:items-center sm:justify-between sm:gap-4"
-                    >
+                    <div className="flex min-h-[3rem] flex-col gap-3 rounded-xl px-2 py-3 transition hover:bg-sky-50 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
                       <div className="min-w-0 flex-1">
-                        <span className="font-semibold text-slate-900 group-hover:text-sky-800">
+                        <span className="font-semibold text-slate-900">
                           {p.name}
                         </span>
                         {meta ? (
@@ -179,10 +190,21 @@ export function PatientHome() {
                           </div>
                         )}
                       </div>
-                      <span className="shrink-0 text-xs font-semibold text-sky-600 group-hover:text-sky-700 sm:text-sm">
-                        상담 기록 →
-                      </span>
-                    </Link>
+                      <div className="flex shrink-0 items-center gap-2">
+                        <Link
+                          href={`/patients/${patientId}?edit=1`}
+                          className="inline-flex min-h-11 items-center justify-center rounded-xl border border-sky-200 bg-white px-4 text-xs font-semibold text-sky-800 shadow-sm hover:bg-sky-50 sm:text-sm"
+                        >
+                          수정
+                        </Link>
+                        <Link
+                          href={`/patients/${patientId}`}
+                          className="inline-flex min-h-11 items-center justify-center rounded-xl bg-sky-600 px-4 text-xs font-semibold text-white shadow-sm hover:bg-sky-700 sm:text-sm"
+                        >
+                          상담 기록
+                        </Link>
+                      </div>
+                    </div>
                   ) : (
                     <div className="rounded-lg px-2 py-2">
                       <div className="text-sm font-semibold text-slate-900">
@@ -224,124 +246,13 @@ export function PatientHome() {
           <p className="mt-1 text-sm text-slate-600">
             아래 정보로 새 환자를 등록할 수 있습니다.
           </p>
-          <form
-            key={`register-${query}`}
-            className="mt-5 grid gap-4"
-            action={(fd) => {
-              setRegisterMessage(null);
-              startRegister(async () => {
-                const res = await createPatient(fd);
-                if (!res.ok) {
-                  setRegisterMessage(res.message);
-                  return;
-                }
-                setRegisterMessage("등록되었습니다. 상담 기록으로 이동합니다.");
-                router.push(`/patients/${res.patient.id}`);
-              });
-            }}
-          >
-            <div>
-              <label
-                htmlFor="name"
-                className="text-xs font-medium text-slate-600"
-              >
-                이름 <span className="text-red-500">*</span>
-              </label>
-              <input
-                id="name"
-                name="name"
-                required
-                defaultValue={prefill.name}
-                className="mt-1 w-full min-h-11 rounded-xl border border-sky-200 px-3 text-slate-900 outline-none focus:border-sky-400 focus:ring-2 focus:ring-sky-400/30"
-              />
-            </div>
-            <div>
-              <label
-                htmlFor="chart_no"
-                className="text-xs font-medium text-slate-600"
-              >
-                차트 번호
-              </label>
-              <input
-                id="chart_no"
-                name="chart_no"
-                type="text"
-                inputMode="numeric"
-                placeholder="예: 12-34"
-                className="mt-1 w-full min-h-11 rounded-xl border border-sky-200 px-3 text-slate-900 outline-none focus:border-sky-400 focus:ring-2 focus:ring-sky-400/30"
-              />
-            </div>
-            <div>
-              <label
-                htmlFor="phone"
-                className="text-xs font-medium text-slate-600"
-              >
-                연락처
-              </label>
-              <input
-                id="phone"
-                name="phone"
-                type="tel"
-                defaultValue={prefill.phone}
-                className="mt-1 w-full min-h-11 rounded-xl border border-sky-200 px-3 text-slate-900 outline-none focus:border-sky-400 focus:ring-2 focus:ring-sky-400/30"
-              />
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label
-                  htmlFor="resident_no_front"
-                  className="text-xs font-medium text-slate-600"
-                >
-                  주민등록번호 앞 6자리
-                </label>
-                <input
-                  id="resident_no_front"
-                  name="resident_no_front"
-                  inputMode="numeric"
-                  maxLength={6}
-                  autoComplete="off"
-                  defaultValue={prefill.residentFront}
-                  placeholder="YYMMDD"
-                  className="mt-1 w-full min-h-11 rounded-xl border border-sky-200 px-3 font-mono text-slate-900 outline-none focus:border-sky-400 focus:ring-2 focus:ring-sky-400/30"
-                />
-              </div>
-              <div>
-                <label
-                  htmlFor="resident_no_back"
-                  className="text-xs font-medium text-slate-600"
-                >
-                  뒤 7자리
-                </label>
-                <input
-                  id="resident_no_back"
-                  name="resident_no_back"
-                  inputMode="numeric"
-                  maxLength={7}
-                  autoComplete="off"
-                  className="mt-1 w-full min-h-11 rounded-xl border border-sky-200 px-3 font-mono text-slate-900 outline-none focus:border-sky-400 focus:ring-2 focus:ring-sky-400/30"
-                />
-              </div>
-            </div>
-            <p className="text-[11px] leading-snug text-slate-500">
-              주민번호는 선택 사항입니다. 입력 시 서버에 저장·검색되며, 타 병원
-              매칭을 위한 해시 식별자를 서버에서 계산할 수 있습니다. 운영 환경에서는
-              `RESIDENT_NO_HASH_PEPPER`를 설정하세요.
-            </p>
-            <button
-              type="submit"
-              disabled={pendingRegister}
-              className="min-h-11 rounded-xl bg-sky-600 text-sm font-semibold text-white shadow-sm hover:bg-sky-700 disabled:opacity-60"
-            >
-              {pendingRegister ? "등록 중..." : "새 환자 등록"}
-            </button>
-            {registerMessage ? (
-              <p
-                className={`text-sm ${registerMessage.startsWith("등록") ? "text-emerald-600" : "text-red-600"}`}
-              >
-                {registerMessage}
-              </p>
-            ) : null}
-          </form>
+          <PatientForm
+            query={query}
+            prefill={prefill}
+            pending={pendingRegister}
+            registerMessage={registerMessage}
+            onSubmit={handleRegister}
+          />
         </section>
       ) : null}
     </div>

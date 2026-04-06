@@ -7,10 +7,17 @@ import { PatientEditForm } from "@/components/patient-edit-form";
 import { formatPhoneForList } from "@/lib/patient-search";
 import { formatResidentNoForList } from "@/lib/rrn-core";
 
-type PageProps = { params: Promise<{ patientId: string }> };
+type PageProps = {
+  params: Promise<{ patientId: string }>;
+  searchParams: Promise<{ edit?: string }>;
+};
 
-export default async function PatientConsultationPage({ params }: PageProps) {
+export default async function PatientConsultationPage({
+  params,
+  searchParams,
+}: PageProps) {
   const { patientId } = await params;
+  const { edit } = await searchParams;
 
   if (!patientId || patientId.trim() === "" || patientId === "undefined") {
     return (
@@ -86,7 +93,7 @@ export default async function PatientConsultationPage({ params }: PageProps) {
         </p>
       </header>
 
-      <PatientEditForm patient={patient} />
+      <PatientEditForm patient={patient} initialOpen={edit === "1"} />
 
       <section className="rounded-2xl border border-sky-100 bg-white p-6 shadow-sm shadow-sky-100/60">
         <ConsultationForm
