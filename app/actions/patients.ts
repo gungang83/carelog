@@ -2,6 +2,7 @@
 
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { patientTable } from "@/lib/supabase/config";
+import { getMyInstitutionId } from "@/lib/auth/institution";
 import type { PatientRow } from "@/lib/types/database";
 import {
   escapeIlike,
@@ -17,7 +18,7 @@ import { hashResidentNoForMatching } from "@/lib/rrn-hash";
 import { revalidatePath } from "next/cache";
 
 const PATIENT_SELECT_PUBLIC =
-  "id, name, chart_no, phone, resident_no, created_at";
+  "id, institution_id, name, chart_no, phone, resident_no, created_at";
 
 function mapPatientRow(row: unknown): PatientRow | null {
   const r = row as Record<string, unknown>;
@@ -27,6 +28,7 @@ function mapPatientRow(row: unknown): PatientRow | null {
   if (!/^\d+$/.test(id)) return null;
   return {
     id,
+    institution_id: String(r.institution_id ?? ""),
     name: String(r.name ?? ""),
     chart_no: r.chart_no != null ? String(r.chart_no) : null,
     phone: r.phone != null ? String(r.phone) : null,
@@ -66,6 +68,11 @@ export async function searchPatients(
     return { ok: true, patients: [] };
   }
   try {
+    const institutionId = await getMyInstitutionId();
+    if (!institutionId) {
+      return { ok: false, message: "기관 정보를 찾을 수 없습니다." };
+    }
+
     const supabase = await createServerSupabaseClient();
     const term = `%${escapeIlike(q)}%`;
     const orParts = new Set<string>([
@@ -84,6 +91,7 @@ export async function searchPatients(
     const { data, error } = await supabase
       .from(patientTable)
       .select(PATIENT_SELECT_PUBLIC)
+      .eq("institution_id", institutionId)
       .or([...orParts].join(","))
       .order("name", { ascending: true })
       .limit(50);
@@ -153,11 +161,17 @@ export async function getPatientById(
       return { ok: false, message: "환자를 찾을 수 없습니다." };
     }
 
+    const institutionId = await getMyInstitutionId();
+    if (!institutionId) {
+      return { ok: false, message: "기관 정보를 찾을 수 없습니다." };
+    }
+
     const supabase = await createServerSupabaseClient();
     const { data, error } = await supabase
       .from(patientTable)
       .select(PATIENT_SELECT_PUBLIC)
       .eq("id", idBigint as unknown as number)
+      .eq("institution_id", institutionId)
       .maybeSingle();
 
     if (error) {
@@ -192,6 +206,11 @@ export async function createPatient(formData: FormData): Promise<
     return { ok: false, message: "이름을 입력해 주세요." };
   }
 
+  const institutionId = await getMyInstitutionId();
+  if (!institutionId) {
+    return { ok: false, message: "기관 정보를 찾을 수 없습니다. 다시 로그인해 주세요." };
+  }
+
   const phone = phoneRaw || null;
   const chartNo = chart_no || null;
 
@@ -222,6 +241,7 @@ export async function createPatient(formData: FormData): Promise<
         chart_no: chartNo,
         phone,
         resident_no,
+        institution_id: institutionId,
       })
       .select(PATIENT_SELECT_PUBLIC)
       .single();
@@ -267,6 +287,11 @@ export async function updatePatient(formData: FormData): Promise<
     return { ok: false, message: "환자 ID가 올바르지 않습니다." };
   }
 
+  const institutionId = await getMyInstitutionId();
+  if (!institutionId) {
+    return { ok: false, message: "기관 정보를 찾을 수 없습니다. 다시 로그인해 주세요." };
+  }
+
   const phone = phoneRaw || null;
   const chartNo = chart_no || null;
 
@@ -304,7 +329,8 @@ export async function updatePatient(formData: FormData): Promise<
     const { error } = await supabase
       .from(patientTable)
       .update(patch)
-      .eq("id", idBigint as unknown as number);
+      .eq("id", idBigint as unknown as number)
+      .eq("institution_id", institutionId);
 
     if (error) {
       return { ok: false, message: error.message };

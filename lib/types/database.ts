@@ -1,6 +1,6 @@
-/** 앱이 기대하는 컬럼 이름입니다. 테이블이 다르면 Supabase에서 맞추거나 코드의 insert/select 필드를 수정하세요. */
 export type PatientRow = {
   id: string;
+  institution_id: string;
   name: string;
   chart_no: string | null;
   phone: string | null;
@@ -12,9 +12,38 @@ export type PatientRow = {
 export type ConsultationRow = {
   id: string;
   patient_id: string;
+  institution_id: string;
   content: string;
   /** Supabase에서 jsonb 또는 text[] 등으로 저장 가능. 배열로 주고받습니다. */
   image_urls: string[] | null;
   prescriptions: string[] | null;
+  created_at: string;
+};
+
+export type InstitutionRow = {
+  id: string;
+  name: string;
+  type: string;
+  created_at: string;
+};
+
+export type InstitutionMemberRow = {
+  id: string;
+  institution_id: string;
+  user_id: string;
+  role: "owner" | "admin" | "staff";
+  invited_by: string | null;
+  joined_at: string;
+};
+
+export type InstitutionInvitationRow = {
+  id: string;
+  institution_id: string;
+  email: string;
+  role: "owner" | "admin" | "staff";
+  token: string;
+  invited_by: string;
+  expires_at: string;
+  accepted_at: string | null;
   created_at: string;
 };

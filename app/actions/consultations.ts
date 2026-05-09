@@ -5,6 +5,7 @@ import {
   consultationBucket,
   consultationTable,
 } from "@/lib/supabase/config";
+import { getMyInstitutionId } from "@/lib/auth/institution";
 import { resolveResidentMatchHashForPatient } from "@/app/actions/patients";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
@@ -17,6 +18,11 @@ export async function saveConsultation(
   const trimmed = content.trim();
   if (!trimmed) {
     return { ok: false, message: "상담 내용을 입력해 주세요." };
+  }
+
+  const institutionId = await getMyInstitutionId();
+  if (!institutionId) {
+    return { ok: false, message: "기관 정보를 찾을 수 없습니다. 다시 로그인해 주세요." };
   }
 
   const stationRaw =
@@ -33,7 +39,6 @@ export async function saveConsultation(
         prescriptions = parsed.filter((v) => typeof v === "string") as string[];
       }
     } catch {
-      // JSON 파싱 실패 시에도 상담 저장은 진행(빈 배열로 저장)
       prescriptions = [];
     }
   }
@@ -78,6 +83,7 @@ export async function saveConsultation(
       .from(consultationTable)
       .insert({
         patient_id: patientId,
+        institution_id: institutionId,
         content: trimmed,
         image_urls,
         prescriptions,
@@ -93,7 +99,6 @@ export async function saveConsultation(
       return { ok: false, message: "DB 저장 실패: consultation id가 없습니다." };
     }
 
-    /* 타 기관·내부 매칭 확장: 주민번호 기반 해시 — 필요 시 consultation·로그에 연동 */
     void (await resolveResidentMatchHashForPatient(patientId));
   } catch (e) {
     const message = e instanceof Error ? e.message : "저장에 실패했습니다.";
@@ -121,6 +126,11 @@ export async function getConsultationsByPatientId(
   | { ok: false; message: string }
 > {
   try {
+    const institutionId = await getMyInstitutionId();
+    if (!institutionId) {
+      return { ok: false, message: "기관 정보를 찾을 수 없습니다." };
+    }
+
     const supabase = await createServerSupabaseClient();
     const { data, error } = await supabase
       .from(consultationTable)
@@ -128,6 +138,7 @@ export async function getConsultationsByPatientId(
         "id, patient_id, content, image_urls, prescriptions, station_name, created_at",
       )
       .eq("patient_id", patientId)
+      .eq("institution_id", institutionId)
       .order("created_at", { ascending: false })
       .limit(50);
 
