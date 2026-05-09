@@ -1,73 +1,134 @@
--- Carelog 앱과 맞추기 위한 예시 스키마입니다.
--- 이미 patient / consultation 테이블이 있다면, 컬럼 이름만 아래와 같거나 코드를 수정하세요.
+-- Carelog 전체 스키마 (참조용)
+-- 마지막 동기화: 2026-05-10
+-- 실제 마이그레이션 파일: supabase/migrations/20260509000001_staff_auth_institution.sql
 
--- 환자
-create table if not exists public.patient (
-  id uuid primary key default gen_random_uuid(),
-  name text not null,
-  chart_no text,
-  phone text,
-  resident_no text,
-  resident_no_hash text,
+-- ============================================================
+-- Extensions
+-- ============================================================
+create extension if not exists pgcrypto;
+
+-- ============================================================
+-- 기관 구조 (다중 테넌트)
+-- ============================================================
+
+create table if not exists public.institutions (
+  id         uuid primary key default gen_random_uuid(),
+  name       text not null,
+  type       text not null default 'dental',
   created_at timestamptz not null default now()
 );
 
--- 기존 patient 테이블(앱은 bigint id를 쓰는 경우 등)에 컬럼만 붙일 때
-alter table public.patient add column if not exists resident_no text;
-alter table public.patient add column if not exists resident_no_hash text;
+create table if not exists public.institution_members (
+  id             uuid primary key default gen_random_uuid(),
+  institution_id uuid not null references public.institutions(id) on delete cascade,
+  user_id        uuid not null references auth.users(id) on delete cascade,
+  role           text not null default 'staff',
+  invited_by     uuid references auth.users(id),
+  joined_at      timestamptz not null default now(),
+  unique(institution_id, user_id)
+);
+create index if not exists idx_inst_members_user on public.institution_members(user_id);
+create index if not exists idx_inst_members_inst on public.institution_members(institution_id);
+
+create table if not exists public.institution_invitations (
+  id             uuid primary key default gen_random_uuid(),
+  institution_id uuid not null references public.institutions(id) on delete cascade,
+  email          text not null,
+  role           text not null default 'staff',
+  token          text not null unique default replace(gen_random_uuid()::text, '-', '') || replace(gen_random_uuid()::text, '-', ''),
+  invited_by     uuid not null references auth.users(id),
+  expires_at     timestamptz not null default (now() + interval '24 hours'),
+  accepted_at    timestamptz,
+  created_at     timestamptz not null default now()
+);
+create index if not exists idx_inst_invitations_token on public.institution_invitations(token);
+
+-- ============================================================
+-- 환자
+-- ============================================================
+create table if not exists public.patient (
+  id              bigint primary key generated always as identity,
+  institution_id  uuid not null references public.institutions(id),
+  name            text not null,
+  chart_no        text,
+  phone           text,
+  resident_no     text,
+  resident_no_hash text,
+  created_at      timestamptz not null default now()
+);
 
 create unique index if not exists patient_resident_no_hash_uidx
   on public.patient (resident_no_hash)
   where resident_no_hash is not null;
 
--- 상담
+-- ============================================================
+-- 상담 기록
+-- ============================================================
 create table if not exists public.consultation (
-  id uuid primary key default gen_random_uuid(),
-  patient_id uuid not null references public.patient (id) on delete cascade,
-  content text not null default '',
-  image_urls jsonb not null default '[]'::jsonb,
-  prescriptions jsonb not null default '[]'::jsonb,
-  station_name text,
-  created_at timestamptz not null default now()
+  id              uuid primary key default gen_random_uuid(),
+  institution_id  uuid not null references public.institutions(id),
+  patient_id      bigint not null references public.patient(id) on delete cascade,
+  content         text not null default '',
+  image_urls      jsonb not null default '[]'::jsonb,
+  prescriptions   jsonb not null default '[]'::jsonb,
+  station_name    text,
+  created_at      timestamptz not null default now()
 );
 
--- 기존 DB에 컬럼만 추가할 때 (이미 테이블이 있으면 아래 실행)
-alter table public.consultation add column if not exists station_name text;
+create index if not exists consultation_patient_id_idx on public.consultation(patient_id);
 
-create index if not exists consultation_patient_id_idx on public.consultation (patient_id);
+-- ============================================================
+-- RLS 헬퍼 함수
+-- ============================================================
+create or replace function public.get_my_institution_id()
+returns uuid language sql security definer stable as $$
+  select institution_id
+  from public.institution_members
+  where user_id = auth.uid()
+  limit 1;
+$$;
 
--- 계정 유형 (기본 individual). Supabase Auth 사용 시 id를 auth.users(id)에 FK로 바꾸는 것을 권장합니다.
-create table if not exists public.users (
-  id uuid primary key default gen_random_uuid(),
-  user_type text not null default 'individual',
-  created_at timestamptz not null default now()
-);
+-- ============================================================
+-- RLS 정책
+-- ============================================================
 
-alter table public.users add column if not exists user_type text;
-update public.users set user_type = 'individual' where user_type is null;
-alter table public.users alter column user_type set default 'individual';
-alter table public.users alter column user_type set not null;
+-- institutions
+alter table public.institutions enable row level security;
+drop policy if exists "member sees own institution" on public.institutions;
+create policy "member sees own institution" on public.institutions
+  for select using (id = public.get_my_institution_id());
 
-create index if not exists users_user_type_idx on public.users (user_type);
+-- institution_members
+alter table public.institution_members enable row level security;
+drop policy if exists "member sees own institution members" on public.institution_members;
+create policy "member sees own institution members" on public.institution_members
+  for select using (institution_id = public.get_my_institution_id());
 
--- 개발용 RLS (운영에서는 로그인·역할에 맞게 정책을 좁히세요)
+-- institution_invitations
+alter table public.institution_invitations enable row level security;
+drop policy if exists "admin manages invitations" on public.institution_invitations;
+create policy "admin manages invitations" on public.institution_invitations
+  for all using (institution_id = public.get_my_institution_id());
+
+-- patient
 alter table public.patient enable row level security;
+drop policy if exists "staff sees own institution patients" on public.patient;
+create policy "staff sees own institution patients" on public.patient
+  for all
+  using (institution_id = public.get_my_institution_id())
+  with check (institution_id = public.get_my_institution_id());
+
+-- consultation
 alter table public.consultation enable row level security;
-alter table public.users enable row level security;
+drop policy if exists "staff sees own institution consultations" on public.consultation;
+create policy "staff sees own institution consultations" on public.consultation
+  for all
+  using (institution_id = public.get_my_institution_id())
+  with check (institution_id = public.get_my_institution_id());
 
-drop policy if exists "carelog patient all" on public.patient;
-create policy "carelog patient all" on public.patient
-  for all using (true) with check (true);
-
-drop policy if exists "carelog consultation all" on public.consultation;
-create policy "carelog consultation all" on public.consultation
-  for all using (true) with check (true);
-
-drop policy if exists "carelog users all" on public.users;
-create policy "carelog users all" on public.users
-  for all using (true) with check (true);
-
--- Storage: 이미지 버킷 (Public)
+-- ============================================================
+-- Storage: 상담 이미지 버킷
+-- ============================================================
 insert into storage.buckets (id, name, public)
 values ('consultation-images', 'consultation-images', true)
 on conflict (id) do nothing;

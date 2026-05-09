@@ -1,7 +1,7 @@
 # Carelog 프로젝트 상태
 
-**최종 업데이트**: 2026-05-09  
-**현재 버전**: main 브랜치 기준 (commit: 9e8d1ff)
+**최종 업데이트**: 2026-05-10  
+**현재 버전**: main 브랜치 (commit: 5625982)
 
 ---
 
@@ -19,26 +19,28 @@
 | 주민번호 해시 | ✅ 완료 | SHA-256, unique index로 중복 방지 |
 | Vercel 배포 | ✅ 완료 | GitHub main 연동 자동 배포 |
 | Supabase Auth 연동 | ✅ 완료 | 이메일+비밀번호, 세션 쿠키, proxy 미들웨어 |
+| 이메일 인증 콜백 | ✅ 완료 | /auth/callback PKCE 코드 교환, 자동 로그인 |
 | 기관 등록 (signUp) | ✅ 완료 | 기관명 + 이메일 + 비밀번호로 신규 기관 생성 |
-| 다기관 격리 구조 | ✅ 완료 | institution_id 필터 + RLS 준비 완료 |
+| 다기관 격리 구조 | ✅ 완료 | institution_id 필터 + RLS (get_my_institution_id) |
 | 로그인/로그아웃 | ✅ 완료 | `/login`, `/signup` 페이지 |
-| 직원 초대 | ✅ 완료 | inviteStaff, acceptInvitation Server Action |
-| 디자인 시스템 문서 | ✅ 완료 | docs/design.md (Sticky/Claude Design 연동용) |
+| 기존 데이터 기관 귀속 | ✅ 완료 | 시드 기관 → 예미안치과 마이그레이션 완료 |
+| 직원 초대 (Server Action) | ✅ 완료 | inviteStaff, acceptInvitation 백엔드 구현 |
+| 디자인 시스템 문서 | ✅ 완료 | docs/design.md |
 
 ---
 
-## 2026-05-09 세션 작업 내용
+## 2026-05-10 세션 작업 내용
 
 | 작업 | 결과 |
 |---|---|
-| spec 001 tasks.md 생성 | 44개 태스크 × 6 Phase 생성 완료 |
-| docs/design.md 작성 | 컬러팔레트, 컴포넌트 패턴, AI 도구 연동 노트 |
-| spec 001 Phase 1~3 구현 | 코드 전체 구현 + 빌드 통과 + push 완료 |
-| Route Groups 분리 | `(auth)/`, `(dashboard)/` 완전 분리 |
-| Next.js 16 proxy 마이그레이션 | `middleware.ts` → `proxy.ts` (Next.js 16 요구사항) |
-| lib/auth/institution.ts | `getMyInstitutionId()` React.cache 유틸 |
-| lib/supabase/admin.ts | Service Role 클라이언트 (signUp, inviteStaff용) |
-| patients.ts + consultations.ts 수정 | institution_id 필터 + INSERT에 포함 |
+| BOM 인코딩 오류 수정 | `SUPABASE_SERVICE_ROLE_KEY` BOM(U+FEFF) 제거 — charCodeAt(0) 체크 |
+| Vercel env var 재설정 | printf로 BOM 없이 production/development 환경변수 재추가 |
+| /auth/callback 라우트 추가 | PKCE 이메일 인증 코드 교환 → 자동 로그인 |
+| Supabase Site URL 수정 | localhost:3000 → carelog-tau.vercel.app (Management API) |
+| 이메일 인증 수동 처리 | SQL로 email_confirmed_at 직접 설정 |
+| 기존 데이터 기관 귀속 | patient 1건, consultation 8건 → 예미안치과로 UPDATE |
+| 전체 동작 검증 | 로그인 + 환자 검색 정상 확인 |
+| 문서 현행화 | architecture.md, database.md, schema.sql, tasks.md 전면 업데이트 |
 
 ---
 
@@ -46,54 +48,36 @@
 
 | 이슈 | 심각도 | 상태 |
 |---|---|---|
-| **DB 마이그레이션 미실행** | 🔴 높음 | ⏳ Supabase SQL Editor에서 data-model.md Step 1~6 실행 필요 |
-| **SUPABASE_SERVICE_ROLE_KEY 미설정** | 🔴 높음 | ⏳ Vercel 대시보드 + `.env.local`에 추가 필요 (signUp 필수) |
-| 기존 데이터 기관 귀속 | 중간 | DB 마이그레이션 Step 3~5 완료 후 자동 해결 |
-| 기존 원장 계정 seed 기관 멤버 등록 | 중간 | 마이그레이션 후 Supabase에서 수동 INSERT |
-| `.env.example` 파일 없음 | 낮음 | docs/development.md 참고로 대체 중 |
+| 직원 초대 UI 미구현 | 중간 | ⏳ T030~T033 (설정 페이지 + invite 폼) |
+| NEXT_PUBLIC_SITE_URL 환경변수 미설정 | 낮음 | 코드에 하드코딩 대체 중, Vercel에 추가 권장 |
 
 ---
 
-## 즉시 다음 세션: DB 마이그레이션 실행
+## 다음 세션: Phase 4 US2 (직원 초대 UI)
 
-### 1단계: SUPABASE_SERVICE_ROLE_KEY 추가
+### T030: `components/auth/invite-form.tsx`
+- 토큰 파라미터 읽기 + 비밀번호 설정 폼
+- `acceptInvitation` Server Action 연결
 
-1. Supabase 대시보드 → Project Settings → API → service_role 키 복사
-2. Vercel 대시보드 → Settings → Environment Variables → `SUPABASE_SERVICE_ROLE_KEY` 추가
-3. `vercel env pull` 실행 → `.env.local` 자동 갱신
+### T031: `app/(auth)/invite/[token]/page.tsx`
+- 토큰 유효성 사전 확인 (만료/사용 여부)
+- InviteForm 렌더
 
-### 2단계: DB 마이그레이션 실행
+### T032: `components/institution/invite-staff-form.tsx`
+- 직원 이메일 + 역할 선택 폼
+- `inviteStaff` Server Action 연결
 
-Supabase SQL Editor에서 `specs/001-staff-auth-institution/data-model.md` Step 1~6 순서대로 실행:
-
-- Step 1: `institutions`, `institution_members`, `institution_invitations` 테이블 생성
-- Step 2: `patient`, `consultation` 테이블에 `institution_id` 컬럼 추가
-- Step 3: 시드 기관 INSERT (`a0000000-0000-0000-0000-000000000001`)
-- Step 4: 기존 데이터 시드 기관 귀속 UPDATE
-- Step 5: `institution_id` NOT NULL 제약 추가
-- Step 6: RLS 함수(`get_my_institution_id()`) + 정책 교체
-
-### 3단계: 기존 원장 계정을 시드 기관에 연결
-
-```sql
--- 원장의 auth.users.id를 Supabase에서 확인 후 실행
-INSERT INTO institution_members (institution_id, user_id, role)
-VALUES ('a0000000-0000-0000-0000-000000000001', '<원장_USER_ID>', 'owner')
-ON CONFLICT DO NOTHING;
-```
-
-### 4단계: 검증
-
-- `/signup` → 새 기관명 + 이메일 + 비밀번호로 가입 → 대시보드 진입 확인
-- 기존 원장 계정으로 `/login` → 환자 목록 정상 표시 확인
+### T033: `app/(dashboard)/settings/page.tsx`
+- 직원 초대 폼
+- 현재 멤버 목록 표시
 
 ---
 
 ## 중장기 로드맵
 
-| Phase | 내용 | 스펙 |
+| Phase | 내용 | 상태 |
 |---|---|---|
-| Phase 1 | 직원 로그인 + 기관 계정 + RLS 전환 | ✅ 구현 완료 (DB 마이그레이션 대기) |
+| Phase 1 | 직원 로그인 + 기관 계정 + RLS | ✅ 완료 |
 | Phase 2 | 콘텐츠 블록 모델 + 오디오 + Audit log | 미착수 |
 | Phase 3 | 환자 포털 (cross-institution 열람, 검증) | 미착수 |
 | Phase 4 | AI 기능 (오디오 전사, 상담 요약) | 미착수 |
@@ -106,3 +90,13 @@ ON CONFLICT DO NOTHING;
 `/speckit-specify` → `/speckit-plan` → `/speckit-tasks` → `/speckit-implement`
 
 Constitution: `.specify/memory/constitution.md` (v1.1.0)
+
+## 인프라 현황
+
+| 항목 | 값 |
+|---|---|
+| 배포 URL | https://carelog-tau.vercel.app |
+| Supabase 프로젝트 | svffiungfijiybvrrnpu |
+| Supabase Site URL | https://carelog-tau.vercel.app |
+| Redirect URLs | https://carelog-tau.vercel.app/**, http://localhost:3000/** |
+| DB 마이그레이션 | 20260509000001_staff_auth_institution.sql 적용 완료 |
