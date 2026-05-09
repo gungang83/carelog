@@ -22,7 +22,12 @@ export async function signUp(formData: FormData): Promise<
   }
 
   const supabase = await createServerSupabaseClient();
-  const { data, error } = await supabase.auth.signUp({ email, password });
+  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "https://carelog-tau.vercel.app";
+  const { data, error } = await supabase.auth.signUp({
+    email,
+    password,
+    options: { emailRedirectTo: `${siteUrl}/auth/callback` },
+  });
 
   if (error) {
     return { ok: false, message: error.message };
