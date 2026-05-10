@@ -1,6 +1,8 @@
 -- Carelog 전체 스키마 (참조용)
 -- 마지막 동기화: 2026-05-10
--- 실제 마이그레이션 파일: supabase/migrations/20260509000001_staff_auth_institution.sql
+-- 실제 마이그레이션 파일:
+--   supabase/migrations/20260509000001_staff_auth_institution.sql
+--   supabase/migrations/20260510000001_patient_portal.sql
 
 -- ============================================================
 -- Extensions
@@ -148,3 +150,72 @@ create policy "carelog consult images update" on storage.objects
 drop policy if exists "carelog consult images delete" on storage.objects;
 create policy "carelog consult images delete" on storage.objects
   for delete using (bucket_id = 'consultation-images');
+
+-- ============================================================
+-- 환자 포털 테이블 (migration: 20260510000001_patient_portal.sql)
+-- ============================================================
+
+create table if not exists public.patient_invitations (
+  id             uuid primary key default gen_random_uuid(),
+  institution_id uuid not null references public.institutions(id) on delete cascade,
+  patient_id     bigint not null references public.patient(id) on delete cascade,
+  phone          text not null,
+  token          text not null unique
+    default replace(gen_random_uuid()::text,'-','') || replace(gen_random_uuid()::text,'-',''),
+  consent_given  boolean not null default false,
+  invited_by     uuid not null references auth.users(id),
+  expires_at     timestamptz not null default (now() + interval '72 hours'),
+  accepted_at    timestamptz,
+  created_at     timestamptz not null default now()
+);
+
+create index if not exists idx_patient_invitations_token   on public.patient_invitations(token);
+create index if not exists idx_patient_invitations_patient on public.patient_invitations(patient_id);
+
+create table if not exists public.patient_accounts (
+  id            uuid primary key default gen_random_uuid(),
+  rrn_hash      text not null unique,
+  created_at    timestamptz not null default now(),
+  last_login_at timestamptz
+);
+
+create table if not exists public.patient_otps (
+  id            uuid primary key default gen_random_uuid(),
+  phone         text not null,
+  code          text not null,
+  expires_at    timestamptz not null default (now() + interval '5 minutes'),
+  verified_at   timestamptz,
+  attempt_count integer not null default 0,
+  created_at    timestamptz not null default now()
+);
+
+create index if not exists idx_patient_otps_phone on public.patient_otps(phone, expires_at);
+
+create table if not exists public.patient_sessions (
+  id                 uuid primary key default gen_random_uuid(),
+  patient_account_id uuid not null references public.patient_accounts(id) on delete cascade,
+  token              text not null unique
+    default replace(gen_random_uuid()::text,'-','') || replace(gen_random_uuid()::text,'-',''),
+  expires_at         timestamptz not null default (now() + interval '30 days'),
+  created_at         timestamptz not null default now()
+);
+
+create index if not exists idx_patient_sessions_token on public.patient_sessions(token);
+
+create table if not exists public.patient_account_links (
+  id                 uuid primary key default gen_random_uuid(),
+  patient_account_id uuid not null references public.patient_accounts(id) on delete cascade,
+  patient_id         bigint not null references public.patient(id) on delete cascade,
+  institution_id     uuid not null references public.institutions(id) on delete cascade,
+  linked_at          timestamptz not null default now(),
+  unique(patient_account_id, patient_id)
+);
+
+create index if not exists idx_pal_account on public.patient_account_links(patient_account_id);
+create index if not exists idx_pal_patient on public.patient_account_links(patient_id);
+
+alter table public.patient_invitations    enable row level security;
+alter table public.patient_accounts       enable row level security;
+alter table public.patient_otps           enable row level security;
+alter table public.patient_sessions       enable row level security;
+alter table public.patient_account_links  enable row level security;

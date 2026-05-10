@@ -4,6 +4,7 @@ import { getConsultationsByPatientId } from "@/app/actions/consultations";
 import { ConsultationForm } from "@/components/consultation-form";
 import { ConsultationHistory } from "@/components/consultation-history";
 import { PatientEditForm } from "@/components/patient-edit-form";
+import { SendInvitationButton } from "@/components/patient/send-invitation-button";
 import { formatPhoneForList } from "@/lib/patient-search";
 import { formatResidentNoForList } from "@/lib/rrn-core";
 
@@ -118,6 +119,20 @@ export default async function PatientConsultationPage({
         </div>
 
         <ConsultationHistory consultations={consultations} />
+      </section>
+
+      <section className="rounded-2xl border border-sky-100 bg-white p-6 shadow-sm shadow-sky-100/60">
+        <p className="mb-3 text-xs font-medium uppercase tracking-wide text-sky-600">
+          환자 포털
+        </p>
+        <p className="mb-4 text-sm text-slate-600">
+          환자에게 케어로그 상담 내역 확인 링크를 문자로 발송합니다.
+        </p>
+        <SendInvitationButton
+          patientId={patient.id}
+          phone={patient.phone}
+          hasRrn={!!patient.resident_no}
+        />
       </section>
     </div>
   );

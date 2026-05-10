@@ -1,7 +1,7 @@
 # Carelog 프로젝트 상태
 
-**최종 업데이트**: 2026-05-10  
-**현재 버전**: main 브랜치 (commit: 5625982)
+**최종 업데이트**: 2026-05-10 (세션 2)
+**현재 버전**: main 브랜치
 
 ---
 
@@ -26,10 +26,36 @@
 | 기존 데이터 기관 귀속 | ✅ 완료 | 시드 기관 → 예미안치과 마이그레이션 완료 |
 | 직원 초대 (Server Action) | ✅ 완료 | inviteStaff, acceptInvitation 백엔드 구현 |
 | 디자인 시스템 문서 | ✅ 완료 | docs/design.md |
+| 환자 포털 — SMS 초대 발송 | ✅ 완료 | 직원이 환자 상세에서 "상담 공유" 버튼으로 Solapi SMS 발송 |
+| 환자 포털 — OTP 가입 | ✅ 완료 | 주민번호+전화번호 → OTP 인증 → patient_accounts 생성 |
+| 환자 포털 — 상담 내역 조회 | ✅ 완료 | /portal/records — 모든 연결 기관 상담 통합 조회 |
+| 환자 포털 — 로그아웃 | ✅ 완료 | patient_session_token 쿠키 삭제 + DB 세션 삭제 |
 
 ---
 
-## 2026-05-10 세션 작업 내용
+## 2026-05-10 세션 2 작업 내용 (환자 포털 구현)
+
+| 작업 | 결과 |
+|---|---|
+| solapi 패키지 설치 | v6.0.1 (패키지명: solapi, not @solapi/node-sdk) |
+| 마이그레이션 파일 생성 | supabase/migrations/20260510000001_patient_portal.sql (5개 테이블) |
+| app/(patient)/ 라우트 그룹 생성 | /p/[token], /portal/login, /portal/verify, /portal/records |
+| lib/sms/solapi.ts 생성 | sendSms() 함수 구현 |
+| lib/patient-session.ts 생성 | getPatientSession() 함수 구현 |
+| 미들웨어 공개 경로 추가 | /p/, /portal/login, /portal/verify |
+| DB 타입 추가 | PatientInvitationRow 등 5개 신규 타입 |
+| app/actions/patient-portal.ts 생성 | sendPatientInvitation, requestPatientOtp, verifyPatientOtp, getPatientRecords, patientLogout |
+| SendInvitationButton 컴포넌트 | 직원용 모달 UI + 동의 체크 |
+| PatientLoginForm 컴포넌트 | 주민번호 앞/뒤 + 전화번호 입력 |
+| PatientOtpForm 컴포넌트 | 6자리 OTP 입력 |
+| PatientRecordsList 컴포넌트 | 상담 카드 펼치기/닫기 |
+| 환자 상세 페이지 업데이트 | "환자 포털" 섹션 + SendInvitationButton 추가 |
+| 빌드 검증 | npm run build ✅ 통과 |
+| 문서 현행화 | architecture.md, database.md, schema.sql, project_status.md 업데이트 |
+
+---
+
+## 2026-05-10 세션 1 작업 내용
 
 | 작업 | 결과 |
 |---|---|
@@ -48,28 +74,21 @@
 
 | 이슈 | 심각도 | 상태 |
 |---|---|---|
+| Solapi 실제 API 키 미설정 | 높음 | ⏳ .env.local과 Vercel에 실제 키 입력 필요 |
+| DB 마이그레이션 미실행 | 높음 | ⏳ Supabase SQL Editor에서 20260510000001_patient_portal.sql 실행 필요 |
 | 직원 초대 UI 미구현 | 중간 | ⏳ T030~T033 (설정 페이지 + invite 폼) |
-| NEXT_PUBLIC_SITE_URL 환경변수 미설정 | 낮음 | 코드에 하드코딩 대체 중, Vercel에 추가 권장 |
+| NEXT_PUBLIC_SITE_URL 환경변수 미설정 | 낮음 | Vercel에 https://carelog-tau.vercel.app 추가 권장 |
 
 ---
 
-## 다음 세션: Phase 4 US2 (직원 초대 UI)
+## 다음 우선순위
 
-### T030: `components/auth/invite-form.tsx`
-- 토큰 파라미터 읽기 + 비밀번호 설정 폼
-- `acceptInvitation` Server Action 연결
+### 즉시 필요 (환자 포털 활성화)
+1. Supabase SQL Editor에서 `supabase/migrations/20260510000001_patient_portal.sql` 실행
+2. Solapi 계정 생성 + 발신번호 등록 후 `.env.local` 및 Vercel에 키 입력
 
-### T031: `app/(auth)/invite/[token]/page.tsx`
-- 토큰 유효성 사전 확인 (만료/사용 여부)
-- InviteForm 렌더
-
-### T032: `components/institution/invite-staff-form.tsx`
-- 직원 이메일 + 역할 선택 폼
-- `inviteStaff` Server Action 연결
-
-### T033: `app/(dashboard)/settings/page.tsx`
-- 직원 초대 폼
-- 현재 멤버 목록 표시
+### 이후
+3. 직원 초대 UI (T030~T033)
 
 ---
 
@@ -78,8 +97,8 @@
 | Phase | 내용 | 상태 |
 |---|---|---|
 | Phase 1 | 직원 로그인 + 기관 계정 + RLS | ✅ 완료 |
-| Phase 2 | 콘텐츠 블록 모델 + 오디오 + Audit log | 미착수 |
-| Phase 3 | 환자 포털 (cross-institution 열람, 검증) | 미착수 |
+| Phase 2 (spec 002) | 환자 포털 — SMS 초대 + OTP 가입 + 상담 조회 | ✅ 코드 완료, DB 마이그레이션 대기 |
+| Phase 3 | 콘텐츠 블록 모델 + 오디오 + Audit log | 미착수 |
 | Phase 4 | AI 기능 (오디오 전사, 상담 요약) | 미착수 |
 
 ---

@@ -1,7 +1,10 @@
 # 데이터베이스 스키마
 
 Supabase(PostgreSQL) 기반. 전체 스키마는 `supabase/schema.sql` 참고.
-마이그레이션 파일: `supabase/migrations/20260509000001_staff_auth_institution.sql`
+
+마이그레이션 파일:
+- `supabase/migrations/20260509000001_staff_auth_institution.sql`
+- `supabase/migrations/20260510000001_patient_portal.sql`
 
 ## 테이블 목록
 
@@ -12,6 +15,11 @@ Supabase(PostgreSQL) 기반. 전체 스키마는 `supabase/schema.sql` 참고.
 | `institution_invitations` | 직원 초대 토큰 관리 |
 | `patient` | 환자 기본 정보 (institution_id 필터) |
 | `consultation` | 상담 기록 (patient 1:N, institution_id 필터) |
+| `patient_invitations` | 환자 포털 SMS 초대 기록 (72시간 유효) |
+| `patient_accounts` | 환자 포털 계정 (주민번호 해시 기반, Supabase Auth 분리) |
+| `patient_otps` | 환자 OTP 인증 코드 (5분 만료) |
+| `patient_sessions` | 환자 세션 토큰 (30일 HttpOnly 쿠키) |
+| `patient_account_links` | PatientAccount ↔ 기관 내 patient 레코드 M:N 연결 |
 
 ---
 
@@ -132,6 +140,88 @@ $$;
 ```
 
 `security definer` + `stable`로 선언하여 RLS 정책 내에서 효율적으로 호출됨.
+
+---
+
+## 환자 포털 테이블 (마이그레이션: 20260510000001)
+
+모든 환자 포털 테이블은 RLS 활성화 + 정책 없음 = anon/authenticated 키 접근 불가.
+모든 읽기/쓰기는 Service Role Admin Client를 통해서만.
+
+## `patient_invitations`
+
+| 컬럼 | 타입 | 설명 |
+|---|---|---|
+| `id` | uuid PK | gen_random_uuid() |
+| `institution_id` | uuid FK → institutions.id | 발송 기관 |
+| `patient_id` | bigint FK → patient.id | 대상 환자 |
+| `phone` | text NOT NULL | 수신 전화번호 (정규화: 010XXXXXXXX) |
+| `token` | text UNIQUE | 64자 랜덤 토큰 (UUID × 2 연결) |
+| `consent_given` | boolean NOT NULL | 개인정보 제공 동의 여부 |
+| `invited_by` | uuid FK → auth.users.id | 발송한 직원 |
+| `expires_at` | timestamptz | 만료 시각 (기본: +72시간) |
+| `accepted_at` | timestamptz | 수락 시각 (NULL = 미수락) |
+| `created_at` | timestamptz | 생성 시각 |
+
+**인덱스**: `idx_patient_invitations_token`, `idx_patient_invitations_patient`
+
+---
+
+## `patient_accounts`
+
+주민번호 해시 기반 환자 포털 계정. 전화번호 저장 없음.
+
+| 컬럼 | 타입 | 설명 |
+|---|---|---|
+| `id` | uuid PK | gen_random_uuid() |
+| `rrn_hash` | text NOT NULL UNIQUE | SHA-256(pepper+정규화된_주민번호) — 영구 식별자 |
+| `created_at` | timestamptz | 가입 시각 |
+| `last_login_at` | timestamptz | 마지막 로그인 |
+
+---
+
+## `patient_otps`
+
+| 컬럼 | 타입 | 설명 |
+|---|---|---|
+| `id` | uuid PK | gen_random_uuid() |
+| `phone` | text NOT NULL | OTP 수신 전화번호 |
+| `code` | text NOT NULL | 6자리 숫자 코드 |
+| `expires_at` | timestamptz | 만료 시각 (기본: +5분) |
+| `verified_at` | timestamptz | 인증 완료 시각 (NULL = 미사용) |
+| `attempt_count` | integer NOT NULL | 오류 시도 횟수 (3회 초과 시 10분 잠금) |
+| `created_at` | timestamptz | 생성 시각 |
+
+**인덱스**: `idx_patient_otps_phone`
+
+---
+
+## `patient_sessions`
+
+| 컬럼 | 타입 | 설명 |
+|---|---|---|
+| `id` | uuid PK | gen_random_uuid() |
+| `patient_account_id` | uuid FK → patient_accounts.id | 연결 계정 |
+| `token` | text UNIQUE | 64자 랜덤 토큰 — HttpOnly 쿠키 값 |
+| `expires_at` | timestamptz | 만료 시각 (기본: +30일) |
+| `created_at` | timestamptz | 생성 시각 |
+
+**인덱스**: `idx_patient_sessions_token`
+
+---
+
+## `patient_account_links`
+
+| 컬럼 | 타입 | 설명 |
+|---|---|---|
+| `id` | uuid PK | gen_random_uuid() |
+| `patient_account_id` | uuid FK → patient_accounts.id | 환자 포털 계정 |
+| `patient_id` | bigint FK → patient.id | 기관 내 환자 레코드 |
+| `institution_id` | uuid FK → institutions.id | 기관 |
+| `linked_at` | timestamptz | 연결 시각 |
+
+**제약**: UNIQUE(patient_account_id, patient_id)
+**인덱스**: `idx_pal_account`, `idx_pal_patient`
 
 ---
 

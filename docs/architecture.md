@@ -37,11 +37,19 @@ app/
 │       └── [consultationId]/page.tsx  # 상담 기록 상세
 ├── auth/
 │   └── callback/route.ts          # 이메일 인증 후 PKCE 코드 교환 → 세션 생성
+├── (patient)/                     # 환자 포털 라우트 그룹 (Supabase Auth 불필요)
+│   ├── layout.tsx                 # 패스스루 (세션 체크는 개별 페이지)
+│   ├── p/[token]/page.tsx         # SMS 초대 링크 — 주민번호+전화번호 입력
+│   └── portal/
+│       ├── login/page.tsx         # 재방문 환자 로그인
+│       ├── verify/page.tsx        # OTP 입력
+│       └── records/page.tsx       # 상담 내역 조회 (세션 보호)
 ├── actions/
 │   ├── auth.ts                    # signUp, signIn, signOut
 │   ├── institutions.ts            # getMyInstitution, inviteStaff, acceptInvitation
 │   ├── patients.ts                # 환자 CRUD, 검색 (institution_id 필터)
-│   └── consultations.ts           # 상담 기록 CRUD (institution_id 필터)
+│   ├── consultations.ts           # 상담 기록 CRUD (institution_id 필터)
+│   └── patient-portal.ts          # 환자 포털 Server Actions (초대·OTP·세션·조회)
 ├── globals.css
 └── layout.tsx                     # HTML/body/fonts 쉘만 포함
 
@@ -51,6 +59,11 @@ components/
 │   └── signup-form.tsx            # 이메일+비밀번호+기관명 가입 폼
 ├── layout/
 │   └── header.tsx                 # 기관명 + StationManager + 로그아웃
+├── patient/
+│   ├── send-invitation-button.tsx # 직원용: 환자 초대 문자 발송 버튼+모달
+│   ├── patient-login-form.tsx     # 환자용: 주민번호+전화번호 입력 폼
+│   ├── patient-otp-form.tsx       # 환자용: OTP 입력 폼
+│   └── patient-records-list.tsx   # 환자용: 상담 내역 목록 (펼치기/닫기)
 ├── patient-home.tsx               # 검색 UI + 새 환자 등록 버튼
 ├── patient-form.tsx               # 새 환자 등록 폼
 ├── patient-edit-form.tsx          # 환자 정보 수정 모달
@@ -67,10 +80,13 @@ lib/
 │   ├── middleware.ts              # updateSession() — proxy.ts에서 호출
 │   ├── admin.ts                   # Service Role 클라이언트 (RLS 우회, 서버 전용)
 │   └── config.ts                  # 테이블명·버킷명 환경변수 매핑
+├── sms/
+│   └── solapi.ts                  # sendSms(to, text) — Solapi SDK 래퍼
 ├── auth/
 │   └── institution.ts             # getMyInstitutionId(), getMyInstitution() React.cache
 ├── types/
-│   └── database.ts                # PatientRow, ConsultationRow, InstitutionRow 등 타입
+│   └── database.ts                # PatientRow, ConsultationRow, PatientInvitationRow 등 타입
+├── patient-session.ts             # getPatientSession(cookies) — patient_sessions 검증
 ├── patient-search.ts              # ilike 쿼리 유틸 (escapeIlike, fragments)
 ├── rrn-core.ts                    # 주민번호 파싱·정규화·검색 패턴
 ├── rrn-hash.ts                    # 주민번호 SHA-256 해시 (중복 방지용)
@@ -80,7 +96,8 @@ lib/
 proxy.ts                           # Next.js 16 미들웨어 진입점 (middleware.ts 대체)
 supabase/
 ├── migrations/
-│   └── 20260509000001_staff_auth_institution.sql  # 기관 구조 + RLS 마이그레이션
+│   ├── 20260509000001_staff_auth_institution.sql  # 기관 구조 + RLS 마이그레이션
+│   └── 20260510000001_patient_portal.sql          # 환자 포털 5개 테이블
 └── schema.sql                     # 전체 스키마 (참조용)
 ```
 
@@ -164,6 +181,53 @@ ConsultationForm (Client)
   → hashResidentNoForMatching() → SHA-256 해시 (resident_no_hash 컬럼)
   → DB 저장: resident_no (원본), resident_no_hash (중복방지 unique index)
   → UI 표시: maskResidentNo() → "880101-1******"
+```
+
+## 환자 포털 인증 흐름
+
+환자 포털은 Supabase Auth와 완전 분리된 자체 세션 시스템을 사용합니다.
+
+```
+[직원] 환자 상세 → "상담 공유" 버튼 → SendInvitationButton (모달)
+  → sendPatientInvitation() [Server Action]
+    → patient_invitations INSERT (72시간 유효 토큰)
+    → sendSms() → Solapi API → 환자 전화번호로 SMS 발송
+    → 문자 내용: "[기관명] 상담 내역 확인: {site}/p/{token}"
+
+[환자] SMS 링크 클릭 → /p/[token]
+  → 초대 유효성 확인 (만료/수락 체크)
+  → PatientLoginForm: 주민번호 앞6 + 뒤7 + 전화번호 입력
+
+  → requestPatientOtp() [Server Action]
+    → hashResidentNoForMatching(rrnFront+rrnBack) → rrnHash
+    → patient.resident_no_hash 대조 (본인 확인)
+    → patient_otps INSERT (6자리 코드, 5분 만료)
+    → sendSms() → OTP 발송
+    → 반환: { ok: true, rrnHash }
+
+  → /portal/verify?phone=...&rrn_hash=...&token=...
+  → PatientOtpForm: 6자리 코드 입력
+
+  → verifyPatientOtp() [Server Action]
+    → OTP 유효성 검증 (만료, attempt_count < 3, 코드 일치)
+    → patient_accounts SELECT/INSERT WHERE rrn_hash = rrnHash
+    → patient_sessions INSERT → patient_session_token 쿠키 설정 (30일 HttpOnly)
+    → invitation_token 있으면: patient_account_links INSERT + accepted_at 업데이트
+
+  → /portal/records
+  → getPatientSession() → patient_sessions 조회 → 만료 체크
+  → getPatientRecords() → patient_account_links → consultations JOIN institutions
+  → PatientRecordsList: 기관명·날짜·내용·사진·처방메모 표시
+```
+
+### 환자 세션 검증
+```
+환자 요청 → /portal/records
+  → getPatientSession(cookieStore)
+    → patient_session_token 쿠키 읽기
+    → admin client: patient_sessions WHERE token = ? AND expires_at > now()
+    → 없거나 만료 → redirect('/portal/login')
+    → 있으면 → { patientAccountId } 반환
 ```
 
 ## 핵심 설계 결정

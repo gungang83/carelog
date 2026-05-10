@@ -47,3 +47,49 @@ export type InstitutionInvitationRow = {
   accepted_at: string | null;
   created_at: string;
 };
+
+export type PatientInvitationRow = {
+  id: string;
+  institution_id: string;
+  patient_id: string;
+  phone: string;
+  token: string;
+  consent_given: boolean;
+  invited_by: string;
+  expires_at: string;
+  accepted_at: string | null;
+  created_at: string;
+};
+
+export type PatientAccountRow = {
+  id: string;
+  rrn_hash: string;
+  created_at: string;
+  last_login_at: string | null;
+};
+
+export type PatientOtpRow = {
+  id: string;
+  phone: string;
+  code: string;
+  expires_at: string;
+  verified_at: string | null;
+  attempt_count: number;
+  created_at: string;
+};
+
+export type PatientSessionRow = {
+  id: string;
+  patient_account_id: string;
+  token: string;
+  expires_at: string;
+  created_at: string;
+};
+
+export type PatientAccountLinkRow = {
+  id: string;
+  patient_account_id: string;
+  patient_id: string;
+  institution_id: string;
+  linked_at: string;
+};
