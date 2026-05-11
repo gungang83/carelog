@@ -91,9 +91,10 @@ export function ConsultationHistory({ consultations }: Props) {
                 ) : null}
               </div>
 
-              <p className="mt-3 whitespace-pre-wrap text-sm leading-6 text-slate-800">
-                {c.content}
-              </p>
+              <div
+                className="rich-content mt-3 text-sm leading-6 text-slate-800"
+                dangerouslySetInnerHTML={{ __html: c.content }}
+              />
 
               {urls.length ? (
                 <div className="mt-4">

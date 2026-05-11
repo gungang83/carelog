@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { saveConsultation } from "@/app/actions/consultations";
 import { CARELOG_STATION_STORAGE_KEY } from "@/lib/station-storage";
 import { isRedirectError } from "next/dist/client/components/redirect-error";
+import { RichTextEditor } from "@/components/rich-text-editor";
 
 type Props = { patientId: string; patientName: string };
 
@@ -153,14 +154,10 @@ export function ConsultationForm({ patientId, patientName }: Props) {
         <p className="mt-1 text-xs text-slate-500">
           {patientName} 님의 주소증/처치/다음 내원 안내를 크게 기록하세요.
         </p>
-        <textarea
-          id="content"
-          name="content"
+        <RichTextEditor
           value={content}
-          onChange={(e) => setContent(e.target.value)}
-          rows={10}
+          onChange={setContent}
           placeholder="예: 주소증, 처치 내용, 진단 소견, 다음 내원 안내 등..."
-          className="mt-3 min-h-[240px] w-full resize-y rounded-xl border border-sky-200 bg-white px-4 py-3 text-slate-900 outline-none ring-sky-400/30 placeholder:text-slate-400 focus:border-sky-400 focus:ring-2"
         />
       </div>
 
