@@ -1,10 +1,11 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, useTransition } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { saveConsultation } from "@/app/actions/consultations";
 import { CARELOG_STATION_STORAGE_KEY } from "@/lib/station-storage";
 import { isRedirectError } from "next/dist/client/components/redirect-error";
 import { RichTextEditor } from "@/components/rich-text-editor";
+import { ImageAnnotator } from "@/components/image-annotator";
 
 type Props = { patientId: string; patientName: string };
 
@@ -21,10 +22,13 @@ export function ConsultationForm({ patientId, patientName }: Props) {
   const [pending, startTransition] = useTransition();
 
   const inputRef = useRef<HTMLInputElement | null>(null);
+  const annotateInputRef = useRef<HTMLInputElement | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [previews, setPreviews] = useState<Preview[]>([]);
   const urlsRef = useRef<string[]>([]);
   const [selectedProducts, setSelectedProducts] = useState<string[]>([]);
+  const [annotateFile, setAnnotateFile] = useState<File | null>(null);
+  const [annotatePreviewId, setAnnotatePreviewId] = useState<string | null>(null);
 
   // 치과에서 바로 추천하는 기본 제품
   const products = useMemo(
@@ -65,7 +69,7 @@ export function ConsultationForm({ patientId, patientName }: Props) {
     inputRef.current.files = dt.files;
   }, [selectedFiles]);
 
-  function addFiles(files: File[]) {
+  const addFiles = useCallback((files: File[]) => {
     const images = files.filter((f) => f.type.startsWith("image/"));
     if (images.length === 0) return;
 
@@ -76,6 +80,45 @@ export function ConsultationForm({ patientId, patientName }: Props) {
     });
 
     setPreviews((prev) => [...prev, ...nextPreviews]);
+  }, []);
+
+  // 클립보드 이미지 붙여넣기 → 주석 도구 바로 열기
+  useEffect(() => {
+    const handlePaste = (e: ClipboardEvent) => {
+      const items = Array.from(e.clipboardData?.items ?? []);
+      const imageItems = items.filter((item) => item.type.startsWith("image/"));
+      if (imageItems.length === 0) return;
+      // 텍스트도 함께 있으면 에디터에서의 텍스트 붙여넣기이므로 무시
+      const hasText = items.some(
+        (item) => item.kind === "string" && item.type === "text/plain",
+      );
+      if (hasText) return;
+      e.preventDefault();
+      const file = imageItems[0].getAsFile();
+      if (!file) return;
+      setAnnotateFile(file);
+      setAnnotatePreviewId(null);
+    };
+    window.addEventListener("paste", handlePaste);
+    return () => window.removeEventListener("paste", handlePaste);
+  }, []);
+
+  function handleAnnotateSave(annotated: File) {
+    const url = URL.createObjectURL(annotated);
+    urlsRef.current.push(url);
+    if (annotatePreviewId) {
+      setPreviews((prev) =>
+        prev.map((p) => {
+          if (p.id !== annotatePreviewId) return p;
+          URL.revokeObjectURL(p.url);
+          return { ...p, url, file: annotated };
+        }),
+      );
+    } else {
+      setPreviews((prev) => [...prev, { id: crypto.randomUUID(), url, file: annotated }]);
+    }
+    setAnnotateFile(null);
+    setAnnotatePreviewId(null);
   }
 
   function removePreview(id: string) {
@@ -182,6 +225,18 @@ export function ConsultationForm({ patientId, patientName }: Props) {
           onChange={(e) => handleFilesFromFileList(e.target.files)}
           className="sr-only"
         />
+        {/* 주석용 파일 선택 (숨김) */}
+        <input
+          ref={annotateInputRef}
+          type="file"
+          accept="image/*"
+          className="sr-only"
+          onChange={(e) => {
+            const f = e.target.files?.[0];
+            if (f) { setAnnotateFile(f); setAnnotatePreviewId(null); }
+            if (annotateInputRef.current) annotateInputRef.current.value = "";
+          }}
+        />
 
         <div
           className={[
@@ -211,8 +266,18 @@ export function ConsultationForm({ patientId, patientName }: Props) {
             {isDragging ? "여기에 놓으면 업로드됩니다" : "여기를 클릭하거나 끌어서 업로드"}
           </div>
           <div className="mt-1 text-xs text-slate-500">
-            최대 여러 장 업로드 가능 (업로드는 저장 시 진행)
+            Ctrl+V로 클립보드 이미지 붙여넣기 가능 · 여러 장 지원
           </div>
+        </div>
+
+        <div className="mt-3 flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={() => annotateInputRef.current?.click()}
+            className="rounded-xl border border-sky-200 bg-white px-4 py-2 text-xs font-semibold text-sky-800 shadow-sm hover:bg-sky-50"
+          >
+            이미지 가져와서 주석 그리기
+          </button>
         </div>
 
         {previews.length > 0 ? (
@@ -233,6 +298,13 @@ export function ConsultationForm({ patientId, patientName }: Props) {
                     alt="preview"
                     className="h-28 w-full object-cover"
                   />
+                  <button
+                    type="button"
+                    onClick={() => { setAnnotateFile(p.file); setAnnotatePreviewId(p.id); }}
+                    className="absolute left-2 top-2 rounded-lg bg-white/90 px-2 py-1 text-xs font-semibold text-sky-700 opacity-0 shadow-sm transition hover:bg-white group-hover:opacity-100"
+                  >
+                    주석
+                  </button>
                   <button
                     type="button"
                     onClick={() => removePreview(p.id)}
@@ -396,6 +468,14 @@ export function ConsultationForm({ patientId, patientName }: Props) {
           </p>
         ) : null}
       </div>
+
+      {annotateFile && (
+        <ImageAnnotator
+          file={annotateFile}
+          onClose={() => { setAnnotateFile(null); setAnnotatePreviewId(null); }}
+          onSave={handleAnnotateSave}
+        />
+      )}
     </form>
   );
 }
