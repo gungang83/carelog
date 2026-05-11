@@ -67,8 +67,10 @@ components/
 ├── patient-home.tsx               # 검색 UI + 새 환자 등록 버튼
 ├── patient-form.tsx               # 새 환자 등록 폼
 ├── patient-edit-form.tsx          # 환자 정보 수정 모달
-├── consultation-form.tsx          # 상담 기록 작성 폼
-├── consultation-history.tsx       # 상담 이력 목록
+├── consultation-form.tsx          # 상담 기록 작성 폼 (처방 메모 포함)
+├── consultation-history.tsx       # 상담 이력 목록 (HTML 렌더링)
+├── rich-text-editor.tsx           # Tiptap 리치 텍스트 에디터 (인라인 이미지·주석 포함)
+├── image-annotator.tsx            # 이미지 주석 캔버스 모달 (펜·직선·화살표·사각형·텍스트·지우개)
 ├── station-manager.tsx            # 체어 번호 설정
 └── ui/
     └── dropdown-menu.tsx          # Radix UI 드롭다운 래퍼
@@ -184,12 +186,22 @@ PatientHome (Client)
 ### 상담 기록 작성
 ```
 ConsultationForm (Client)
-  → 이미지 선택 → Supabase Storage 직접 업로드 (consultation-images 버킷)
-  → saveConsultation(formData) [Server Action]
+  → RichTextEditor (Tiptap)
+      → 이미지 삽입 (툴바 버튼 / 드래그 앤 드롭 / Ctrl+V 붙여넣기)
+        → ImageAnnotator (캔버스 주석 모달)
+          → 주석 완료 → Supabase Storage 즉시 업로드 (브라우저 클라이언트)
+          → 반환된 publicUrl을 에디터에 <img> 태그로 삽입
+      → 텍스트 + 이미지가 섞인 HTML 생성 (content 상태)
+  → saveConsultation(patientId, content, formData) [Server Action]
     → getMyInstitutionId() → institution_id 포함 INSERT
-    → image_urls, content, prescriptions, station_name 저장
+    → content(HTML), image_urls([] — 이미지는 HTML에 포함), prescriptions, station_name 저장
     → revalidatePath('/patients/[id]')
 ```
+
+**이미지 저장 방식 변경 이력**
+- 구버전: 이미지를 별도 `image_urls` JSONB 배열로 분리 저장, 상담 이력에서 별도 갤러리 표시
+- 현재: 이미지가 HTML content 안에 `<img src="supabase-url">` 태그로 인라인 포함
+- `image_urls` 컬럼은 구버전 데이터 호환을 위해 유지 (신규 상담은 `[]`)
 
 ### 주민번호 처리
 ```

@@ -22,7 +22,7 @@
 
 **⚠️ CRITICAL**: DB 마이그레이션 실행 후 User Story 구현 시작
 
-- [ ] T005 Supabase Management API 또는 SQL Editor에서 `supabase/migrations/20260510000001_patient_portal.sql` 실행하여 5개 테이블 생성 확인 ⬅ 사용자가 직접 실행 필요
+- [x] T005 Supabase Management API 또는 SQL Editor에서 `supabase/migrations/20260510000001_patient_portal.sql` 실행하여 5개 테이블 생성 확인 ← 2026-05-10 사용자가 SQL Editor에서 직접 실행 완료
 - [x] T006 [P] `lib/types/database.ts` 업데이트 — `PatientInvitationRow`, `PatientAccountRow`, `PatientOtpRow`, `PatientSessionRow`, `PatientAccountLinkRow` 타입 추가
 - [x] T007 [P] `lib/sms/solapi.ts` 생성 — `sendSms(to: string, text: string)` 함수 구현, `solapi` SDK 사용
 - [x] T008 `lib/patient-session.ts` 생성 — `getPatientSession(cookies)` 함수 구현
@@ -96,12 +96,12 @@
 
 ## Phase 7: Polish & 마무리
 
-- [ ] T026 quickstart.md 7개 시나리오 수동 실행 — 전체 통과 확인 (시나리오 5: 만료 링크, 6: OTP 잠금 포함)
-- [ ] T027 [P] `docs/architecture.md` 업데이트 — `(patient)` 라우트 그룹, `lib/sms/solapi.ts`, `lib/patient-session.ts` 추가
-- [ ] T028 [P] `docs/database.md` 업데이트 — 5개 신규 테이블 스키마 추가
-- [ ] T029 [P] `supabase/schema.sql` 업데이트 — 마이그레이션 SQL 전체 반영
-- [ ] T030 [P] `project_status.md` 업데이트 — 환자 포털 기능 완료 표시
-- [ ] T031 `npm run build` 실행 — 타입 에러, 빌드 에러 없음 확인 후 `git push origin main`
+- [ ] T026 quickstart.md 7개 시나리오 수동 실행 — 전체 통과 확인 (시나리오 5: 만료 링크, 6: OTP 잠금 포함) ← Solapi 실제 키 설정 후 진행 필요
+- [x] T027 [P] `docs/architecture.md` 업데이트 — `(patient)` 라우트 그룹, `lib/sms/solapi.ts`, `lib/patient-session.ts` 추가
+- [x] T028 [P] `docs/database.md` 업데이트 — 5개 신규 테이블 스키마 추가
+- [x] T029 [P] `supabase/schema.sql` 업데이트 — 마이그레이션 SQL 전체 반영
+- [x] T030 [P] `project_status.md` 업데이트 — 환자 포털 기능 완료 표시
+- [x] T031 `npm run build` 실행 — 타입 에러, 빌드 에러 없음 확인 후 `git push origin main`
 
 ---
 
