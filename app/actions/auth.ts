@@ -94,3 +94,48 @@ export async function signOut(_formData?: FormData): Promise<void> {
   await supabase.auth.signOut();
   redirect("/login");
 }
+
+export async function setupInstitution(formData: FormData): Promise<
+  { ok: false; message: string }
+> {
+  const institution_name = String(formData.get("institution_name") ?? "").trim();
+  if (!institution_name) {
+    return { ok: false, message: "기관명을 입력해 주세요." };
+  }
+
+  const supabase = await createServerSupabaseClient();
+  const { data: { user }, error: userErr } = await supabase.auth.getUser();
+  if (userErr || !user) redirect("/login");
+
+  const admin = createAdminSupabaseClient();
+
+  const { data: existing } = await admin
+    .from("institution_members")
+    .select("id")
+    .eq("user_id", user!.id)
+    .maybeSingle();
+
+  if (existing) redirect("/");
+
+  const { data: inst, error: instErr } = await admin
+    .from("institutions")
+    .insert({ name: institution_name, type: "dental" })
+    .select("id")
+    .single();
+
+  if (instErr || !inst) {
+    return { ok: false, message: `기관 등록 실패: ${instErr?.message ?? "알 수 없는 오류"}` };
+  }
+
+  const { error: memberErr } = await admin.from("institution_members").insert({
+    institution_id: inst.id,
+    user_id: user!.id,
+    role: "owner",
+  });
+
+  if (memberErr) {
+    return { ok: false, message: `멤버 등록 실패: ${memberErr.message}` };
+  }
+
+  redirect("/");
+}

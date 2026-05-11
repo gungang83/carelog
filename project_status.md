@@ -1,6 +1,6 @@
 # Carelog 프로젝트 상태
 
-**최종 업데이트**: 2026-05-11 (세션 3)
+**최종 업데이트**: 2026-05-12 (세션 4)
 **현재 버전**: main 브랜치
 
 ---
@@ -34,6 +34,7 @@
 | 환자 포털 — OTP 가입 | ✅ 완료 | 주민번호+전화번호 → OTP 인증 → patient_accounts 생성 |
 | 환자 포털 — 상담 내역 조회 | ✅ 완료 | /portal/records — 모든 연결 기관 상담 통합 조회 |
 | 환자 포털 — 로그아웃 | ✅ 완료 | patient_session_token 쿠키 삭제 + DB 세션 삭제 |
+| Google OAuth 로그인 | ✅ 완료 (외부 설정 필요) | Google 로그인 버튼 + 신규 사용자 기관 등록 온보딩 흐름 |
 
 ---
 
@@ -51,6 +52,18 @@
 | 이미지 주석 도구 (`ImageAnnotator`) | `components/image-annotator.tsx` — 펜·직선·화살표·사각형·텍스트·지우개, 색상 7종, 두께 3단계, Ctrl+Z, 터치 지원 |
 | 이미지 삽입 흐름 통합 | 툴바 버튼 / 드래그 앤 드롭 / Ctrl+V → 주석 도구 → Supabase 업로드 → 에디터 인라인 삽입 |
 | 기존 별도 이미지 첨부 섹션 제거 | `consultation-form.tsx` 단순화 |
+| 빌드 검증 | `npm run build` ✅ 통과 |
+
+---
+
+## 2026-05-12 세션 4 작업 내용 (Google OAuth 로그인)
+
+| 작업 | 결과 |
+|---|---|
+| Google 로그인 버튼 추가 | `components/auth/login-form.tsx` — Google 아이콘 버튼, `signInWithOAuth({ provider: "google" })` |
+| 온보딩 플로우 구현 | `app/(auth)/onboarding/page.tsx` + `components/auth/onboarding-form.tsx` — 신규 Google 사용자 기관명 입력 |
+| `setupInstitution` Server Action | `app/actions/auth.ts` — institution + member 생성, 이미 기관 있으면 스킵 |
+| `/auth/callback` 수정 | institution_members 존재 여부 확인 → 없으면 `/onboarding` 리다이렉트 |
 | 빌드 검증 | `npm run build` ✅ 통과 |
 
 ---
@@ -98,6 +111,7 @@
 | 이슈 | 심각도 | 상태 |
 |---|---|---|
 | Solapi 실제 API 키 미설정 | 높음 | ⏳ .env.local과 Vercel에 실제 키 입력 필요 |
+| Google OAuth 외부 설정 미완료 | 높음 | ⏳ Google Cloud Console + Supabase Dashboard 설정 필요 (아래 참조) |
 | 직원 초대 UI 미구현 | 중간 | ⏳ 설정 페이지 + invite 폼 (스펙 미작성) |
 | NEXT_PUBLIC_SITE_URL 환경변수 미설정 | 낮음 | Vercel에 https://carelog-tau.vercel.app 추가 권장 |
 | spec 002 quickstart 시나리오 수동 검증 | 낮음 | ⏳ Solapi 키 설정 후 전체 흐름 테스트 필요 |
@@ -106,9 +120,25 @@
 
 ## 다음 우선순위
 
-1. **Solapi 계정 생성** + 발신번호 등록 후 `.env.local` 및 Vercel에 API 키 입력
-2. **spec 002 quickstart 7개 시나리오** 수동 검증 (환자 포털 전체 흐름)
-3. **직원 초대 UI** — `/speckit-specify`로 spec 작성 후 구현
+1. **Google OAuth 외부 설정** — Google Cloud Console + Supabase Dashboard 설정 (아래 설명 참조)
+2. **Solapi 계정 생성** + 발신번호 등록 후 `.env.local` 및 Vercel에 API 키 입력
+3. **spec 002 quickstart 7개 시나리오** 수동 검증 (환자 포털 전체 흐름)
+4. **직원 초대 UI** — `/speckit-specify`로 spec 작성 후 구현
+
+### Google OAuth 설정 가이드
+
+**1. Google Cloud Console**
+- console.cloud.google.com → 프로젝트 선택 또는 생성
+- APIs & Services → OAuth consent screen → External → 앱 정보 입력
+- APIs & Services → Credentials → Create Credentials → OAuth client ID
+  - Application type: Web application
+  - Authorized redirect URIs:
+    - `https://svffiungfijiybvrrnpu.supabase.co/auth/v1/callback`
+- Client ID와 Client Secret 복사
+
+**2. Supabase Dashboard**
+- supabase.com → 프로젝트 → Authentication → Providers → Google
+- Client ID와 Client Secret 붙여넣기 → Save
 
 ---
 

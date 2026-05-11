@@ -27,6 +27,7 @@ app/
 │   ├── layout.tsx                 # 중앙 정렬 래퍼
 │   ├── login/page.tsx
 │   ├── signup/page.tsx
+│   ├── onboarding/page.tsx        # Google OAuth 신규 사용자 기관명 등록
 │   └── invite/[token]/page.tsx    # 직원 초대 수락
 ├── (dashboard)/                   # 인증 필요 라우트 그룹
 │   ├── layout.tsx                 # 미인증 시 /login 리다이렉트 + 기관명 헤더
@@ -45,7 +46,7 @@ app/
 │       ├── verify/page.tsx        # OTP 입력
 │       └── records/page.tsx       # 상담 내역 조회 (세션 보호)
 ├── actions/
-│   ├── auth.ts                    # signUp, signIn, signOut
+│   ├── auth.ts                    # signUp, signIn, signOut, setupInstitution
 │   ├── institutions.ts            # getMyInstitution, inviteStaff, acceptInvitation
 │   ├── patients.ts                # 환자 CRUD, 검색 (institution_id 필터)
 │   ├── consultations.ts           # 상담 기록 CRUD (institution_id 필터)
@@ -55,8 +56,9 @@ app/
 
 components/
 ├── auth/
-│   ├── login-form.tsx             # 이메일+비밀번호 로그인 폼
-│   └── signup-form.tsx            # 이메일+비밀번호+기관명 가입 폼
+│   ├── login-form.tsx             # 이메일+비밀번호 로그인 폼 + Google 로그인 버튼
+│   ├── signup-form.tsx            # 이메일+비밀번호+기관명 가입 폼
+│   └── onboarding-form.tsx        # Google 신규 사용자 기관명 입력 폼
 ├── layout/
 │   └── header.tsx                 # 기관명 + StationManager + 로그아웃
 ├── patient/
@@ -122,6 +124,16 @@ supabase/
 3. 로그인 (/login)
    LoginForm → signIn(formData)
      → supabase.auth.signInWithPassword()
+     → redirect('/')
+
+   또는 Google 로그인
+   LoginForm → signInWithOAuth({ provider: "google" })
+     → Google 인증 → /auth/callback?code=XXX
+     → institution_members 존재 여부 확인
+       있으면 → / 리다이렉트
+       없으면 → /onboarding 리다이렉트
+   OnboardingForm → setupInstitution(institution_name)
+     → admin client: institutions INSERT → institution_members INSERT (role: owner)
      → redirect('/')
 
 4. 세션 유지
