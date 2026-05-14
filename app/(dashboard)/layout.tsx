@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { Header } from "@/components/layout/header";
+import { getMyInstitutions, getMyInstitutionId } from "@/lib/auth/institution";
 
 export default async function DashboardLayout({
   children,
@@ -16,18 +17,31 @@ export default async function DashboardLayout({
     redirect("/login");
   }
 
-  const { data } = await supabase
-    .from("institution_members")
-    .select("institutions(name)")
-    .eq("user_id", user.id)
-    .maybeSingle();
+  const [institutions, activeInstitutionId] = await Promise.all([
+    getMyInstitutions(),
+    getMyInstitutionId(),
+  ]);
 
-  const inst = (data?.institutions as unknown) as { name: string } | null;
-  const institutionName = inst?.name ?? "Carelog";
+  if (institutions.length > 0 && !institutions.some((i) => i.is_active)) {
+    return (
+      <>
+        <Header institutions={[]} activeInstitutionId="" />
+        <main className="flex flex-1 items-center justify-center p-8">
+          <div className="rounded-2xl border border-slate-200 bg-white p-8 text-center shadow-sm">
+            <p className="text-slate-700 font-medium">이 기관의 접근 권한이 비활성화되었습니다.</p>
+            <p className="mt-1 text-sm text-slate-500">기관 관리자에게 문의하세요.</p>
+          </div>
+        </main>
+      </>
+    );
+  }
 
   return (
     <>
-      <Header institutionName={institutionName} />
+      <Header
+        institutions={institutions}
+        activeInstitutionId={activeInstitutionId ?? ""}
+      />
       <main className="flex-1">{children}</main>
     </>
   );

@@ -1,23 +1,80 @@
 import { cache } from "react";
+import { cookies } from "next/headers";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
+import { createAdminSupabaseClient } from "@/lib/supabase/admin";
 import type { InstitutionRow } from "@/lib/types/database";
 
-/** 현재 로그인한 사용자의 institution_id를 반환. 로그인 안 됐거나 소속 없으면 null. */
+export const ACTIVE_INSTITUTION_COOKIE = "carelog_active_institution";
+
+export type InstitutionWithRole = {
+  institution: InstitutionRow;
+  role: "owner" | "admin" | "staff";
+  is_active: boolean;
+};
+
+/** 현재 로그인한 사용자의 모든 기관 목록을 반환. */
+export const getMyInstitutions = cache(async (): Promise<InstitutionWithRole[]> => {
+  try {
+    const supabase = await createServerSupabaseClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return [];
+
+    const { data, error } = await supabase
+      .from("institution_members")
+      .select("role, is_active, institutions(id, name, type, created_at)")
+      .eq("user_id", user.id);
+
+    if (error || !data) return [];
+
+    return data
+      .map((row) => ({
+        institution: row.institutions as unknown as InstitutionRow,
+        role: row.role as "owner" | "admin" | "staff",
+        is_active: row.is_active,
+      }))
+      .filter((r) => r.institution != null);
+  } catch {
+    return [];
+  }
+});
+
+/**
+ * 현재 활성 기관 ID 반환.
+ * 쿠키에 유효한 institution_id가 있고 해당 기관의 is_active=true 멤버이면 쿠키값 반환.
+ * 없으면 첫 번째 기관 반환.
+ */
 export const getMyInstitutionId = cache(async (): Promise<string | null> => {
   try {
     const supabase = await createServerSupabaseClient();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
+    const { data: { user } } = await supabase.auth.getUser();
     if (!user) return null;
 
-    const { data } = await supabase
+    const cookieStore = await cookies();
+    const activeCookie = cookieStore.get(ACTIVE_INSTITUTION_COOKIE)?.value;
+
+    if (activeCookie) {
+      const { data } = await supabase
+        .from("institution_members")
+        .select("institution_id, is_active")
+        .eq("user_id", user.id)
+        .eq("institution_id", activeCookie)
+        .maybeSingle();
+
+      if (data && data.is_active) {
+        return data.institution_id;
+      }
+    }
+
+    // 쿠키 없거나 유효하지 않으면 첫 번째 활성 기관
+    const { data: firstMember } = await supabase
       .from("institution_members")
       .select("institution_id")
       .eq("user_id", user.id)
+      .eq("is_active", true)
+      .limit(1)
       .maybeSingle();
 
-    return data?.institution_id ?? null;
+    return firstMember?.institution_id ?? null;
   } catch {
     return null;
   }
@@ -29,16 +86,18 @@ export const getMyInstitution = cache(async (): Promise<{
   role: "owner" | "admin" | "staff";
 } | null> => {
   try {
+    const institutionId = await getMyInstitutionId();
+    if (!institutionId) return null;
+
     const supabase = await createServerSupabaseClient();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
+    const { data: { user } } = await supabase.auth.getUser();
     if (!user) return null;
 
     const { data } = await supabase
       .from("institution_members")
       .select("role, institutions(id, name, type, created_at)")
       .eq("user_id", user.id)
+      .eq("institution_id", institutionId)
       .maybeSingle();
 
     if (!data) return null;

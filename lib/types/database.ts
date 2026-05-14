@@ -34,6 +34,7 @@ export type InstitutionMemberRow = {
   role: "owner" | "admin" | "staff";
   invited_by: string | null;
   joined_at: string;
+  is_active: boolean;
 };
 
 export type InstitutionInvitationRow = {

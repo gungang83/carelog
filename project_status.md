@@ -1,6 +1,6 @@
 # Carelog 프로젝트 상태
 
-**최종 업데이트**: 2026-05-12 (세션 4)
+**최종 업데이트**: 2026-05-14 (세션 5)
 **현재 버전**: main 브랜치
 
 ---
@@ -35,6 +35,9 @@
 | 환자 포털 — 상담 내역 조회 | ✅ 완료 | /portal/records — 모든 연결 기관 상담 통합 조회 |
 | 환자 포털 — 로그아웃 | ✅ 완료 | patient_session_token 쿠키 삭제 + DB 세션 삭제 |
 | Google OAuth 로그인 | ✅ 완료 (외부 설정 필요) | Google 로그인 버튼 + 신규 사용자 기관 등록 온보딩 흐름 |
+| 헤더 기관 전환 드롭다운 | ✅ 완료 | 복수 기관 소속 직원용 드롭다운, 단일 기관은 텍스트만 표시 |
+| 직원 권한 관리 (설정 페이지) | ✅ 완료 | `/settings` — 직원 목록 조회, is_active 토글, 직원 초대, 기관명 수정 |
+| 최고 관리자 패널 | ✅ 완료 | `/admin` — 전체 기관 통합 조회, 기관별 직원 권한 관리 |
 
 ---
 
@@ -52,6 +55,27 @@
 | 이미지 주석 도구 (`ImageAnnotator`) | `components/image-annotator.tsx` — 펜·직선·화살표·사각형·텍스트·지우개, 색상 7종, 두께 3단계, Ctrl+Z, 터치 지원 |
 | 이미지 삽입 흐름 통합 | 툴바 버튼 / 드래그 앤 드롭 / Ctrl+V → 주석 도구 → Supabase 업로드 → 에디터 인라인 삽입 |
 | 기존 별도 이미지 첨부 섹션 제거 | `consultation-form.tsx` 단순화 |
+| 빌드 검증 | `npm run build` ✅ 통과 |
+
+---
+
+## 2026-05-14 세션 5 작업 내용 (어드민 패널 — 기관 전환 + 직원 권한 관리)
+
+| 작업 | 결과 |
+|---|---|
+| `supabase/migrations/20260514000001_admin_panel.sql` | `institution_members.is_active` 컬럼 추가 (Supabase SQL Editor에서 적용 완료) |
+| `lib/admin.ts` 생성 | `isSuperAdmin(email)` 유틸리티 함수 |
+| `lib/auth/institution.ts` 재작성 | `getMyInstitutions()`, `getMyInstitutionId()` (쿠키 우선), `getMyInstitution()` |
+| `app/actions/admin.ts` 생성 | `switchInstitution`, `getStaffList`, `setStaffActive`, `getAllInstitutions`, `getInstitutionStaff`, `setStaffActiveAsAdmin`, `updateInstitutionName` |
+| `components/layout/institution-switcher.tsx` 생성 | 기관 전환 드롭다운 클라이언트 컴포넌트 |
+| `components/layout/header.tsx` 수정 | props 교체 (`institutionName` → `institutions`/`activeInstitutionId`), 설정 링크 추가 |
+| `app/(dashboard)/layout.tsx` 수정 | `getMyInstitutions()` + `getMyInstitutionId()` 사용, is_active=false 접근 차단 |
+| `components/settings/staff-list.tsx` 생성 | 직원 목록 테이블 + is_active 토글 |
+| `components/settings/staff-invite-form.tsx` 생성 | 직원 초대 폼 |
+| `components/settings/institution-name-form.tsx` 생성 | 기관명 수정 폼 |
+| `app/(dashboard)/settings/page.tsx` 생성 | 설정 페이지 (owner: 기관 프로필 + 직원 관리 / admin: 직원 관리 / staff: 안내) |
+| `components/admin/institution-list.tsx` 생성 | 기관 목록 + 기관별 직원 펼치기/권한 토글 |
+| `app/(dashboard)/admin/page.tsx` 생성 | 최고 관리자 패널 (슈퍼 어드민 전용) |
 | 빌드 검증 | `npm run build` ✅ 통과 |
 
 ---
@@ -112,9 +136,9 @@
 |---|---|---|
 | Solapi 실제 API 키 미설정 | 높음 | ⏳ .env.local과 Vercel에 실제 키 입력 필요 |
 | Google OAuth 외부 설정 미완료 | 높음 | ⏳ Google Cloud Console + Supabase Dashboard 설정 필요 (아래 참조) |
-| 직원 초대 UI 미구현 | 중간 | ⏳ 설정 페이지 + invite 폼 (스펙 미작성) |
 | NEXT_PUBLIC_SITE_URL 환경변수 미설정 | 낮음 | Vercel에 https://carelog-tau.vercel.app 추가 권장 |
 | spec 002 quickstart 시나리오 수동 검증 | 낮음 | ⏳ Solapi 키 설정 후 전체 흐름 테스트 필요 |
+| 어드민 패널 DB 마이그레이션 | 완료 | ✅ 20260514000001_admin_panel.sql 적용 완료 |
 
 ---
 
@@ -123,7 +147,7 @@
 1. **Google OAuth 외부 설정** — Google Cloud Console + Supabase Dashboard 설정 (아래 설명 참조)
 2. **Solapi 계정 생성** + 발신번호 등록 후 `.env.local` 및 Vercel에 API 키 입력
 3. **spec 002 quickstart 7개 시나리오** 수동 검증 (환자 포털 전체 흐름)
-4. **직원 초대 UI** — `/speckit-specify`로 spec 작성 후 구현
+4. **어드민 패널 수동 검증** — `/settings`, `/admin` 페이지 실제 동작 확인
 
 ### Google OAuth 설정 가이드
 
@@ -149,7 +173,8 @@
 | Phase 1 | 직원 로그인 + 기관 계정 + RLS | ✅ 완료 |
 | Phase 2 (spec 002) | 환자 포털 — SMS 초대 + OTP 가입 + 상담 조회 | ✅ 완료 (Solapi 키 입력 대기) |
 | Phase 2.5 | 리치 에디터 + 인라인 이미지 + 주석 도구 | ✅ 완료 |
-| Phase 3 | 직원 초대 UI + 콘텐츠 블록 모델 + Audit log | 미착수 |
+| Phase 3 (spec 003) | 어드민 패널 — 기관 전환 + 직원 권한 관리 + 최고 관리자 | ✅ 완료 |
+| Phase 4 | 콘텐츠 블록 모델 + Audit log | 미착수 |
 | Phase 4 | AI 기능 (오디오 전사, 상담 요약) | 미착수 |
 
 ---
