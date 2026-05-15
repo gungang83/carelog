@@ -29,8 +29,28 @@ function iconLabel(name: string) {
 
 export function ConsultationHistory({ consultations }: Props) {
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
+  const [highlightId, setHighlightId] = useState<string | null>(null);
 
   const closeLightbox = useCallback(() => setLightboxUrl(null), []);
+
+  // URL hash로 특정 상담 기록으로 스크롤 이동
+  useEffect(() => {
+    const hash = window.location.hash;
+    if (!hash.startsWith("#consultation-")) return;
+    const targetId = hash.slice(1);
+    setHighlightId(targetId);
+    const el = document.getElementById(targetId);
+    if (el) {
+      el.scrollIntoView({ behavior: "smooth", block: "center" });
+    } else {
+      // 렌더링 후 재시도
+      const timer = setTimeout(() => {
+        const el2 = document.getElementById(targetId);
+        if (el2) el2.scrollIntoView({ behavior: "smooth", block: "center" });
+      }, 300);
+      return () => clearTimeout(timer);
+    }
+  }, []);
 
   useEffect(() => {
     if (!lightboxUrl) return;
@@ -67,10 +87,16 @@ export function ConsultationHistory({ consultations }: Props) {
           const urls = c.image_urls ?? [];
           const prescriptions = c.prescriptions ?? [];
 
+          const isHighlighted = highlightId === `consultation-${c.id}`;
           return (
             <li
               key={c.id}
-              className="rounded-2xl border border-sky-100 bg-white p-4 shadow-sm"
+              id={`consultation-${c.id}`}
+              className={`rounded-2xl border p-4 shadow-sm transition-colors duration-1000 ${
+                isHighlighted
+                  ? "border-sky-400 bg-sky-50"
+                  : "border-sky-100 bg-white"
+              }`}
             >
               <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
                 <time

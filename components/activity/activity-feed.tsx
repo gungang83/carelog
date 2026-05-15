@@ -48,7 +48,7 @@ export function ActivityFeed({ logs }: ActivityFeedProps) {
           <li key={log.id}>
             {log.consultation_id && log.patient_id ? (
               <Link
-                href={`/patients/${log.patient_id}`}
+                href={`/patients/${log.patient_id}#consultation-${log.consultation_id}`}
                 className="group flex items-start gap-3 rounded-xl border border-transparent px-3 py-2.5 transition hover:border-sky-100 hover:bg-sky-50"
               >
                 <LogIcon />
