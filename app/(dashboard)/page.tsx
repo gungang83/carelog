@@ -1,6 +1,11 @@
 import { PatientHome } from "@/components/patient-home";
+import { ActivityFeed } from "@/components/activity/activity-feed";
+import { getActivityLogs } from "@/app/actions/activity";
 
-export default function Home() {
+export default async function Home() {
+  const activityResult = await getActivityLogs(50);
+  const logs = activityResult.ok ? activityResult.logs : [];
+
   return (
     <div className="mx-auto flex w-full max-w-3xl flex-col gap-10 px-4 py-12 sm:px-6">
       <header className="text-center sm:text-left">
@@ -16,6 +21,13 @@ export default function Home() {
       </header>
 
       <PatientHome />
+
+      <section className="space-y-3">
+        <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">
+          최근 활동
+        </h2>
+        <ActivityFeed logs={logs} />
+      </section>
     </div>
   );
 }
