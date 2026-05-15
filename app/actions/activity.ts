@@ -6,8 +6,8 @@ import { getMyInstitutionId } from "@/lib/auth/institution";
 export type ActivityLogEntry = {
   id: string;
   event_type: string;
-  patient_id: string | null;
-  consultation_id: string | null;
+  patient_id: number | null;
+  consultation_id: number | null;
   created_at: string;
   content_preview: string | null;
   patient_name: string | null;
@@ -25,7 +25,7 @@ export async function getActivityLogs(limit = 50): Promise<
 
   const { data, error } = await supabase
     .from("activity_logs")
-    .select("id, event_type, patient_id, consultation_id, created_at, metadata, patients(name)")
+    .select("id, event_type, patient_id, consultation_id, created_at, metadata, patient(name)")
     .eq("institution_id", institutionId)
     .order("created_at", { ascending: false })
     .limit(limit);
@@ -39,7 +39,7 @@ export async function getActivityLogs(limit = 50): Promise<
     consultation_id: row.consultation_id,
     created_at: row.created_at,
     content_preview: (row.metadata as { content_preview?: string } | null)?.content_preview ?? null,
-    patient_name: (row.patients as unknown as { name: string } | null)?.name ?? null,
+    patient_name: (row.patient as unknown as { name: string } | null)?.name ?? null,
   }));
 
   return { ok: true, logs };
