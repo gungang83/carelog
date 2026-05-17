@@ -10,6 +10,8 @@ import { resolveResidentMatchHashForPatient } from "@/app/actions/patients";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { sendPushToInstitution } from "@/app/actions/push";
+import { sendPushToPatient } from "@/app/actions/patient-portal";
+import { createAdminSupabaseClient } from "@/lib/supabase/admin";
 
 export async function saveConsultation(
   patientId: string,
@@ -114,6 +116,24 @@ export async function saveConsultation(
       title: "새 상담 기록",
       body: `${patientName} — ${preview}`,
       url: `/patients/${patientId}#consultation-${inserted.id}`,
+    }).catch(() => {});
+
+    // 환자 앱 푸시 알림 (가입한 환자에게만)
+    const admin = createAdminSupabaseClient();
+    void Promise.resolve(
+      admin
+        .from("patient_account_links")
+        .select("patient_account_id")
+        .eq("patient_id", patientId)
+        .maybeSingle(),
+    ).then((r) => {
+      if (r.data?.patient_account_id) {
+        sendPushToPatient(r.data.patient_account_id, {
+          title: "새 진료 기록",
+          body: `${patientName} — ${preview}`,
+          url: `/portal/records`,
+        }).catch(() => {});
+      }
     }).catch(() => {});
   } catch (e) {
     const message = e instanceof Error ? e.message : "저장에 실패했습니다.";

@@ -248,3 +248,42 @@ create policy "users can insert own push subscriptions"
 create policy "users can delete own push subscriptions"
   on public.push_subscriptions for delete
   using (user_id = auth.uid());
+
+-- ============================================================
+-- 환자 인증 링크 (migration: 20260517000002_patient_auth_links.sql)
+-- ============================================================
+
+create table if not exists public.patient_auth_links (
+  id                  uuid primary key default gen_random_uuid(),
+  auth_user_id        uuid not null references auth.users(id) on delete cascade,
+  patient_account_id  uuid not null references public.patient_accounts(id) on delete cascade,
+  provider            text not null default 'google',
+  created_at          timestamptz not null default now(),
+  unique(auth_user_id),
+  unique(patient_account_id, provider)
+);
+
+create index if not exists idx_pal_auth_user on public.patient_auth_links(auth_user_id);
+create index if not exists idx_pal_patient_account on public.patient_auth_links(patient_account_id);
+
+alter table public.patient_auth_links enable row level security;
+
+create policy "patient can read own auth link"
+  on public.patient_auth_links for select
+  using (auth_user_id = auth.uid());
+
+-- 환자 전용 Web Push 구독 (patient_account_id 기준)
+create table if not exists public.patient_push_subscriptions (
+  id                  uuid primary key default gen_random_uuid(),
+  patient_account_id  uuid not null references public.patient_accounts(id) on delete cascade,
+  endpoint            text not null,
+  p256dh              text not null,
+  auth                text not null,
+  created_at          timestamptz not null default now(),
+  unique(patient_account_id, endpoint)
+);
+
+create index if not exists idx_pps_account on public.patient_push_subscriptions(patient_account_id);
+
+alter table public.patient_push_subscriptions enable row level security;
+-- 환자는 Server Action(admin client)을 통해서만 접근

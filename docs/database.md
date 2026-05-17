@@ -227,6 +227,43 @@ $$;
 
 ---
 
+## `patient_auth_links` *(신규 — migration 20260517000002)*
+
+Supabase auth.users와 patient_accounts를 연결. Google OAuth 가입 시 생성.
+
+| 컬럼 | 타입 | 설명 |
+|---|---|---|
+| `id` | uuid PK | gen_random_uuid() |
+| `auth_user_id` | uuid FK → auth.users(id) CASCADE | Supabase 인증 사용자 ID |
+| `patient_account_id` | uuid FK → patient_accounts(id) CASCADE | 환자 포털 계정 |
+| `provider` | text NOT NULL DEFAULT 'google' | 소셜 제공자 (현재 'google') |
+| `created_at` | timestamptz | 생성 시각 |
+
+**제약**: UNIQUE(auth_user_id), UNIQUE(patient_account_id, provider)
+**인덱스**: `idx_pal_auth_user`, `idx_pal_patient_account`
+**RLS**: SELECT — auth_user_id = auth.uid(). INSERT/DELETE — admin client 전용.
+
+---
+
+## `patient_push_subscriptions` *(신규 — migration 20260517000002)*
+
+환자 전용 Web Push 구독. OTP 세션 또는 Google 세션 모두 지원.
+
+| 컬럼 | 타입 | 설명 |
+|---|---|---|
+| `id` | uuid PK | gen_random_uuid() |
+| `patient_account_id` | uuid FK → patient_accounts(id) CASCADE | 환자 포털 계정 |
+| `endpoint` | text NOT NULL | Push 구독 endpoint URL |
+| `p256dh` | text NOT NULL | ECDH 공개 키 |
+| `auth` | text NOT NULL | 인증 비밀 |
+| `created_at` | timestamptz | 생성 시각 |
+
+**제약**: UNIQUE(patient_account_id, endpoint)
+**인덱스**: `idx_pps_account`
+**RLS**: enabled, 정책 없음 (admin client만 접근 가능)
+
+---
+
 ## Storage
 
 | 버킷 | 공개 여부 | 용도 |

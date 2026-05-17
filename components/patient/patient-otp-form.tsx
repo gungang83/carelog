@@ -30,7 +30,11 @@ export function PatientOtpForm({ phone, rrnHash, invitationToken }: Props) {
     const result = await verifyPatientOtp(formData);
 
     if (result.ok) {
-      router.push("/portal/records");
+      if (result.isNewAccount && invitationToken) {
+        router.push(`/portal/signup-cta?invitation=${invitationToken}`);
+      } else {
+        router.push("/portal/records");
+      }
     } else {
       setStatus("error");
       setMessage(result.message);

@@ -34,6 +34,13 @@ export function Header({ institutions, activeInstitutionId }: HeaderProps) {
         <RefreshButton />
 
         <Link
+          href="/portal/records"
+          className="hidden sm:inline-flex min-h-9 items-center justify-center rounded-xl border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-600 shadow-sm transition hover:bg-slate-50"
+        >
+          내 진료 기록
+        </Link>
+
+        <Link
           href="/settings"
           className="inline-flex min-h-9 items-center justify-center rounded-xl border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-600 shadow-sm transition hover:bg-slate-50"
         >

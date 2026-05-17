@@ -94,3 +94,20 @@ export type PatientAccountLinkRow = {
   institution_id: string;
   linked_at: string;
 };
+
+export type PatientAuthLinkRow = {
+  id: string;
+  auth_user_id: string;
+  patient_account_id: string;
+  provider: string;
+  created_at: string;
+};
+
+export type PatientPushSubscriptionRow = {
+  id: string;
+  patient_account_id: string;
+  endpoint: string;
+  p256dh: string;
+  auth: string;
+  created_at: string;
+};

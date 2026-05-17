@@ -1,6 +1,6 @@
 # Carelog 프로젝트 상태
 
-**최종 업데이트**: 2026-05-17 (세션 6)
+**최종 업데이트**: 2026-05-17 (세션 7)
 **현재 버전**: main 브랜치
 
 ---
@@ -43,6 +43,33 @@
 | 항시 로그인 | ✅ 완료 | proxy.ts updateSession() + SessionRefresher 클라이언트 리스너 |
 | 헤더 고정 + 새로고침 | ✅ 완료 | sticky 헤더 + RefreshButton (router.refresh()) |
 | 푸터 브랜딩 | ✅ 완료 | SUWANT holdings Inc. 푸터 전 페이지 표시 |
+| 환자 Google OAuth 가입 | ✅ 완료 | SMS OTP 인증 후 /portal/signup-cta → Google OAuth → patient_auth_links 연결 |
+| 환자 Google 재로그인 | ✅ 완료 | /portal/login Google 버튼 → /auth/patient-callback → /portal/records |
+| 환자 포털 이중 인증 지원 | ✅ 완료 | OTP 쿠키 세션 OR Supabase Google 세션 모두 허용 (getPatientSession 업데이트) |
+| 이중 역할 전환 | ✅ 완료 | 직원 헤더 "내 진료 기록" → /portal/records, 환자 화면 "직원 화면" → / |
+| 환자 푸시 알림 | ✅ 완료 | patient_push_subscriptions + sendPushToPatient, 상담 저장 시 fire-and-forget |
+| 환자 계정 연결 오류 안내 | ✅ 완료 | /portal/link-account — OTP 없이 Google 로그인 시도 시 안내 |
+
+---
+
+## 2026-05-17 세션 7 작업 내용 (환자 앱 — Google OAuth 가입 + 이중 역할 + 환자 푸시)
+
+| 작업 | 결과 |
+|---|---|
+| speckit 005 계획 수립 | research.md, data-model.md, contracts/, quickstart.md, plan.md, tasks.md 생성 |
+| DB 마이그레이션 | `patient_auth_links`, `patient_push_subscriptions` 테이블 추가 (migration 20260517000002) |
+| getPatientSession 업데이트 | OTP 쿠키 → Supabase Google 세션 폴백 지원 |
+| /auth/patient-callback | 환자 Google OAuth 전용 콜백 라우트 생성 |
+| /portal/signup-cta | OTP 인증 후 상담 미리보기 + Google 가입 CTA 페이지 |
+| /portal/link-account | Google 로그인 했지만 환자 계정 미연결 시 안내 |
+| PatientSignupCta 컴포넌트 | Google OAuth 가입 버튼 (pending 쿠키 설정 + OAuth 리디렉션) |
+| PatientLoginForm 업데이트 | OTP 폼 아래 Google 로그인 버튼 추가 |
+| PatientOtpForm 업데이트 | isNewAccount + invitationToken 시 /portal/signup-cta 리디렉션 |
+| 직원 헤더 업데이트 | "내 진료 기록" 링크 추가 (/portal/records) |
+| /portal/records 업데이트 | PatientPushBanner 추가, "직원 화면" 링크 추가 |
+| PatientPushBanner 생성 | 환자용 Web Push 구독 배너 (patient_push_subscriptions 사용) |
+| consultations.ts 업데이트 | 상담 저장 시 환자에게도 푸시 알림 fire-and-forget |
+| 빌드 검증 | `npm run build` ✅ 통과 |
 
 ---
 

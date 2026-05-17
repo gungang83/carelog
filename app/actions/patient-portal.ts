@@ -478,3 +478,160 @@ export async function patientLogout(_formData?: FormData): Promise<void> {
   cookieStore.delete("patient_session_token");
   redirect("/portal/login");
 }
+
+// ─── Google 가입: pending 쿠키 설정 ─────────────────────────────────────────
+
+export async function setCookieForPatientAuth(
+  patientAccountId: string,
+): Promise<{ ok: true } | { ok: false; message: string }> {
+  const cookieStore = await cookies();
+  const session = await getPatientSession(cookieStore);
+
+  if (!session || session.patientAccountId !== patientAccountId) {
+    return { ok: false, message: "인증이 필요합니다." };
+  }
+
+  cookieStore.set("pending_patient_account_id", patientAccountId, {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "lax",
+    maxAge: 300, // 5분
+    path: "/",
+  });
+
+  return { ok: true };
+}
+
+// ─── 환자 인증 상태 조회 ──────────────────────────────────────────────────────
+
+export async function getPatientAuthStatus(): Promise<
+  | { ok: true; patientAccountId: string; isGoogleLinked: boolean }
+  | { ok: false; message: string }
+> {
+  const cookieStore = await cookies();
+  const session = await getPatientSession(cookieStore);
+
+  if (!session) {
+    return { ok: false, message: "로그인이 필요합니다." };
+  }
+
+  const admin = createAdminSupabaseClient();
+  const { data: link } = await admin
+    .from("patient_auth_links")
+    .select("id")
+    .eq("patient_account_id", session.patientAccountId)
+    .eq("provider", "google")
+    .maybeSingle();
+
+  return {
+    ok: true,
+    patientAccountId: session.patientAccountId,
+    isGoogleLinked: !!link,
+  };
+}
+
+// ─── 환자 푸시 구독 관리 ──────────────────────────────────────────────────────
+
+type PushSubscriptionJSON = {
+  endpoint: string;
+  keys: { p256dh: string; auth: string };
+};
+
+export async function subscribePatientPush(
+  sub: PushSubscriptionJSON,
+): Promise<{ ok: true } | { ok: false; message: string }> {
+  const cookieStore = await cookies();
+  const session = await getPatientSession(cookieStore);
+
+  if (!session) {
+    return { ok: false, message: "로그인이 필요합니다." };
+  }
+
+  const admin = createAdminSupabaseClient();
+  const { error } = await admin.from("patient_push_subscriptions").upsert(
+    {
+      patient_account_id: session.patientAccountId,
+      endpoint: sub.endpoint,
+      p256dh: sub.keys.p256dh,
+      auth: sub.keys.auth,
+    },
+    { onConflict: "patient_account_id,endpoint" },
+  );
+
+  if (error) {
+    return { ok: false, message: "구독 등록에 실패했습니다." };
+  }
+
+  return { ok: true };
+}
+
+export async function unsubscribePatientPush(
+  endpoint: string,
+): Promise<{ ok: true } | { ok: false; message: string }> {
+  const cookieStore = await cookies();
+  const session = await getPatientSession(cookieStore);
+
+  if (!session) {
+    return { ok: false, message: "로그인이 필요합니다." };
+  }
+
+  const admin = createAdminSupabaseClient();
+  await admin
+    .from("patient_push_subscriptions")
+    .delete()
+    .eq("patient_account_id", session.patientAccountId)
+    .eq("endpoint", endpoint);
+
+  return { ok: true };
+}
+
+// ─── 특정 환자에게 푸시 알림 발송 ────────────────────────────────────────────
+
+type PushPayload = { title: string; body: string; url: string };
+
+export async function sendPushToPatient(
+  patientAccountId: string,
+  payload: PushPayload,
+): Promise<void> {
+  const admin = createAdminSupabaseClient();
+
+  const { data: subs } = await admin
+    .from("patient_push_subscriptions")
+    .select("endpoint, p256dh, auth")
+    .eq("patient_account_id", patientAccountId);
+
+  if (!subs || subs.length === 0) return;
+
+  const webpush = await import("web-push");
+  webpush.setVapidDetails(
+    process.env.VAPID_SUBJECT!,
+    process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY!,
+    process.env.VAPID_PRIVATE_KEY!,
+  );
+
+  const staleEndpoints: string[] = [];
+
+  await Promise.allSettled(
+    subs.map(async (sub) => {
+      try {
+        await webpush.sendNotification(
+          { endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } },
+          JSON.stringify(payload),
+        );
+      } catch (err: unknown) {
+        const status = (err as { statusCode?: number }).statusCode;
+        if (status === 410 || status === 404) {
+          staleEndpoints.push(sub.endpoint);
+        }
+      }
+    }),
+  );
+
+  if (staleEndpoints.length > 0) {
+    await admin
+      .from("patient_push_subscriptions")
+      .delete()
+      .in("endpoint", staleEndpoints)
+      .eq("patient_account_id", patientAccountId);
+  }
+}

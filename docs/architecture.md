@@ -37,21 +37,24 @@ app/
 │   └── view/
 │       └── [consultationId]/page.tsx  # 상담 기록 상세
 ├── auth/
-│   └── callback/route.ts          # 이메일 인증 후 PKCE 코드 교환 → 세션 생성
-├── (patient)/                     # 환자 포털 라우트 그룹 (Supabase Auth 불필요)
+│   ├── callback/route.ts          # 직원 Google OAuth PKCE 코드 교환
+│   └── patient-callback/route.ts  # 환자 Google OAuth 콜백 → patient_auth_links 연결
+├── (patient)/                     # 환자 포털 라우트 그룹
 │   ├── layout.tsx                 # 패스스루 (세션 체크는 개별 페이지)
 │   ├── p/[token]/page.tsx         # SMS 초대 링크 — 주민번호+전화번호 입력
 │   └── portal/
-│       ├── login/page.tsx         # 재방문 환자 로그인
+│       ├── login/page.tsx         # 재방문 환자 로그인 (OTP + Google 버튼)
 │       ├── verify/page.tsx        # OTP 입력
-│       └── records/page.tsx       # 상담 내역 조회 (세션 보호)
+│       ├── signup-cta/page.tsx    # OTP 완료 후 상담 미리보기 + Google 가입 CTA
+│       ├── link-account/page.tsx  # Google 로그인 후 계정 미연결 시 안내
+│       └── records/page.tsx       # 상담 내역 조회 (OTP 세션 OR Google 세션)
 ├── actions/
 │   ├── auth.ts                    # signUp, signIn, signOut, setupInstitution
 │   ├── institutions.ts            # getMyInstitution, inviteStaff, acceptInvitation
 │   ├── patients.ts                # 환자 CRUD, 검색 (institution_id 필터)
-│   ├── consultations.ts           # 상담 기록 CRUD (institution_id 필터)
-│   ├── push.ts                    # subscribePush, unsubscribePush, sendPushToInstitution (Web Push/VAPID)
-│   └── patient-portal.ts          # 환자 포털 Server Actions (초대·OTP·세션·조회)
+│   ├── consultations.ts           # 상담 기록 CRUD + 환자 푸시 fire-and-forget
+│   ├── push.ts                    # subscribePush, unsubscribePush, sendPushToInstitution (직원 Web Push)
+│   └── patient-portal.ts          # 환자 포털 Server Actions (초대·OTP·Google가입·환자푸시)
 ├── globals.css
 └── layout.tsx                     # HTML/body/fonts 쉘만 포함
 
@@ -67,9 +70,11 @@ components/
 │   └── session-refresher.tsx      # onAuthStateChange 리스너 (SIGNED_OUT → /login)
 ├── patient/
 │   ├── send-invitation-button.tsx # 직원용: 환자 초대 문자 발송 버튼+모달
-│   ├── patient-login-form.tsx     # 환자용: 주민번호+전화번호 입력 폼
-│   ├── patient-otp-form.tsx       # 환자용: OTP 입력 폼
-│   └── patient-records-list.tsx   # 환자용: 상담 내역 목록 (펼치기/닫기)
+│   ├── patient-login-form.tsx     # 환자용: 주민번호+전화번호 입력 폼 + Google 로그인 버튼
+│   ├── patient-otp-form.tsx       # 환자용: OTP 입력 폼 (isNewAccount 기반 리디렉션)
+│   ├── patient-records-list.tsx   # 환자용: 상담 내역 목록 (펼치기/닫기)
+│   ├── patient-signup-cta.tsx     # 환자용: Google OAuth 가입 버튼 (pending 쿠키 설정)
+│   └── patient-push-banner.tsx    # 환자용: 새 진료 기록 Web Push 구독 배너
 ├── patient-home.tsx               # 검색 UI + 새 환자 등록 버튼
 ├── patient-form.tsx               # 새 환자 등록 폼
 ├── patient-edit-form.tsx          # 환자 정보 수정 모달
@@ -96,7 +101,7 @@ lib/
 │   └── institution.ts             # getMyInstitutionId(), getMyInstitution() React.cache
 ├── types/
 │   └── database.ts                # PatientRow, ConsultationRow, PatientInvitationRow 등 타입
-├── patient-session.ts             # getPatientSession(cookies) — patient_sessions 검증
+├── patient-session.ts             # getPatientSession(cookies) — OTP 세션 OR Google 세션 폴백
 ├── patient-search.ts              # ilike 쿼리 유틸 (escapeIlike, fragments)
 ├── rrn-core.ts                    # 주민번호 파싱·정규화·검색 패턴
 ├── rrn-hash.ts                    # 주민번호 SHA-256 해시 (중복 방지용)
@@ -115,7 +120,8 @@ supabase/
 ├── migrations/
 │   ├── 20260509000001_staff_auth_institution.sql  # 기관 구조 + RLS 마이그레이션
 │   ├── 20260510000001_patient_portal.sql          # 환자 포털 5개 테이블
-│   └── 20260517000001_push_subscriptions.sql      # Web Push 구독 정보
+│   ├── 20260517000001_push_subscriptions.sql      # 직원 Web Push 구독 정보
+│   └── 20260517000002_patient_auth_links.sql      # 환자 Google OAuth 연결 + 환자 푸시 구독
 └── schema.sql                     # 전체 스키마 (참조용)
 ```
 
