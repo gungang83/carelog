@@ -1,5 +1,6 @@
 import { PatientHome } from "@/components/patient-home";
 import { ActivityFeed } from "@/components/activity/activity-feed";
+import { PushNotificationBanner } from "@/components/push-notification-banner";
 import { getActivityLogs } from "@/app/actions/activity";
 
 export default async function Home() {
@@ -19,6 +20,8 @@ export default async function Home() {
           환자를 검색하거나 새로 등록한 뒤, 상담 내용과 이미지를 기록합니다.
         </p>
       </header>
+
+      <PushNotificationBanner />
 
       <PatientHome />
 

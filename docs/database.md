@@ -5,6 +5,7 @@ Supabase(PostgreSQL) 기반. 전체 스키마는 `supabase/schema.sql` 참고.
 마이그레이션 파일:
 - `supabase/migrations/20260509000001_staff_auth_institution.sql`
 - `supabase/migrations/20260510000001_patient_portal.sql`
+- `supabase/migrations/20260517000001_push_subscriptions.sql`
 
 ## 테이블 목록
 
@@ -20,6 +21,7 @@ Supabase(PostgreSQL) 기반. 전체 스키마는 `supabase/schema.sql` 참고.
 | `patient_otps` | 환자 OTP 인증 코드 (5분 만료) |
 | `patient_sessions` | 환자 세션 토큰 (30일 HttpOnly 쿠키) |
 | `patient_account_links` | PatientAccount ↔ 기관 내 patient 레코드 M:N 연결 |
+| `push_subscriptions` | Web Push 구독 정보 (기기별 VAPID 엔드포인트) |
 
 ---
 

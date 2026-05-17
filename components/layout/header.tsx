@@ -2,6 +2,7 @@ import Link from "next/link";
 import { StationManager } from "@/components/station-manager";
 import { signOut } from "@/app/actions/auth";
 import { InstitutionSwitcher } from "@/components/layout/institution-switcher";
+import { RefreshButton } from "@/components/layout/refresh-button";
 import type { InstitutionWithRole } from "@/lib/auth/institution";
 
 interface HeaderProps {
@@ -29,6 +30,8 @@ export function Header({ institutions, activeInstitutionId }: HeaderProps) {
         <div className="min-w-0 flex-1 sm:ml-auto sm:flex-none sm:max-w-[220px] sm:pl-3">
           <StationManager />
         </div>
+
+        <RefreshButton />
 
         <Link
           href="/settings"

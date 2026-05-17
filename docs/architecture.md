@@ -50,6 +50,7 @@ app/
 │   ├── institutions.ts            # getMyInstitution, inviteStaff, acceptInvitation
 │   ├── patients.ts                # 환자 CRUD, 검색 (institution_id 필터)
 │   ├── consultations.ts           # 상담 기록 CRUD (institution_id 필터)
+│   ├── push.ts                    # subscribePush, unsubscribePush, sendPushToInstitution (Web Push/VAPID)
 │   └── patient-portal.ts          # 환자 포털 Server Actions (초대·OTP·세션·조회)
 ├── globals.css
 └── layout.tsx                     # HTML/body/fonts 쉘만 포함
@@ -60,7 +61,10 @@ components/
 │   ├── signup-form.tsx            # 이메일+비밀번호+기관명 가입 폼
 │   └── onboarding-form.tsx        # Google 신규 사용자 기관명 입력 폼
 ├── layout/
-│   └── header.tsx                 # 기관명 + StationManager + 로그아웃
+│   ├── header.tsx                 # 기관명 + StationManager + RefreshButton + 로그아웃
+│   ├── refresh-button.tsx         # router.refresh() 클라이언트 컴포넌트
+│   ├── institution-switcher.tsx   # 복수 기관 전환 드롭다운
+│   └── session-refresher.tsx      # onAuthStateChange 리스너 (SIGNED_OUT → /login)
 ├── patient/
 │   ├── send-invitation-button.tsx # 직원용: 환자 초대 문자 발송 버튼+모달
 │   ├── patient-login-form.tsx     # 환자용: 주민번호+전화번호 입력 폼
@@ -69,6 +73,8 @@ components/
 ├── patient-home.tsx               # 검색 UI + 새 환자 등록 버튼
 ├── patient-form.tsx               # 새 환자 등록 폼
 ├── patient-edit-form.tsx          # 환자 정보 수정 모달
+├── footer.tsx                     # SUWANT holdings Inc. 푸터
+├── push-notification-banner.tsx   # 홈 화면 푸시 알림 수신 동의 배너
 ├── consultation-form.tsx          # 상담 기록 작성 폼 (처방 메모 포함)
 ├── consultation-history.tsx       # 상담 이력 목록 (HTML 렌더링)
 ├── rich-text-editor.tsx           # Tiptap 리치 텍스트 에디터 (인라인 이미지·주석 포함)
@@ -98,10 +104,18 @@ lib/
 └── utils.ts                       # 공통 유틸
 
 proxy.ts                           # Next.js 16 미들웨어 진입점 (middleware.ts 대체)
+public/
+├── sw.js                          # Service Worker (Web Push 수신 + 기본 캐시)
+└── icons/
+    ├── icon-192.png               # PWA 아이콘 192×192
+    └── icon-512.png               # PWA 아이콘 512×512 (maskable)
+app/
+└── manifest.ts                    # Web App Manifest (Next.js 16 방식)
 supabase/
 ├── migrations/
 │   ├── 20260509000001_staff_auth_institution.sql  # 기관 구조 + RLS 마이그레이션
-│   └── 20260510000001_patient_portal.sql          # 환자 포털 5개 테이블
+│   ├── 20260510000001_patient_portal.sql          # 환자 포털 5개 테이블
+│   └── 20260517000001_push_subscriptions.sql      # Web Push 구독 정보
 └── schema.sql                     # 전체 스키마 (참조용)
 ```
 

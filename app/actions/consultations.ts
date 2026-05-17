@@ -9,6 +9,7 @@ import { getMyInstitutionId } from "@/lib/auth/institution";
 import { resolveResidentMatchHashForPatient } from "@/app/actions/patients";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import { sendPushToInstitution } from "@/app/actions/push";
 
 export async function saveConsultation(
   patientId: string,
@@ -100,6 +101,20 @@ export async function saveConsultation(
     }
 
     void (await resolveResidentMatchHashForPatient(patientId));
+
+    // 푸시 알림 발송 (fire-and-forget — 실패해도 상담 저장에 영향 없음)
+    const patientName = await supabase
+      .from("patient")
+      .select("name")
+      .eq("id", patientId)
+      .single()
+      .then((r) => r.data?.name ?? "환자");
+    const preview = trimmed.replace(/<[^>]*>/g, "").slice(0, 60);
+    sendPushToInstitution(institutionId, {
+      title: "새 상담 기록",
+      body: `${patientName} — ${preview}`,
+      url: `/patients/${patientId}#consultation-${inserted.id}`,
+    }).catch(() => {});
   } catch (e) {
     const message = e instanceof Error ? e.message : "저장에 실패했습니다.";
     return { ok: false, message };

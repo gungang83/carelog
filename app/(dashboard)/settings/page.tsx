@@ -5,6 +5,7 @@ import { getStaffList } from "@/app/actions/admin";
 import { StaffList } from "@/components/settings/staff-list";
 import { StaffInviteForm } from "@/components/settings/staff-invite-form";
 import { InstitutionNameForm } from "@/components/settings/institution-name-form";
+import { NotificationSettings } from "@/components/settings/notification-settings";
 
 export default async function SettingsPage() {
   const supabase = await createServerSupabaseClient();
@@ -54,6 +55,11 @@ export default async function SettingsPage() {
           </div>
         </section>
       )}
+
+      <section className="space-y-4">
+        <h2 className="text-base font-semibold text-slate-800">알림 관리</h2>
+        <NotificationSettings />
+      </section>
 
       {!isOwnerOrAdmin && (
         <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">

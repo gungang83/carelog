@@ -1,6 +1,8 @@
 import { redirect } from "next/navigation";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { Header } from "@/components/layout/header";
+import { Footer } from "@/components/footer";
+import { SessionRefresher } from "@/components/layout/session-refresher";
 import { getMyInstitutions, getMyInstitutionId } from "@/lib/auth/institution";
 
 export default async function DashboardLayout({
@@ -38,11 +40,13 @@ export default async function DashboardLayout({
 
   return (
     <>
+      <SessionRefresher />
       <Header
         institutions={institutions}
         activeInstitutionId={activeInstitutionId ?? ""}
       />
       <main className="flex-1">{children}</main>
+      <Footer />
     </>
   );
 }
