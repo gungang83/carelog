@@ -34,6 +34,7 @@ export async function updateSession(request: NextRequest) {
   const isPublicPath =
     pathname.startsWith("/login") ||
     pathname.startsWith("/signup") ||
+    pathname.startsWith("/about") ||
     pathname.startsWith("/invite") ||
     pathname.startsWith("/auth/callback") ||
     pathname.startsWith("/p/") ||
@@ -42,6 +43,11 @@ export async function updateSession(request: NextRequest) {
 
   if (!user && !isPublicPath) {
     const url = request.nextUrl.clone();
+    // Root → landing page; all other protected paths → login with redirect
+    if (pathname === "/") {
+      url.pathname = "/about";
+      return NextResponse.redirect(url);
+    }
     url.pathname = "/login";
     url.searchParams.set("redirect", pathname);
     return NextResponse.redirect(url);
