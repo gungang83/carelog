@@ -7,10 +7,10 @@ import {
   ReactNodeViewRenderer,
   type NodeViewProps,
 } from "@tiptap/react";
+import React, { forwardRef, useImperativeHandle, useRef, useState } from "react";
 import StarterKit from "@tiptap/starter-kit";
 import Placeholder from "@tiptap/extension-placeholder";
 import Image from "@tiptap/extension-image";
-import { useRef, useState } from "react";
 import { ImageAnnotator } from "@/components/image-annotator";
 import { createBrowserSupabaseClient } from "@/lib/supabase/client";
 
@@ -133,13 +133,18 @@ const BTN_ACTIVE =
   "rounded px-2 py-1 text-sm font-medium bg-sky-100 text-sky-700 transition-colors";
 
 // ── Component ─────────────────────────────────────────────────
+export type RichTextEditorHandle = {
+  insertText: (text: string) => void;
+};
+
 type Props = {
   value: string;
   onChange: (html: string) => void;
   placeholder?: string;
 };
 
-export function RichTextEditor({ value, onChange, placeholder }: Props) {
+export const RichTextEditor = forwardRef<RichTextEditorHandle, Props>(
+function RichTextEditor({ value, onChange, placeholder }, ref) {
   const [annotateFile, setAnnotateFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -148,6 +153,19 @@ export function RichTextEditor({ value, onChange, placeholder }: Props) {
   const openAnnotatorRef = useRef(setAnnotateFile);
   openAnnotatorRef.current = setAnnotateFile;
 
+  useImperativeHandle(ref, () => ({
+    insertText(text: string) {
+      if (!editorRef.current) return;
+      const html = text
+        .split(/\n+/)
+        .filter(Boolean)
+        .map((line) => `<p>${line}</p>`)
+        .join("");
+      editorRef.current.chain().focus().insertContent(html).run();
+    },
+  }));
+
+  const editorRef = useRef<ReturnType<typeof useEditor>>(null);
   const editor = useEditor({
     extensions: [
       StarterKit,
@@ -157,7 +175,11 @@ export function RichTextEditor({ value, onChange, placeholder }: Props) {
       ResizableImage,
     ],
     content: value || "",
+    onCreate({ editor }) {
+      (editorRef as React.MutableRefObject<typeof editor>).current = editor;
+    },
     onUpdate({ editor }) {
+      (editorRef as React.MutableRefObject<typeof editor>).current = editor;
       const html = editor.getHTML();
       onChange(html === "<p></p>" ? "" : html);
     },
@@ -375,4 +397,6 @@ export function RichTextEditor({ value, onChange, placeholder }: Props) {
       )}
     </div>
   );
-}
+});
+
+RichTextEditor.displayName = "RichTextEditor";

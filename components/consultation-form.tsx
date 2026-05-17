@@ -1,16 +1,18 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { useMemo, useRef, useState, useTransition } from "react";
 import { saveConsultation } from "@/app/actions/consultations";
 import { CARELOG_STATION_STORAGE_KEY } from "@/lib/station-storage";
 import { isRedirectError } from "next/dist/client/components/redirect-error";
-import { RichTextEditor } from "@/components/rich-text-editor";
+import { RichTextEditor, type RichTextEditorHandle } from "@/components/rich-text-editor";
+import { VoiceRecorder } from "@/components/consultation/voice-recorder";
 
 type Props = { patientId: string; patientName: string };
 
 export function ConsultationForm({ patientId, patientName }: Props) {
   const [content, setContent] = useState("");
   const [message, setMessage] = useState<string | null>(null);
+  const editorRef = useRef<RichTextEditorHandle>(null);
   const [ok, setOk] = useState(false);
   const [pending, startTransition] = useTransition();
   const [selectedProducts, setSelectedProducts] = useState<string[]>([]);
@@ -82,13 +84,21 @@ export function ConsultationForm({ patientId, patientName }: Props) {
     >
       {/* 상담 내용 */}
       <div className="rounded-2xl border border-sky-100 bg-white p-5 shadow-sm">
-        <label className="text-sm font-semibold text-slate-800">
-          상담 내용
-        </label>
-        <p className="mt-1 text-xs text-slate-500">
-          {patientName} 님의 주소증 / 처치 / 다음 내원 안내를 기록하세요. 이미지는 에디터 안에 바로 삽입됩니다.
-        </p>
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <label className="text-sm font-semibold text-slate-800">
+              상담 내용
+            </label>
+            <p className="mt-1 text-xs text-slate-500">
+              {patientName} 님의 주소증 / 처치 / 다음 내원 안내를 기록하세요.
+            </p>
+          </div>
+          <VoiceRecorder
+            onResult={(text) => editorRef.current?.insertText(text)}
+          />
+        </div>
         <RichTextEditor
+          ref={editorRef}
           value={content}
           onChange={setContent}
           placeholder="예: 주소증, 처치 내용, 진단 소견, 다음 내원 안내 등..."
