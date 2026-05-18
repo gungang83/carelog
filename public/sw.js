@@ -1,5 +1,6 @@
-// Carelog Service Worker — Web Push + 기본 오프라인 지원
-const CACHE_NAME = "carelog-v1";
+// Carelog Service Worker — Web Push + 캐싱 최적화
+const CACHE_NAME = "carelog-v2";
+const STATIC_CACHE = "carelog-static-v2";
 
 self.addEventListener("install", (event) => {
   self.skipWaiting();
@@ -8,20 +9,54 @@ self.addEventListener("install", (event) => {
 self.addEventListener("activate", (event) => {
   event.waitUntil(
     caches.keys().then((keys) =>
-      Promise.all(keys.filter((k) => k !== CACHE_NAME).map((k) => caches.delete(k)))
+      Promise.all(
+        keys
+          .filter((k) => k !== CACHE_NAME && k !== STATIC_CACHE)
+          .map((k) => caches.delete(k))
+      )
     ).then(() => self.clients.claim())
+      .then(() => {
+        // 서버리스 함수 워밍업 (cold start 방지)
+        fetch("/api/health", { cache: "no-store" }).catch(() => {});
+      })
   );
 });
 
-// 네트워크 우선, 실패 시 캐시
 self.addEventListener("fetch", (event) => {
   if (event.request.method !== "GET") return;
   const url = new URL(event.request.url);
-  // API / Server Action 요청은 캐시 스킵
-  if (url.pathname.startsWith("/api/") || url.pathname.startsWith("/_next/")) return;
 
+  // /_next/static/ — 해시 파일명으로 불변, cache-first
+  if (url.pathname.startsWith("/_next/static/")) {
+    event.respondWith(
+      caches.open(STATIC_CACHE).then(async (cache) => {
+        const cached = await cache.match(event.request);
+        if (cached) return cached;
+        const response = await fetch(event.request);
+        if (response.ok) cache.put(event.request, response.clone());
+        return response;
+      })
+    );
+    return;
+  }
+
+  // 기타 /_next/ 경로 (이미지 최적화 등) — 브라우저 캐시에 위임
+  if (url.pathname.startsWith("/_next/")) return;
+
+  // API / Server Action — 캐시 안 함
+  if (url.pathname.startsWith("/api/")) return;
+
+  // 네비게이션 요청 — 네트워크 우선, 실패 시 캐시 폴백
   event.respondWith(
-    fetch(event.request).catch(() => caches.match(event.request))
+    fetch(event.request)
+      .then((response) => {
+        if (response.ok && response.status === 200) {
+          const clone = response.clone();
+          caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));
+        }
+        return response;
+      })
+      .catch(() => caches.match(event.request))
   );
 });
 
