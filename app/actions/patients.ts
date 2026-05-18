@@ -15,6 +15,7 @@ import {
   residentNoSearchPatterns,
 } from "@/lib/rrn-core";
 import { hashResidentNoForMatching } from "@/lib/rrn-hash";
+import { createAdminSupabaseClient } from "@/lib/supabase/admin";
 import { revalidatePath } from "next/cache";
 
 const PATIENT_SELECT_PUBLIC =
@@ -250,6 +251,18 @@ export async function createPatient(formData: FormData): Promise<
       return { ok: false, message: error.message };
     }
 
+    if (resident_no && data) {
+      const normalized = normalizeFullResidentNo(resident_no);
+      if (normalized) {
+        const admin = createAdminSupabaseClient();
+        void admin
+          .from(patientTable)
+          .update({ resident_no_hash: hashResidentNoForMatching(normalized) })
+          .eq("id", (data as { id: unknown }).id)
+          .then(() => {});
+      }
+    }
+
     revalidatePath("/");
     const patient = mapPatientRow(data);
     if (!patient) {
@@ -334,6 +347,25 @@ export async function updatePatient(formData: FormData): Promise<
 
     if (error) {
       return { ok: false, message: error.message };
+    }
+
+    if (resident_no) {
+      const normalized = normalizeFullResidentNo(resident_no);
+      if (normalized) {
+        const admin = createAdminSupabaseClient();
+        void admin
+          .from(patientTable)
+          .update({ resident_no_hash: hashResidentNoForMatching(normalized) })
+          .eq("id", idBigint as unknown as number)
+          .then(() => {});
+      }
+    } else if (rrnFront === "" && rrnBack === "") {
+      const admin = createAdminSupabaseClient();
+      void admin
+        .from(patientTable)
+        .update({ resident_no_hash: null })
+        .eq("id", idBigint as unknown as number)
+        .then(() => {});
     }
 
     revalidatePath("/");

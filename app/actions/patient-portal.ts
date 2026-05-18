@@ -5,6 +5,7 @@ import { getMyInstitution } from "@/lib/auth/institution";
 import { sendSms } from "@/lib/sms/solapi";
 import { getPatientSession } from "@/lib/patient-session";
 import { hashResidentNoForMatching } from "@/lib/rrn-hash";
+import { normalizeFullResidentNo } from "@/lib/rrn-core";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import type { PatientInvitationRow } from "@/lib/types/database";
@@ -153,11 +154,15 @@ export async function requestPatientOtp(
 
     const { data: patient } = await admin
       .from("patient")
-      .select("resident_no_hash")
+      .select("resident_no")
       .eq("id", invitation.patient_id)
       .single();
 
-    if (!patient || patient.resident_no_hash !== rrnHash) {
+    if (!patient?.resident_no) {
+      return { ok: false, message: "입력 정보가 일치하지 않습니다." };
+    }
+    const storedNorm = normalizeFullResidentNo(patient.resident_no);
+    if (!storedNorm || hashResidentNoForMatching(storedNorm) !== rrnHash) {
       return { ok: false, message: "입력 정보가 일치하지 않습니다." };
     }
   } else {
@@ -611,12 +616,16 @@ export async function linkMyPatientAccount(
   const { institution } = institutionData;
 
   const admin = createAdminSupabaseClient();
-  const { data: patientRecord } = await admin
+  const { data: patientsInInstitution } = await admin
     .from("patient")
-    .select("id")
+    .select("id, resident_no")
     .eq("institution_id", institution.id)
-    .eq("resident_no_hash", rrnHash)
-    .maybeSingle();
+    .not("resident_no", "is", null);
+
+  const patientRecord = (patientsInInstitution ?? []).find((p) => {
+    const norm = normalizeFullResidentNo(p.resident_no ?? "");
+    return norm && hashResidentNoForMatching(norm) === rrnHash;
+  }) ?? null;
 
   if (!patientRecord) {
     return {
