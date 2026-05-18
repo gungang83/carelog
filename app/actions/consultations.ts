@@ -118,7 +118,7 @@ export async function saveConsultation(
       // 이미 위에서 생성한 supabase 클라이언트 재사용 (RLS — 직원은 자기 기관 환자 조회 가능)
       const { data: patientRow, error: patientErr } = await supabase
         .from("patient")
-        .select("phone, resident_no_hash")
+        .select("phone, resident_no")
         .eq("id", patientId)
         .eq("institution_id", institutionId)
         .maybeSingle();
@@ -132,7 +132,7 @@ export async function saveConsultation(
       if (!patientRow.phone) {
         return { ok: false, message: "환자 전화번호가 등록되어 있지 않습니다. 환자 정보를 먼저 수정해 주세요." };
       }
-      if (!patientRow.resident_no_hash) {
+      if (!patientRow.resident_no) {
         return { ok: false, message: "환자 주민번호가 등록되어 있지 않습니다. 환자 정보를 먼저 수정해 주세요." };
       }
 
