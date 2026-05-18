@@ -115,21 +115,29 @@ export async function saveConsultation(
     // "저장 후 환자 전송" 모드: SMS 초대 발송
     const submitMode = formData.get("submit_mode");
     if (submitMode === "send") {
-      const adminSms = createAdminSupabaseClient();
-      const { data: { user } } = await (await createServerSupabaseClient()).auth.getUser();
-
-      const { data: patientRow } = await adminSms
+      // 이미 위에서 생성한 supabase 클라이언트 재사용 (RLS — 직원은 자기 기관 환자 조회 가능)
+      const { data: patientRow, error: patientErr } = await supabase
         .from("patient")
         .select("phone, resident_no_hash")
         .eq("id", patientId)
-        .single();
+        .eq("institution_id", institutionId)
+        .maybeSingle();
 
-      if (!patientRow?.phone) {
+      if (patientErr) {
+        return { ok: false, message: `환자 정보 조회 실패: ${patientErr.message}` };
+      }
+      if (!patientRow) {
+        return { ok: false, message: "환자 정보를 찾을 수 없습니다." };
+      }
+      if (!patientRow.phone) {
         return { ok: false, message: "환자 전화번호가 등록되어 있지 않습니다. 환자 정보를 먼저 수정해 주세요." };
       }
-      if (!patientRow?.resident_no_hash) {
+      if (!patientRow.resident_no_hash) {
         return { ok: false, message: "환자 주민번호가 등록되어 있지 않습니다. 환자 정보를 먼저 수정해 주세요." };
       }
+
+      const adminSms = createAdminSupabaseClient();
+      const { data: { user } } = await supabase.auth.getUser();
 
       // 기존 미수락 초대 무효화
       await adminSms
@@ -152,7 +160,7 @@ export async function saveConsultation(
         .single();
 
       if (invErr || !invitation) {
-        return { ok: false, message: "초대 생성에 실패했습니다." };
+        return { ok: false, message: `초대 생성 실패: ${invErr?.message ?? "알 수 없는 오류"}` };
       }
 
       const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "https://carelog-tau.vercel.app";
