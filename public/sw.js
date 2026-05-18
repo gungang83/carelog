@@ -1,6 +1,9 @@
-// Carelog Service Worker — Web Push + 캐싱 최적화
+// Carelog Service Worker — Web Push + 배지 + 캐싱 최적화
 const CACHE_NAME = "carelog-v2";
 const STATIC_CACHE = "carelog-static-v2";
+
+// 푸시 수신 후 앱 열기 전까지 누적되는 배지 카운트
+let badgeCount = 0;
 
 self.addEventListener("install", (event) => {
   self.skipWaiting();
@@ -40,7 +43,7 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
-  // 기타 /_next/ 경로 (이미지 최적화 등) — 브라우저 캐시에 위임
+  // 기타 /_next/ 경로 — 브라우저 캐시에 위임
   if (url.pathname.startsWith("/_next/")) return;
 
   // API / Server Action — 캐시 안 함
@@ -60,6 +63,16 @@ self.addEventListener("fetch", (event) => {
   );
 });
 
+// 클라이언트 → SW 메시지 처리
+self.addEventListener("message", (event) => {
+  if (event.data?.type === "CLEAR_BADGE") {
+    badgeCount = 0;
+    if (self.registration.clearAppBadge) {
+      self.registration.clearAppBadge().catch(() => {});
+    }
+  }
+});
+
 // Web Push 수신
 self.addEventListener("push", (event) => {
   if (!event.data) return;
@@ -72,21 +85,35 @@ self.addEventListener("push", (event) => {
 
   const { title = "Carelog", body = "", url = "/", icon = "/icons/icon-192.png" } = payload;
 
+  badgeCount += 1;
+
   event.waitUntil(
-    self.registration.showNotification(title, {
-      body,
-      icon,
-      badge: "/icons/icon-192.png",
-      data: { url },
-      requireInteraction: false,
-    })
+    Promise.all([
+      self.registration.showNotification(title, {
+        body,
+        icon,
+        badge: "/icons/icon-192.png",
+        data: { url },
+        requireInteraction: false,
+      }),
+      // 홈 화면 아이콘 배지 업데이트
+      self.registration.setAppBadge
+        ? self.registration.setAppBadge(badgeCount).catch(() => {})
+        : Promise.resolve(),
+    ])
   );
 });
 
-// 알림 탭 → 해당 URL로 이동
+// 알림 탭 → 해당 URL로 이동 + 배지 초기화
 self.addEventListener("notificationclick", (event) => {
   event.notification.close();
   const targetUrl = event.notification.data?.url ?? "/";
+
+  // 알림을 직접 탭하면 배지도 초기화
+  badgeCount = 0;
+  if (self.registration.clearAppBadge) {
+    self.registration.clearAppBadge().catch(() => {});
+  }
 
   event.waitUntil(
     self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((clientList) => {
