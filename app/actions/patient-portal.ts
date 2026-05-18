@@ -384,6 +384,24 @@ export async function verifyPatientOtp(
     }
   }
 
+  // Supabase 로그인 상태라면 patient_auth_links도 자동 연결
+  // (직원 겸 환자인 경우, 이후 Supabase 세션만으로 /portal/records 접근 가능)
+  try {
+    const { createServerSupabaseClient } = await import("@/lib/supabase/server");
+    const supabase = await createServerSupabaseClient();
+    const { data: { user: authUser } } = await supabase.auth.getUser();
+    if (authUser) {
+      await admin
+        .from("patient_auth_links")
+        .upsert(
+          { auth_user_id: authUser.id, patient_account_id: patientAccountId, provider: "google" },
+          { onConflict: "auth_user_id" },
+        );
+    }
+  } catch {
+    // 인증 컨텍스트 없을 때 무시 (순수 환자 OTP 흐름)
+  }
+
   return { ok: true, isNewAccount };
 }
 
