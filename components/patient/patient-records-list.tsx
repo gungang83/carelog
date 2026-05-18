@@ -16,6 +16,10 @@ function formatDate(iso: string): string {
   });
 }
 
+function stripHtml(html: string): string {
+  return html.replace(/<[^>]*>/g, "").replace(/\s+/g, " ").trim();
+}
+
 export function PatientRecordsList({ records }: Props) {
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
@@ -31,6 +35,7 @@ export function PatientRecordsList({ records }: Props) {
     <ul className="flex flex-col gap-3">
       {records.map((record) => {
         const isOpen = expandedId === record.consultationId;
+        const preview = stripHtml(record.content);
         return (
           <li
             key={record.consultationId}
@@ -53,7 +58,7 @@ export function PatientRecordsList({ records }: Props) {
                     </span>
                   </div>
                   <p className="text-sm text-slate-700 line-clamp-2">
-                    {record.content}
+                    {preview || "(내용 없음)"}
                   </p>
                 </div>
                 <span className="text-slate-400 text-sm flex-shrink-0">
@@ -63,13 +68,14 @@ export function PatientRecordsList({ records }: Props) {
             </button>
 
             {isOpen && (
-              <div className="border-t border-slate-100 px-5 py-4 bg-slate-50">
-                <p className="text-sm text-slate-700 whitespace-pre-wrap mb-4">
-                  {record.content}
-                </p>
+              <div className="border-t border-slate-100 px-5 py-4 bg-slate-50 space-y-4">
+                <div
+                  className="text-sm text-slate-700 leading-relaxed [&_p]:mb-2 [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5 [&_strong]:font-semibold [&_img]:max-w-full [&_img]:rounded-lg [&_img]:mt-2"
+                  dangerouslySetInnerHTML={{ __html: record.content }}
+                />
 
                 {record.prescriptions.length > 0 && (
-                  <div className="mb-4">
+                  <div>
                     <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 mb-2">
                       처방 메모
                     </p>

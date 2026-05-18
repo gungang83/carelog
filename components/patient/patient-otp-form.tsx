@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { verifyPatientOtp, requestPatientOtp } from "@/app/actions/patient-portal";
+import { verifyPatientOtp } from "@/app/actions/patient-portal";
 
 type Props = {
   phone: string;
@@ -13,9 +13,10 @@ type Props = {
 export function PatientOtpForm({ phone, rrnHash, invitationToken }: Props) {
   const router = useRouter();
   const [status, setStatus] = useState<
-    "idle" | "verifying" | "resending" | "error"
+    "idle" | "verifying" | "success" | "error"
   >("idle");
   const [message, setMessage] = useState("");
+  const [isNewAccount, setIsNewAccount] = useState(false);
 
   async function handleVerify(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -30,25 +31,60 @@ export function PatientOtpForm({ phone, rrnHash, invitationToken }: Props) {
     const result = await verifyPatientOtp(formData);
 
     if (result.ok) {
-      if (result.isNewAccount && invitationToken) {
-        router.push(`/portal/signup-cta?invitation=${invitationToken}`);
-      } else {
-        router.push("/portal/records");
-      }
+      setIsNewAccount(result.isNewAccount);
+      setStatus("success");
     } else {
       setStatus("error");
       setMessage(result.message);
     }
   }
 
-  async function handleResend() {
-    setStatus("resending");
-    setMessage("");
+  function handleContinue() {
+    if (isNewAccount && invitationToken) {
+      router.push(`/portal/signup-cta?invitation=${invitationToken}`);
+    } else {
+      router.push("/portal/records");
+    }
+  }
 
-    // requestPatientOtp needs rrn_front/rrn_back but we only have rrnHash here.
-    // We cannot resend without them — user must go back to the login page.
-    setStatus("error");
-    setMessage("인증번호를 다시 받으려면 이전 화면으로 돌아가 주세요.");
+  if (status === "success") {
+    return (
+      <div className="flex flex-col items-center gap-5 py-2 text-center">
+        <div className="flex h-16 w-16 items-center justify-center rounded-full bg-green-100">
+          <svg viewBox="0 0 24 24" fill="none" className="h-8 w-8 text-green-600">
+            <path
+              d="M5 13l4 4L19 7"
+              stroke="currentColor"
+              strokeWidth={2.5}
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          </svg>
+        </div>
+        <div>
+          <p className="text-lg font-semibold text-slate-900">인증 완료!</p>
+          <p className="mt-1 text-sm text-slate-500">
+            {isNewAccount
+              ? "케어로그에 가입하면 언제든 진료 기록을 확인할 수 있어요."
+              : "상담 내역을 확인할 수 있습니다."}
+          </p>
+        </div>
+        <button
+          onClick={handleContinue}
+          className="w-full rounded-lg bg-sky-600 py-2.5 text-sm font-semibold text-white hover:bg-sky-700"
+        >
+          {isNewAccount ? "가입하고 계속하기 →" : "내 진료 기록 보기 →"}
+        </button>
+        {isNewAccount && (
+          <button
+            onClick={() => router.push("/portal/records")}
+            className="text-sm text-slate-400 hover:text-slate-600"
+          >
+            나중에 가입하기
+          </button>
+        )}
+      </div>
+    );
   }
 
   return (
@@ -76,29 +112,20 @@ export function PatientOtpForm({ phone, rrnHash, invitationToken }: Props) {
       </div>
 
       {message && (
-        <p
-          className={`text-sm ${message.includes("재발송") ? "text-green-600" : "text-red-600"}`}
-        >
-          {message}
-        </p>
+        <p className="text-sm text-red-600">{message}</p>
       )}
 
       <button
         type="submit"
-        disabled={status === "verifying" || status === "resending"}
+        disabled={status === "verifying"}
         className="w-full rounded-lg bg-sky-600 py-2.5 text-sm font-semibold text-white hover:bg-sky-700 disabled:opacity-60"
       >
         {status === "verifying" ? "확인 중..." : "확인"}
       </button>
 
-      <button
-        type="button"
-        onClick={handleResend}
-        disabled={status === "verifying" || status === "resending"}
-        className="text-sm text-sky-600 hover:underline disabled:opacity-50"
-      >
-        인증번호 재발송
-      </button>
+      <p className="text-center text-xs text-slate-400">
+        인증번호가 오지 않으면 이전 화면으로 돌아가 다시 시도해 주세요.
+      </p>
     </form>
   );
 }
