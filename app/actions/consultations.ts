@@ -12,6 +12,7 @@ import { redirect } from "next/navigation";
 import { sendPushToInstitution } from "@/app/actions/push";
 import { sendPushToPatient } from "@/app/actions/patient-portal";
 import { createAdminSupabaseClient } from "@/lib/supabase/admin";
+import { sendSms } from "@/lib/sms/solapi";
 
 export async function saveConsultation(
   patientId: string,
@@ -104,13 +105,69 @@ export async function saveConsultation(
 
     void (await resolveResidentMatchHashForPatient(patientId));
 
-    // 푸시 알림 발송 (fire-and-forget — 실패해도 상담 저장에 영향 없음)
     const patientName = await supabase
       .from("patient")
       .select("name")
       .eq("id", patientId)
       .single()
       .then((r) => r.data?.name ?? "환자");
+
+    // "저장 후 환자 전송" 모드: SMS 초대 발송
+    const submitMode = formData.get("submit_mode");
+    if (submitMode === "send") {
+      const adminSms = createAdminSupabaseClient();
+      const { data: { user } } = await (await createServerSupabaseClient()).auth.getUser();
+
+      const { data: patientRow } = await adminSms
+        .from("patient")
+        .select("phone, resident_no_hash")
+        .eq("id", patientId)
+        .single();
+
+      if (!patientRow?.phone) {
+        return { ok: false, message: "환자 전화번호가 등록되어 있지 않습니다. 환자 정보를 먼저 수정해 주세요." };
+      }
+      if (!patientRow?.resident_no_hash) {
+        return { ok: false, message: "환자 주민번호가 등록되어 있지 않습니다. 환자 정보를 먼저 수정해 주세요." };
+      }
+
+      // 기존 미수락 초대 무효화
+      await adminSms
+        .from("patient_invitations")
+        .update({ expires_at: new Date().toISOString() })
+        .eq("patient_id", patientId)
+        .is("accepted_at", null);
+
+      // 새 초대 생성
+      const { data: invitation, error: invErr } = await adminSms
+        .from("patient_invitations")
+        .insert({
+          institution_id: institutionId,
+          patient_id: patientId,
+          phone: patientRow.phone,
+          consent_given: true,
+          invited_by: user?.id ?? null,
+        })
+        .select("token")
+        .single();
+
+      if (invErr || !invitation) {
+        return { ok: false, message: "초대 생성에 실패했습니다." };
+      }
+
+      const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "https://carelog-tau.vercel.app";
+      const institutionData = await (await import("@/lib/auth/institution")).getMyInstitution();
+      const institutionName = institutionData?.institution.name ?? "케어로그";
+      const smsText = `[${institutionName}] ${patientName}님의 상담 내역 확인하기: ${siteUrl}/p/${invitation.token}`;
+      const smsResult = await sendSms(patientRow.phone, smsText);
+
+      if (!smsResult.ok) {
+        await adminSms.from("patient_invitations").delete().eq("token", invitation.token);
+        return { ok: false, message: `SMS 발송 실패: ${smsResult.message}` };
+      }
+    }
+
+    // 푸시 알림 발송 (fire-and-forget — 실패해도 상담 저장에 영향 없음)
     const preview = trimmed.replace(/<[^>]*>/g, "").slice(0, 60);
     sendPushToInstitution(institutionId, {
       title: "새 상담 기록",
