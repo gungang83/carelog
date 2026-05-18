@@ -585,6 +585,127 @@ export async function unsubscribePatientPush(
   return { ok: true };
 }
 
+// ─── 직원 본인 환자 계정 직접 연동 ───────────────────────────────────────────
+
+export async function linkMyPatientAccount(
+  rrnFront: string,
+  rrnBack: string,
+): Promise<{ ok: true } | { ok: false; message: string }> {
+  // 1. 현재 Supabase staff 세션 확인
+  const { createServerSupabaseClient } = await import("@/lib/supabase/server");
+  const supabase = await createServerSupabaseClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false, message: "로그인이 필요합니다." };
+
+  // 2. 주민번호 형식 검증
+  if (!/^\d{6}$/.test(rrnFront) || !/^\d{7}$/.test(rrnBack)) {
+    return { ok: false, message: "주민등록번호를 올바르게 입력해 주세요." };
+  }
+  const rrnHash = hashResidentNoForMatching(rrnFront + rrnBack);
+
+  // 3. 소속 기관의 환자 레코드에서 주민번호 매칭
+  const institutionData = await getMyInstitution();
+  if (!institutionData) return { ok: false, message: "소속 기관이 없습니다." };
+  const { institution } = institutionData;
+
+  const admin = createAdminSupabaseClient();
+  const { data: patientRecord } = await admin
+    .from("patient")
+    .select("id")
+    .eq("institution_id", institution.id)
+    .eq("resident_no_hash", rrnHash)
+    .maybeSingle();
+
+  if (!patientRecord) {
+    return {
+      ok: false,
+      message:
+        "일치하는 환자 정보를 찾을 수 없습니다. 먼저 환자 목록에서 본인 정보를 등록하고 주민번호를 입력해 주세요.",
+    };
+  }
+
+  // 4. patient_accounts upsert (rrn_hash 기준)
+  const { data: existingAccount } = await admin
+    .from("patient_accounts")
+    .select("id")
+    .eq("rrn_hash", rrnHash)
+    .maybeSingle();
+
+  let patientAccountId: string;
+
+  if (existingAccount) {
+    patientAccountId = existingAccount.id;
+  } else {
+    const { data: newAccount, error: accountError } = await admin
+      .from("patient_accounts")
+      .insert({ rrn_hash: rrnHash })
+      .select("id")
+      .single();
+    if (accountError || !newAccount) {
+      return { ok: false, message: "환자 계정 생성에 실패했습니다." };
+    }
+    patientAccountId = newAccount.id;
+  }
+
+  // 5. patient_account_links upsert
+  await admin
+    .from("patient_account_links")
+    .upsert(
+      {
+        patient_account_id: patientAccountId,
+        patient_id: patientRecord.id,
+        institution_id: institution.id,
+      },
+      { onConflict: "patient_account_id,patient_id" },
+    );
+
+  // 6. patient_auth_links upsert — 현재 Google 계정과 연동
+  const { error: linkError } = await admin
+    .from("patient_auth_links")
+    .upsert(
+      {
+        auth_user_id: user.id,
+        patient_account_id: patientAccountId,
+        provider: "google",
+      },
+      { onConflict: "auth_user_id" },
+    );
+
+  if (linkError) {
+    return { ok: false, message: "계정 연동에 실패했습니다." };
+  }
+
+  return { ok: true };
+}
+
+// ─── 직원 환자 계정 연동 상태 조회 ───────────────────────────────────────────
+
+export async function getMyPatientLinkStatus(): Promise<
+  | { ok: true; linked: true; patientAccountId: string }
+  | { ok: true; linked: false }
+  | { ok: false; message: string }
+> {
+  const { createServerSupabaseClient } = await import("@/lib/supabase/server");
+  const supabase = await createServerSupabaseClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false, message: "로그인이 필요합니다." };
+
+  const admin = createAdminSupabaseClient();
+  const { data: link } = await admin
+    .from("patient_auth_links")
+    .select("patient_account_id")
+    .eq("auth_user_id", user.id)
+    .eq("provider", "google")
+    .maybeSingle();
+
+  if (!link) return { ok: true, linked: false };
+  return { ok: true, linked: true, patientAccountId: link.patient_account_id };
+}
+
 // ─── 특정 환자에게 푸시 알림 발송 ────────────────────────────────────────────
 
 type PushPayload = { title: string; body: string; url: string };

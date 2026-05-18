@@ -2,10 +2,12 @@ import { redirect } from "next/navigation";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { getMyInstitution } from "@/lib/auth/institution";
 import { getStaffList } from "@/app/actions/admin";
+import { getMyPatientLinkStatus } from "@/app/actions/patient-portal";
 import { StaffList } from "@/components/settings/staff-list";
 import { StaffInviteForm } from "@/components/settings/staff-invite-form";
 import { InstitutionNameForm } from "@/components/settings/institution-name-form";
 import { NotificationSettings } from "@/components/settings/notification-settings";
+import { PatientAccountLink } from "@/components/settings/patient-account-link";
 
 export default async function SettingsPage() {
   const supabase = await createServerSupabaseClient();
@@ -21,7 +23,10 @@ export default async function SettingsPage() {
 
   const isOwnerOrAdmin = role === "owner" || role === "admin";
 
-  const staffResult = isOwnerOrAdmin ? await getStaffList() : null;
+  const [staffResult, patientLinkStatus] = await Promise.all([
+    isOwnerOrAdmin ? getStaffList() : Promise.resolve(null),
+    getMyPatientLinkStatus(),
+  ]);
   const members = staffResult?.ok ? staffResult.members : [];
 
   return (
@@ -55,6 +60,13 @@ export default async function SettingsPage() {
           </div>
         </section>
       )}
+
+      <section className="space-y-4">
+        <h2 className="text-base font-semibold text-slate-800">내 진료 기록</h2>
+        <PatientAccountLink
+          initialLinked={patientLinkStatus.ok && patientLinkStatus.linked}
+        />
+      </section>
 
       <section className="space-y-4">
         <h2 className="text-base font-semibold text-slate-800">알림 관리</h2>
