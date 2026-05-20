@@ -75,6 +75,7 @@ create table if not exists public.consultation (
   prescriptions   jsonb not null default '[]'::jsonb,
   station_name    text,
   status          text not null default 'confirmed' check (status in ('draft', 'confirmed')),
+  sms_sent_at     timestamptz,
   created_at      timestamptz not null default now()
 );
 

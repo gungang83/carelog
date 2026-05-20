@@ -1,7 +1,12 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState, useTransition } from "react";
-import { confirmConsultation, deleteDraftConsultation, updateDraftConsultation } from "@/app/actions/consultations";
+import {
+  confirmConsultation,
+  deleteDraftConsultation,
+  sendConsultationSms,
+  updateDraftConsultation,
+} from "@/app/actions/consultations";
 import { RichTextEditor, type RichTextEditorHandle } from "@/components/rich-text-editor";
 
 export type ConsultationHistoryItem = {
@@ -11,6 +16,7 @@ export type ConsultationHistoryItem = {
   prescriptions: string[] | null;
   station_name: string | null;
   status: string;
+  sms_sent_at: string | null;
   created_at: string;
 };
 
@@ -31,6 +37,7 @@ function iconLabel(name: string) {
   return label.length > 3 ? label.slice(0, 3) : label;
 }
 
+// ─── 임시저장 액션 버튼 ───────────────────────────────────────────────────────
 function DraftActions({
   item,
   patientId,
@@ -40,7 +47,7 @@ function DraftActions({
 }) {
   const [editing, setEditing] = useState(false);
   const [editContent, setEditContent] = useState(item.content);
-  const [editPrescriptions, setEditPrescriptions] = useState<string[]>(item.prescriptions ?? []);
+  const [editPrescriptions] = useState<string[]>(item.prescriptions ?? []);
   const [message, setMessage] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
   const editorRef = useRef<RichTextEditorHandle>(null);
@@ -51,18 +58,15 @@ function DraftActions({
       const fd = new FormData();
       fd.set("prescriptions", JSON.stringify(editPrescriptions));
       const res = await updateDraftConsultation(item.id, editContent, fd);
-      if (!res.ok) {
-        setMessage(res.message);
-        return;
-      }
+      if (!res.ok) { setMessage(res.message); return; }
       setEditing(false);
     });
   };
 
-  const handleConfirm = () => {
+  const handleConfirm = (shouldSendSms: boolean) => {
     setMessage(null);
     startTransition(async () => {
-      const res = await confirmConsultation(item.id, patientId);
+      const res = await confirmConsultation(item.id, patientId, shouldSendSms);
       if (!res.ok) setMessage(res.message);
     });
   };
@@ -109,36 +113,108 @@ function DraftActions({
   }
 
   return (
-    <div className="mt-3 flex flex-wrap items-center gap-2">
-      <button
-        type="button"
-        onClick={() => setEditing(true)}
-        disabled={pending}
-        className="inline-flex min-h-9 items-center justify-center rounded-lg border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-600 hover:bg-slate-50 disabled:opacity-60"
-      >
-        수정
-      </button>
-      <button
-        type="button"
-        onClick={handleConfirm}
-        disabled={pending}
-        className="inline-flex min-h-9 items-center justify-center rounded-lg bg-emerald-600 px-4 text-sm font-semibold text-white shadow-sm hover:bg-emerald-700 disabled:opacity-60"
-      >
-        {pending ? "처리 중..." : "확정하기"}
-      </button>
-      <button
-        type="button"
-        onClick={handleDelete}
-        disabled={pending}
-        className="inline-flex min-h-9 items-center justify-center rounded-lg border border-red-200 bg-white px-4 text-sm font-semibold text-red-600 hover:bg-red-50 disabled:opacity-60"
-      >
-        삭제
-      </button>
-      {message ? <p className="text-sm text-red-600">{message}</p> : null}
+    <div className="mt-3 flex flex-col gap-2">
+      <div className="flex flex-wrap gap-2">
+        <button
+          type="button"
+          onClick={() => setEditing(true)}
+          disabled={pending}
+          className="inline-flex min-h-9 items-center justify-center rounded-lg border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-600 hover:bg-slate-50 disabled:opacity-60"
+        >
+          수정
+        </button>
+        <button
+          type="button"
+          onClick={() => handleConfirm(false)}
+          disabled={pending}
+          className="inline-flex min-h-9 items-center justify-center rounded-lg bg-emerald-600 px-4 text-sm font-semibold text-white shadow-sm hover:bg-emerald-700 disabled:opacity-60"
+        >
+          {pending ? "처리 중..." : "확정"}
+        </button>
+        <button
+          type="button"
+          onClick={() => handleConfirm(true)}
+          disabled={pending}
+          className="inline-flex min-h-9 items-center justify-center rounded-lg bg-sky-600 px-4 text-sm font-semibold text-white shadow-sm hover:bg-sky-700 disabled:opacity-60"
+        >
+          {pending ? "처리 중..." : "확정 + 환자 전송"}
+        </button>
+        <button
+          type="button"
+          onClick={handleDelete}
+          disabled={pending}
+          className="inline-flex min-h-9 items-center justify-center rounded-lg border border-red-200 bg-white px-4 text-sm font-semibold text-red-600 hover:bg-red-50 disabled:opacity-60"
+        >
+          삭제
+        </button>
+      </div>
+      {message ? (
+        <p className={`text-sm ${message.startsWith("확정 완료") ? "text-amber-600" : "text-red-600"}`}>
+          {message}
+        </p>
+      ) : null}
     </div>
   );
 }
 
+// ─── 확정된 상담 SMS 전송 버튼 ────────────────────────────────────────────────
+function SmsControls({
+  item,
+  patientId,
+}: {
+  item: ConsultationHistoryItem;
+  patientId: string;
+}) {
+  const [message, setMessage] = useState<string | null>(null);
+  const [pending, startTransition] = useTransition();
+  const [sentAt, setSentAt] = useState<string | null>(item.sms_sent_at);
+
+  const handleSend = () => {
+    if (!confirm("환자에게 상담 내역 링크를 SMS로 전송할까요?")) return;
+    setMessage(null);
+    startTransition(async () => {
+      const res = await sendConsultationSms(item.id, patientId);
+      if (!res.ok) {
+        setMessage(res.message);
+      } else {
+        setSentAt(new Date().toISOString());
+      }
+    });
+  };
+
+  const sentLabel = sentAt
+    ? new Date(sentAt).toLocaleString("ko-KR", {
+        month: "2-digit",
+        day: "2-digit",
+        hour: "2-digit",
+        minute: "2-digit",
+      })
+    : null;
+
+  return (
+    <div className="mt-3 flex flex-wrap items-center gap-3 text-xs">
+      {sentLabel ? (
+        <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-3 py-1 font-semibold text-emerald-700">
+          <span>✓</span>
+          <span>SMS 전송됨 ({sentLabel})</span>
+        </span>
+      ) : (
+        <span className="text-slate-400">SMS 미전송</span>
+      )}
+      <button
+        type="button"
+        onClick={handleSend}
+        disabled={pending}
+        className="inline-flex min-h-8 items-center justify-center rounded-lg border border-sky-200 bg-white px-3 text-xs font-semibold text-sky-700 hover:bg-sky-50 disabled:opacity-60"
+      >
+        {pending ? "전송 중..." : sentLabel ? "재전송" : "환자에게 전송"}
+      </button>
+      {message ? <p className="text-red-600">{message}</p> : null}
+    </div>
+  );
+}
+
+// ─── 메인 컴포넌트 ────────────────────────────────────────────────────────────
 export function ConsultationHistory({ consultations, patientId }: Props) {
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
   const [highlightId, setHighlightId] = useState<string | null>(null);
@@ -155,8 +231,7 @@ export function ConsultationHistory({ consultations, patientId }: Props) {
       el.scrollIntoView({ behavior: "smooth", block: "center" });
     } else {
       const timer = setTimeout(() => {
-        const el2 = document.getElementById(targetId);
-        if (el2) el2.scrollIntoView({ behavior: "smooth", block: "center" });
+        document.getElementById(targetId)?.scrollIntoView({ behavior: "smooth", block: "center" });
       }, 300);
       return () => clearTimeout(timer);
     }
@@ -164,19 +239,13 @@ export function ConsultationHistory({ consultations, patientId }: Props) {
 
   useEffect(() => {
     if (!lightboxUrl) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") closeLightbox();
-    };
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") closeLightbox(); };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [lightboxUrl, closeLightbox]);
 
   if (consultations.length === 0) {
-    return (
-      <p className="mt-6 text-sm text-slate-600">
-        아직 저장된 상담 기록이 없습니다.
-      </p>
-    );
+    return <p className="mt-6 text-sm text-slate-600">아직 저장된 상담 기록이 없습니다.</p>;
   }
 
   return (
@@ -211,11 +280,9 @@ export function ConsultationHistory({ consultations, patientId }: Props) {
                   : "border-sky-100 bg-white"
               }`}
             >
+              {/* 헤더 */}
               <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
-                <time
-                  dateTime={c.created_at}
-                  className="text-xs font-semibold text-slate-500"
-                >
+                <time dateTime={c.created_at} className="text-xs font-semibold text-slate-500">
                   {createdLabel}
                 </time>
                 {isDraft ? (
@@ -225,9 +292,7 @@ export function ConsultationHistory({ consultations, patientId }: Props) {
                 ) : null}
                 {c.station_name ? (
                   <>
-                    <span className="text-[11px] text-sky-200" aria-hidden>
-                      ·
-                    </span>
+                    <span className="text-[11px] text-sky-200" aria-hidden>·</span>
                     <span className="text-[11px] font-medium tracking-tight text-sky-700">
                       {c.station_name}
                     </span>
@@ -235,11 +300,13 @@ export function ConsultationHistory({ consultations, patientId }: Props) {
                 ) : null}
               </div>
 
+              {/* 본문 */}
               <div
                 className="rich-content mt-3 text-sm leading-6 text-slate-800"
                 dangerouslySetInnerHTML={{ __html: c.content }}
               />
 
+              {/* 이미지 */}
               {urls.length ? (
                 <div className="mt-4">
                   <div className="text-xs font-semibold text-slate-600">
@@ -251,14 +318,10 @@ export function ConsultationHistory({ consultations, patientId }: Props) {
                         key={`${c.id}-${idx}`}
                         type="button"
                         onClick={() => setLightboxUrl(url)}
-                        className="group relative overflow-hidden rounded-xl border border-sky-100 bg-sky-50/30 text-left shadow-sm transition hover:border-sky-300 hover:shadow-md focus-visible:outline focus-visible:ring-2 focus-visible:ring-sky-400"
+                        className="group relative overflow-hidden rounded-xl border border-sky-100 bg-sky-50/30 text-left shadow-sm transition hover:border-sky-300 hover:shadow-md"
                       >
                         {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img
-                          src={url}
-                          alt=""
-                          className="h-28 w-full object-cover transition group-hover:scale-[1.02]"
-                        />
+                        <img src={url} alt="" className="h-28 w-full object-cover transition group-hover:scale-[1.02]" />
                         <span className="absolute bottom-2 right-2 rounded-lg bg-white/90 px-2 py-1 text-[10px] font-semibold text-sky-800 shadow">
                           확대
                         </span>
@@ -268,46 +331,38 @@ export function ConsultationHistory({ consultations, patientId }: Props) {
                 </div>
               ) : null}
 
+              {/* 처방 제품 */}
               {prescriptions.length ? (
                 <div className="mt-4">
-                  <div className="text-xs font-semibold text-slate-600">
-                    처방 제품
-                  </div>
+                  <div className="text-xs font-semibold text-slate-600">처방 제품</div>
                   <div className="mt-2 flex flex-wrap gap-2">
                     {prescriptions.map((name) => (
-                      <button
+                      <span
                         key={`${c.id}-${name}`}
-                        type="button"
-                        onClick={() => {
-                          /* 추후 상세 모달 연결용 */
-                        }}
-                        className="inline-flex min-h-11 cursor-pointer items-center gap-2 rounded-2xl border border-sky-100 bg-gradient-to-br from-white to-sky-50 px-4 py-2.5 text-left shadow-sm transition hover:border-sky-300 hover:shadow-md active:scale-[0.99]"
+                        className="inline-flex min-h-11 items-center gap-2 rounded-2xl border border-sky-100 bg-gradient-to-br from-white to-sky-50 px-4 py-2.5 shadow-sm"
                       >
                         <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-sky-100 text-xs font-bold text-sky-800">
                           {iconLabel(name)}
                         </span>
-                        <span className="text-sm font-semibold text-slate-800">
-                          {name}
-                        </span>
-                      </button>
+                        <span className="text-sm font-semibold text-slate-800">{name}</span>
+                      </span>
                     ))}
                   </div>
                 </div>
               ) : null}
 
+              {/* 하단 액션 */}
               {isDraft ? (
                 <DraftActions item={c} patientId={patientId} />
               ) : (
-                <div className="mt-4 text-xs text-slate-500">
-                  환자 뷰어:{" "}
-                  <span className="font-mono text-slate-600">/view/{c.id}</span>
-                </div>
+                <SmsControls item={c} patientId={patientId} />
               )}
             </li>
           );
         })}
       </ol>
 
+      {/* 이미지 라이트박스 */}
       {lightboxUrl ? (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/70 p-4 backdrop-blur-sm"
@@ -328,11 +383,7 @@ export function ConsultationHistory({ consultations, patientId }: Props) {
               닫기
             </button>
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src={lightboxUrl}
-              alt=""
-              className="mx-auto max-h-[80vh] w-auto max-w-full rounded-xl object-contain"
-            />
+            <img src={lightboxUrl} alt="" className="mx-auto max-h-[80vh] w-auto max-w-full rounded-xl object-contain" />
           </div>
         </div>
       ) : null}
