@@ -47,6 +47,9 @@ export async function saveConsultation(
     }
   }
 
+  const submitMode = formData.get("submit_mode");
+  const status = submitMode === "draft" ? "draft" : "confirmed";
+
   const files = formData.getAll("images").filter((v) => v instanceof File) as File[];
   const nonEmpty = files.filter((f) => f.size > 0);
 
@@ -92,6 +95,7 @@ export async function saveConsultation(
         image_urls,
         prescriptions,
         station_name,
+        status,
       })
       .select("id")
       .single();
@@ -112,10 +116,14 @@ export async function saveConsultation(
       .single()
       .then((r) => r.data?.name ?? "환자");
 
+    // draft 저장은 SMS/푸시 없이 종료
+    if (status === "draft") {
+      revalidatePath(`/patients/${patientId}`);
+      redirect(`/patients/${patientId}`);
+    }
+
     // "저장 후 환자 전송" 모드: SMS 초대 발송
-    const submitMode = formData.get("submit_mode");
     if (submitMode === "send") {
-      // 이미 위에서 생성한 supabase 클라이언트 재사용 (RLS — 직원은 자기 기관 환자 조회 가능)
       const { data: patientRow, error: patientErr } = await supabase
         .from("patient")
         .select("phone, resident_no")
@@ -139,14 +147,12 @@ export async function saveConsultation(
       const adminSms = createAdminSupabaseClient();
       const { data: { user } } = await supabase.auth.getUser();
 
-      // 기존 미수락 초대 무효화
       await adminSms
         .from("patient_invitations")
         .update({ expires_at: new Date().toISOString() })
         .eq("patient_id", patientId)
         .is("accepted_at", null);
 
-      // 새 초대 생성
       const { data: invitation, error: invErr } = await adminSms
         .from("patient_invitations")
         .insert({
@@ -175,7 +181,7 @@ export async function saveConsultation(
       }
     }
 
-    // 푸시 알림 발송 (fire-and-forget — 실패해도 상담 저장에 영향 없음)
+    // 푸시 알림 발송 (fire-and-forget)
     const preview = trimmed.replace(/<[^>]*>/g, "").slice(0, 60);
     sendPushToInstitution(institutionId, {
       title: "새 상담 기록",
@@ -183,7 +189,7 @@ export async function saveConsultation(
       url: `/patients/${patientId}#consultation-${inserted.id}`,
     }).catch(() => {});
 
-    // 환자 앱 푸시 알림 (가입한 환자에게만)
+    // 환자 앱 푸시 알림
     const admin = createAdminSupabaseClient();
     void Promise.resolve(
       admin
@@ -209,6 +215,144 @@ export async function saveConsultation(
   redirect(`/patients/${patientId}`);
 }
 
+export async function updateDraftConsultation(
+  consultationId: string,
+  content: string,
+  formData: FormData,
+): Promise<{ ok: true } | { ok: false; message: string }> {
+  const trimmed = content.trim();
+  if (!trimmed) {
+    return { ok: false, message: "상담 내용을 입력해 주세요." };
+  }
+
+  const institutionId = await getMyInstitutionId();
+  if (!institutionId) {
+    return { ok: false, message: "기관 정보를 찾을 수 없습니다." };
+  }
+
+  const prescriptionsRaw = formData.get("prescriptions");
+  let prescriptions: string[] = [];
+  if (typeof prescriptionsRaw === "string" && prescriptionsRaw.trim()) {
+    try {
+      const parsed = JSON.parse(prescriptionsRaw) as unknown;
+      if (Array.isArray(parsed)) {
+        prescriptions = parsed.filter((v) => typeof v === "string") as string[];
+      }
+    } catch {
+      prescriptions = [];
+    }
+  }
+
+  try {
+    const supabase = await createServerSupabaseClient();
+    const { error } = await supabase
+      .from(consultationTable)
+      .update({ content: trimmed, prescriptions })
+      .eq("id", consultationId)
+      .eq("institution_id", institutionId)
+      .eq("status", "draft");
+
+    if (error) {
+      return { ok: false, message: `수정 실패: ${error.message}` };
+    }
+    return { ok: true };
+  } catch (e) {
+    const message = e instanceof Error ? e.message : "수정에 실패했습니다.";
+    return { ok: false, message };
+  }
+}
+
+export async function confirmConsultation(
+  consultationId: string,
+  patientId: string,
+): Promise<{ ok: true } | { ok: false; message: string }> {
+  const institutionId = await getMyInstitutionId();
+  if (!institutionId) {
+    return { ok: false, message: "기관 정보를 찾을 수 없습니다." };
+  }
+
+  try {
+    const supabase = await createServerSupabaseClient();
+    const { data: updated, error } = await supabase
+      .from(consultationTable)
+      .update({ status: "confirmed" })
+      .eq("id", consultationId)
+      .eq("institution_id", institutionId)
+      .eq("status", "draft")
+      .select("id, content")
+      .single();
+
+    if (error) {
+      return { ok: false, message: `확정 실패: ${error.message}` };
+    }
+    if (!updated) {
+      return { ok: false, message: "임시저장 상담을 찾을 수 없습니다." };
+    }
+
+    // 환자 앱 푸시 알림 (fire-and-forget)
+    const patientName = await supabase
+      .from("patient")
+      .select("name")
+      .eq("id", patientId)
+      .single()
+      .then((r) => r.data?.name ?? "환자");
+
+    const preview = String(updated.content).replace(/<[^>]*>/g, "").slice(0, 60);
+    const admin = createAdminSupabaseClient();
+    void Promise.resolve(
+      admin
+        .from("patient_account_links")
+        .select("patient_account_id")
+        .eq("patient_id", patientId)
+        .maybeSingle(),
+    ).then((r) => {
+      if (r.data?.patient_account_id) {
+        sendPushToPatient(r.data.patient_account_id, {
+          title: "새 진료 기록",
+          body: `${patientName} — ${preview}`,
+          url: `/portal/records`,
+        }).catch(() => {});
+      }
+    }).catch(() => {});
+
+    revalidatePath(`/patients/${patientId}`);
+    return { ok: true };
+  } catch (e) {
+    const message = e instanceof Error ? e.message : "확정에 실패했습니다.";
+    return { ok: false, message };
+  }
+}
+
+export async function deleteDraftConsultation(
+  consultationId: string,
+  patientId: string,
+): Promise<{ ok: true } | { ok: false; message: string }> {
+  const institutionId = await getMyInstitutionId();
+  if (!institutionId) {
+    return { ok: false, message: "기관 정보를 찾을 수 없습니다." };
+  }
+
+  try {
+    const supabase = await createServerSupabaseClient();
+    const { error } = await supabase
+      .from(consultationTable)
+      .delete()
+      .eq("id", consultationId)
+      .eq("institution_id", institutionId)
+      .eq("status", "draft");
+
+    if (error) {
+      return { ok: false, message: `삭제 실패: ${error.message}` };
+    }
+
+    revalidatePath(`/patients/${patientId}`);
+    return { ok: true };
+  } catch (e) {
+    const message = e instanceof Error ? e.message : "삭제에 실패했습니다.";
+    return { ok: false, message };
+  }
+}
+
 export async function getConsultationsByPatientId(
   patientId: string,
 ): Promise<
@@ -220,6 +364,7 @@ export async function getConsultationsByPatientId(
         image_urls: string[] | null;
         prescriptions: string[] | null;
         station_name: string | null;
+        status: string;
         created_at: string;
       }>;
     }
@@ -235,7 +380,7 @@ export async function getConsultationsByPatientId(
     const { data, error } = await supabase
       .from(consultationTable)
       .select(
-        "id, patient_id, content, image_urls, prescriptions, station_name, created_at",
+        "id, patient_id, content, image_urls, prescriptions, station_name, status, created_at",
       )
       .eq("patient_id", patientId)
       .eq("institution_id", institutionId)
@@ -254,6 +399,7 @@ export async function getConsultationsByPatientId(
         image_urls: string[] | null;
         prescriptions: string[] | null;
         station_name: string | null;
+        status: string;
         created_at: string;
       }>,
     };
@@ -275,6 +421,7 @@ export async function getConsultationById(
         image_urls: string[] | null;
         prescriptions: string[] | null;
         station_name: string | null;
+        status: string;
         created_at: string;
       };
     }
@@ -285,7 +432,7 @@ export async function getConsultationById(
     const { data, error } = await supabase
       .from(consultationTable)
       .select(
-        "id, patient_id, content, image_urls, prescriptions, station_name, created_at",
+        "id, patient_id, content, image_urls, prescriptions, station_name, status, created_at",
       )
       .eq("id", consultationId)
       .maybeSingle();

@@ -74,6 +74,7 @@ create table if not exists public.consultation (
   image_urls      jsonb not null default '[]'::jsonb,
   prescriptions   jsonb not null default '[]'::jsonb,
   station_name    text,
+  status          text not null default 'confirmed' check (status in ('draft', 'confirmed')),
   created_at      timestamptz not null default now()
 );
 

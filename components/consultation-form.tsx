@@ -212,6 +212,16 @@ export function ConsultationForm({ patientId, patientName }: Props) {
           <button
             type="submit"
             name="submit_mode"
+            value="draft"
+            disabled={pending}
+            className="inline-flex min-h-11 w-full items-center justify-center rounded-xl border border-slate-200 bg-white px-6 text-sm font-semibold text-slate-600 shadow-sm hover:bg-slate-50 disabled:opacity-60 sm:w-auto"
+          >
+            {pending ? "저장 중..." : "임시 저장"}
+          </button>
+
+          <button
+            type="submit"
+            name="submit_mode"
             value="save"
             disabled={pending}
             className="inline-flex min-h-11 w-full items-center justify-center rounded-xl bg-sky-600 px-6 text-sm font-semibold text-white shadow-sm shadow-sky-200 hover:bg-sky-700 disabled:opacity-60 sm:w-auto"

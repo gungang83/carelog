@@ -451,6 +451,7 @@ export async function getPatientRecords(): Promise<
       .from("consultation")
       .select("id, patient_id, institution_id, content, image_urls, prescriptions, created_at")
       .in("patient_id", patientIds)
+      .eq("status", "confirmed")
       .order("created_at", { ascending: false }),
     admin
       .from("institutions")

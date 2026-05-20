@@ -118,7 +118,7 @@ export default async function PatientConsultationPage({
           </div>
         </div>
 
-        <ConsultationHistory consultations={consultations} />
+        <ConsultationHistory consultations={consultations} patientId={patientId} />
       </section>
 
       <section className="rounded-2xl border border-sky-100 bg-white p-6 shadow-sm shadow-sky-100/60">

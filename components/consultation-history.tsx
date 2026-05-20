@@ -1,6 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState, useTransition } from "react";
+import { confirmConsultation, deleteDraftConsultation, updateDraftConsultation } from "@/app/actions/consultations";
+import { RichTextEditor, type RichTextEditorHandle } from "@/components/rich-text-editor";
 
 export type ConsultationHistoryItem = {
   id: string;
@@ -8,11 +10,13 @@ export type ConsultationHistoryItem = {
   image_urls: string[] | null;
   prescriptions: string[] | null;
   station_name: string | null;
+  status: string;
   created_at: string;
 };
 
 type Props = {
   consultations: ConsultationHistoryItem[];
+  patientId: string;
 };
 
 const PRODUCT_ICON: Record<string, string> = {
@@ -27,13 +31,120 @@ function iconLabel(name: string) {
   return label.length > 3 ? label.slice(0, 3) : label;
 }
 
-export function ConsultationHistory({ consultations }: Props) {
+function DraftActions({
+  item,
+  patientId,
+}: {
+  item: ConsultationHistoryItem;
+  patientId: string;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [editContent, setEditContent] = useState(item.content);
+  const [editPrescriptions, setEditPrescriptions] = useState<string[]>(item.prescriptions ?? []);
+  const [message, setMessage] = useState<string | null>(null);
+  const [pending, startTransition] = useTransition();
+  const editorRef = useRef<RichTextEditorHandle>(null);
+
+  const handleSaveEdit = () => {
+    setMessage(null);
+    startTransition(async () => {
+      const fd = new FormData();
+      fd.set("prescriptions", JSON.stringify(editPrescriptions));
+      const res = await updateDraftConsultation(item.id, editContent, fd);
+      if (!res.ok) {
+        setMessage(res.message);
+        return;
+      }
+      setEditing(false);
+    });
+  };
+
+  const handleConfirm = () => {
+    setMessage(null);
+    startTransition(async () => {
+      const res = await confirmConsultation(item.id, patientId);
+      if (!res.ok) setMessage(res.message);
+    });
+  };
+
+  const handleDelete = () => {
+    if (!confirm("임시 저장된 상담을 삭제할까요?")) return;
+    setMessage(null);
+    startTransition(async () => {
+      const res = await deleteDraftConsultation(item.id, patientId);
+      if (!res.ok) setMessage(res.message);
+    });
+  };
+
+  if (editing) {
+    return (
+      <div className="mt-3 flex flex-col gap-3">
+        <RichTextEditor
+          ref={editorRef}
+          value={editContent}
+          onChange={setEditContent}
+          placeholder="상담 내용을 수정하세요..."
+        />
+        <div className="flex gap-2">
+          <button
+            type="button"
+            onClick={handleSaveEdit}
+            disabled={pending}
+            className="inline-flex min-h-9 items-center justify-center rounded-lg bg-sky-600 px-4 text-sm font-semibold text-white shadow-sm hover:bg-sky-700 disabled:opacity-60"
+          >
+            {pending ? "저장 중..." : "수정 저장"}
+          </button>
+          <button
+            type="button"
+            onClick={() => { setEditing(false); setEditContent(item.content); }}
+            disabled={pending}
+            className="inline-flex min-h-9 items-center justify-center rounded-lg border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-600 hover:bg-slate-50 disabled:opacity-60"
+          >
+            취소
+          </button>
+        </div>
+        {message ? <p className="text-sm text-red-600">{message}</p> : null}
+      </div>
+    );
+  }
+
+  return (
+    <div className="mt-3 flex flex-wrap items-center gap-2">
+      <button
+        type="button"
+        onClick={() => setEditing(true)}
+        disabled={pending}
+        className="inline-flex min-h-9 items-center justify-center rounded-lg border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-600 hover:bg-slate-50 disabled:opacity-60"
+      >
+        수정
+      </button>
+      <button
+        type="button"
+        onClick={handleConfirm}
+        disabled={pending}
+        className="inline-flex min-h-9 items-center justify-center rounded-lg bg-emerald-600 px-4 text-sm font-semibold text-white shadow-sm hover:bg-emerald-700 disabled:opacity-60"
+      >
+        {pending ? "처리 중..." : "확정하기"}
+      </button>
+      <button
+        type="button"
+        onClick={handleDelete}
+        disabled={pending}
+        className="inline-flex min-h-9 items-center justify-center rounded-lg border border-red-200 bg-white px-4 text-sm font-semibold text-red-600 hover:bg-red-50 disabled:opacity-60"
+      >
+        삭제
+      </button>
+      {message ? <p className="text-sm text-red-600">{message}</p> : null}
+    </div>
+  );
+}
+
+export function ConsultationHistory({ consultations, patientId }: Props) {
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
   const [highlightId, setHighlightId] = useState<string | null>(null);
 
   const closeLightbox = useCallback(() => setLightboxUrl(null), []);
 
-  // URL hash로 특정 상담 기록으로 스크롤 이동
   useEffect(() => {
     const hash = window.location.hash;
     if (!hash.startsWith("#consultation-")) return;
@@ -43,7 +154,6 @@ export function ConsultationHistory({ consultations }: Props) {
     if (el) {
       el.scrollIntoView({ behavior: "smooth", block: "center" });
     } else {
-      // 렌더링 후 재시도
       const timer = setTimeout(() => {
         const el2 = document.getElementById(targetId);
         if (el2) el2.scrollIntoView({ behavior: "smooth", block: "center" });
@@ -86,14 +196,17 @@ export function ConsultationHistory({ consultations }: Props) {
 
           const urls = c.image_urls ?? [];
           const prescriptions = c.prescriptions ?? [];
-
+          const isDraft = c.status === "draft";
           const isHighlighted = highlightId === `consultation-${c.id}`;
+
           return (
             <li
               key={c.id}
               id={`consultation-${c.id}`}
               className={`rounded-2xl border p-4 shadow-sm transition-colors duration-1000 ${
-                isHighlighted
+                isDraft
+                  ? "border-amber-200 bg-amber-50"
+                  : isHighlighted
                   ? "border-sky-400 bg-sky-50"
                   : "border-sky-100 bg-white"
               }`}
@@ -105,6 +218,11 @@ export function ConsultationHistory({ consultations }: Props) {
                 >
                   {createdLabel}
                 </time>
+                {isDraft ? (
+                  <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-semibold text-amber-700">
+                    임시저장
+                  </span>
+                ) : null}
                 {c.station_name ? (
                   <>
                     <span className="text-[11px] text-sky-200" aria-hidden>
@@ -177,10 +295,14 @@ export function ConsultationHistory({ consultations }: Props) {
                 </div>
               ) : null}
 
-              <div className="mt-4 text-xs text-slate-500">
-                환자 뷰어:{" "}
-                <span className="font-mono text-slate-600">/view/{c.id}</span>
-              </div>
+              {isDraft ? (
+                <DraftActions item={c} patientId={patientId} />
+              ) : (
+                <div className="mt-4 text-xs text-slate-500">
+                  환자 뷰어:{" "}
+                  <span className="font-mono text-slate-600">/view/{c.id}</span>
+                </div>
+              )}
             </li>
           );
         })}
