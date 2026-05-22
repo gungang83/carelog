@@ -154,7 +154,7 @@ export async function requestPatientOtp(
 
     const { data: patient } = await admin
       .from("patient")
-      .select("resident_no")
+      .select("resident_no, phone")
       .eq("id", invitation.patient_id)
       .single();
 
@@ -163,6 +163,10 @@ export async function requestPatientOtp(
     }
     const storedNorm = normalizeFullResidentNo(patient.resident_no);
     if (!storedNorm || hashResidentNoForMatching(storedNorm) !== rrnHash) {
+      return { ok: false, message: "입력 정보가 일치하지 않습니다." };
+    }
+    const storedPhone = normalizePhone(patient.phone ?? "");
+    if (!storedPhone || storedPhone !== phone) {
       return { ok: false, message: "입력 정보가 일치하지 않습니다." };
     }
   } else {
@@ -178,6 +182,29 @@ export async function requestPatientOtp(
         message:
           "가입된 계정이 없습니다. 치과에서 받은 초대 링크로 가입해 주세요.",
       };
+    }
+
+    // 연결된 환자 기록의 전화번호와 대조
+    const { data: links } = await admin
+      .from("patient_account_links")
+      .select("patient_id")
+      .eq("patient_account_id", account.id);
+
+    if (!links?.length) {
+      return { ok: false, message: "입력 정보가 일치하지 않습니다." };
+    }
+
+    const { data: patients } = await admin
+      .from("patient")
+      .select("phone")
+      .in("id", links.map((l) => l.patient_id));
+
+    const storedPhones = (patients ?? [])
+      .map((p) => normalizePhone(p.phone ?? ""))
+      .filter(Boolean);
+
+    if (!storedPhones.includes(phone)) {
+      return { ok: false, message: "입력 정보가 일치하지 않습니다." };
     }
   }
 
