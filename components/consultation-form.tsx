@@ -236,7 +236,7 @@ export function ConsultationForm({ patientId, patientName }: Props) {
             disabled={pending}
             className="inline-flex min-h-11 w-full items-center justify-center rounded-xl border border-sky-200 bg-white px-6 text-sm font-semibold text-sky-800 shadow-sm hover:bg-sky-50 disabled:opacity-60 sm:w-auto"
           >
-            저장 후 환자 전송
+            {pending ? "전송 중..." : "저장 후 환자 전송"}
           </button>
         </div>
 
