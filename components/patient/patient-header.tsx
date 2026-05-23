@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { PatientHamburgerDrawer } from "@/components/patient/patient-hamburger-drawer";
+import { RefreshButton } from "@/components/layout/refresh-button";
 
 interface PatientHeaderProps {
   isLoggedIn: boolean;
@@ -24,11 +25,14 @@ export function PatientHeader({ isLoggedIn }: PatientHeaderProps) {
           </div>
         </Link>
 
-        {isLoggedIn && (
-          <div className="ml-auto flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-sky-100 text-sm font-bold text-sky-700">
-            환
-          </div>
-        )}
+        <div className="ml-auto flex items-center gap-2">
+          <RefreshButton />
+          {isLoggedIn && (
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-sky-100 text-sm font-bold text-sky-700">
+              환
+            </div>
+          )}
+        </div>
       </div>
     </header>
   );

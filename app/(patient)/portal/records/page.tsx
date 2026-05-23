@@ -1,4 +1,3 @@
-import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { getPatientSession } from "@/lib/patient-session";
 import { getPatientRecords } from "@/app/actions/patient-portal";
@@ -6,8 +5,7 @@ import { PatientRecordsList } from "@/components/patient/patient-records-list";
 import { PatientPushBanner } from "@/components/patient/patient-push-banner";
 
 export default async function PatientRecordsPage() {
-  const cookieStore = await cookies();
-  const session = await getPatientSession(cookieStore);
+  const session = await getPatientSession();
 
   if (!session) {
     redirect("/portal/login");

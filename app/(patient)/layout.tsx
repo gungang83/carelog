@@ -1,4 +1,3 @@
-import { cookies } from "next/headers";
 import { getPatientSession } from "@/lib/patient-session";
 import { PatientHeader } from "@/components/patient/patient-header";
 import { Footer } from "@/components/footer";
@@ -8,8 +7,7 @@ export default async function PatientLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const cookieStore = await cookies();
-  const session = await getPatientSession(cookieStore);
+  const session = await getPatientSession();
 
   return (
     <div className="flex min-h-screen flex-col bg-slate-50">

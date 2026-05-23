@@ -1,4 +1,3 @@
-import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { getPatientSession } from "@/lib/patient-session";
 import { createAdminSupabaseClient } from "@/lib/supabase/admin";
@@ -10,8 +9,7 @@ type PageProps = {
 };
 
 export default async function PatientSignupCtaPage({ searchParams }: PageProps) {
-  const cookieStore = await cookies();
-  const session = await getPatientSession(cookieStore);
+  const session = await getPatientSession();
 
   if (!session) {
     redirect("/portal/login");

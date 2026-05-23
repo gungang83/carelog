@@ -449,8 +449,7 @@ export async function getPatientRecords(): Promise<
   | { ok: true; records: PatientRecordItem[] }
   | { ok: false; message: string }
 > {
-  const cookieStore = await cookies();
-  const session = await getPatientSession(cookieStore);
+  const session = await getPatientSession();
 
   if (!session) {
     return { ok: false, message: "로그인이 필요합니다." };
@@ -535,13 +534,13 @@ export async function patientLogout(_formData?: FormData): Promise<void> {
 export async function setCookieForPatientAuth(
   patientAccountId: string,
 ): Promise<{ ok: true } | { ok: false; message: string }> {
-  const cookieStore = await cookies();
-  const session = await getPatientSession(cookieStore);
+  const session = await getPatientSession();
 
   if (!session || session.patientAccountId !== patientAccountId) {
     return { ok: false, message: "인증이 필요합니다." };
   }
 
+  const cookieStore = await cookies();
   cookieStore.set("pending_patient_account_id", patientAccountId, {
     httpOnly: true,
     secure: process.env.NODE_ENV === "production",
@@ -559,8 +558,7 @@ export async function getPatientAuthStatus(): Promise<
   | { ok: true; patientAccountId: string; isGoogleLinked: boolean }
   | { ok: false; message: string }
 > {
-  const cookieStore = await cookies();
-  const session = await getPatientSession(cookieStore);
+  const session = await getPatientSession();
 
   if (!session) {
     return { ok: false, message: "로그인이 필요합니다." };
@@ -591,8 +589,7 @@ type PushSubscriptionJSON = {
 export async function subscribePatientPush(
   sub: PushSubscriptionJSON,
 ): Promise<{ ok: true } | { ok: false; message: string }> {
-  const cookieStore = await cookies();
-  const session = await getPatientSession(cookieStore);
+  const session = await getPatientSession();
 
   if (!session) {
     return { ok: false, message: "로그인이 필요합니다." };
@@ -619,8 +616,7 @@ export async function subscribePatientPush(
 export async function unsubscribePatientPush(
   endpoint: string,
 ): Promise<{ ok: true } | { ok: false; message: string }> {
-  const cookieStore = await cookies();
-  const session = await getPatientSession(cookieStore);
+  const session = await getPatientSession();
 
   if (!session) {
     return { ok: false, message: "로그인이 필요합니다." };
