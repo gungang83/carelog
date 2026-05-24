@@ -422,7 +422,7 @@ export async function verifyPatientOtp(
         .from("patient_auth_links")
         .upsert(
           { auth_user_id: authUser.id, patient_account_id: patientAccountId, provider: "google" },
-          { onConflict: "auth_user_id" },
+          { onConflict: "auth_user_id", ignoreDuplicates: true },
         );
     }
   } catch {
@@ -712,7 +712,7 @@ export async function linkMyPatientAccount(
       { onConflict: "patient_account_id,patient_id" },
     );
 
-  // 6. patient_auth_links upsert — 현재 Google 계정과 연동
+  // 6. patient_auth_links upsert — 현재 Google 계정과 연동 (기존 연결 유지)
   const { error: linkError } = await admin
     .from("patient_auth_links")
     .upsert(
@@ -721,7 +721,7 @@ export async function linkMyPatientAccount(
         patient_account_id: patientAccountId,
         provider: "google",
       },
-      { onConflict: "auth_user_id" },
+      { onConflict: "auth_user_id", ignoreDuplicates: true },
     );
 
   if (linkError) {

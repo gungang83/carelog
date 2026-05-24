@@ -38,8 +38,7 @@ export async function updateSession(request: NextRequest) {
     pathname.startsWith("/invite") ||
     pathname.startsWith("/auth/callback") ||
     pathname.startsWith("/p/") ||
-    pathname.startsWith("/portal/login") ||
-    pathname.startsWith("/portal/verify");
+    pathname.startsWith("/portal/"); // 환자 포털 전체 — 각 페이지가 자체 세션 검증
 
   if (!user && !isPublicPath) {
     const url = request.nextUrl.clone();

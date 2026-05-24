@@ -8,6 +8,7 @@ import {
 import { getMyInstitutionId } from "@/lib/auth/institution";
 import { resolveResidentMatchHashForPatient } from "@/app/actions/patients";
 import { revalidatePath } from "next/cache";
+import { sanitizeRichHtml } from "@/lib/sanitize-html";
 import { redirect } from "next/navigation";
 import { sendPushToInstitution } from "@/app/actions/push";
 import { sendPushToPatient } from "@/app/actions/patient-portal";
@@ -88,7 +89,7 @@ export async function saveConsultation(
   content: string,
   formData: FormData,
 ): Promise<{ ok: false; message: string } | never> {
-  const trimmed = content.trim();
+  const trimmed = sanitizeRichHtml(content.trim());
   if (!trimmed) {
     return { ok: false, message: "상담 내용을 입력해 주세요." };
   }
@@ -201,7 +202,7 @@ export async function updateDraftConsultation(
   content: string,
   formData: FormData,
 ): Promise<{ ok: true } | { ok: false; message: string }> {
-  const trimmed = content.trim();
+  const trimmed = sanitizeRichHtml(content.trim());
   if (!trimmed) return { ok: false, message: "상담 내용을 입력해 주세요." };
 
   const institutionId = await getMyInstitutionId();

@@ -24,12 +24,37 @@ export async function GET(request: NextRequest) {
   const pendingAccountId = cookieStore.get("pending_patient_account_id")?.value;
 
   if (pendingAccountId) {
-    // 신규 가입: OTP 세션에서 넘어온 patient_account_id와 연결
+    // pending 쿠키가 현재 OTP 세션의 patient_account_id와 일치하는지 검증
+    const sessionToken = cookieStore.get("patient_session_token")?.value;
+    let verified = false;
+
+    if (sessionToken) {
+      const { data: session } = await admin
+        .from("patient_sessions")
+        .select("patient_account_id, expires_at")
+        .eq("token", sessionToken)
+        .maybeSingle();
+
+      if (
+        session &&
+        session.patient_account_id === pendingAccountId &&
+        new Date(session.expires_at) > new Date()
+      ) {
+        verified = true;
+      }
+    }
+
+    if (!verified) {
+      cookieStore.delete("pending_patient_account_id");
+      return NextResponse.redirect(`${origin}/portal/login?error=auth_failed`);
+    }
+
+    // 검증 통과: Google 계정과 patient_account 연결
     await Promise.resolve(
       admin
         .from("patient_auth_links")
         .insert({ auth_user_id: authUserId, patient_account_id: pendingAccountId, provider: "google" }),
-    ).catch(() => null); // ON CONFLICT DO NOTHING — UNIQUE 제약으로 중복 무시됨
+    ).catch(() => null); // UNIQUE 제약으로 중복 시 무시
 
     cookieStore.delete("pending_patient_account_id");
     return NextResponse.redirect(`${origin}/portal/records`);
