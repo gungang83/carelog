@@ -44,12 +44,12 @@ async function verifyJwt(
 export async function GET(req: NextRequest) {
   try {
     const token = req.nextUrl.searchParams.get("token");
-    const secret = process.env.CARELOG_SSO_SECRET;
+    const secret = stripBom(process.env.CARELOG_SSO_SECRET ?? "");
 
     console.log("[SSO] token present:", !!token, "secret present:", !!secret);
 
     if (!token || !secret) {
-      console.error("[SSO] missing token or secret");
+      console.error("[SSO] missing token or secret", { tokenLen: token?.length, secretLen: secret.length });
       return NextResponse.redirect(`${EO_APP_URL}?sso_error=missing`);
     }
 
