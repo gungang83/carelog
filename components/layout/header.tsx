@@ -55,14 +55,12 @@ export function Header({
 
         {/* 오른쪽: EO 복귀 + 새로고침 + 프로필 */}
         <div className="ml-auto flex items-center gap-2">
-          {process.env.EO_APP_URL && (
-            <a
-              href={process.env.EO_APP_URL}
-              className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-indigo-200 bg-indigo-50 text-indigo-700 text-xs font-semibold hover:bg-indigo-100 transition-colors"
-            >
-              EO로 돌아가기
-            </a>
-          )}
+          <a
+            href={process.env.EO_APP_URL || "https://eo-ten.vercel.app"}
+            className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-indigo-200 bg-indigo-50 text-indigo-700 text-xs font-semibold hover:bg-indigo-100 transition-colors"
+          >
+            EO로 돌아가기
+          </a>
           <RefreshButton />
           <ProfileDropdown
             userEmail={userEmail}
