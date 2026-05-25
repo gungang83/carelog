@@ -1,8 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminSupabaseClient } from "@/lib/supabase/admin";
 
-const EO_APP_URL =
-  process.env.EO_APP_URL ?? "https://eo-ten.vercel.app";
+const stripBom = (s: string) => (s.charCodeAt(0) === 0xfeff ? s.slice(1) : s);
+const EO_APP_URL = stripBom(
+  process.env.EO_APP_URL ?? "https://eo-ten.vercel.app",
+);
 
 async function verifyJwt(
   token: string,
