@@ -137,7 +137,7 @@ export async function GET(req: NextRequest) {
       return NextResponse.redirect(`${EO_APP_URL}?sso_error=magic_link`);
     }
 
-    console.log("[SSO] redirecting to action_link");
+    console.log("[SSO] action_link:", linkData.properties.action_link);
     return NextResponse.redirect(linkData.properties.action_link);
   } catch (e) {
     console.error("[SSO] unhandled error:", e);
