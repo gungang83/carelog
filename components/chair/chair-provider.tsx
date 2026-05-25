@@ -4,6 +4,7 @@ import {
   createContext,
   useCallback,
   useContext,
+  useEffect,
   useReducer,
   useRef,
   type ReactNode,
@@ -144,6 +145,19 @@ export function ChairProvider({
     recording: {},
     unlinkedCounts: {},
   });
+
+  // 마운트 시 DB에서 미연결 기록 수 초기 로드 — 다른 기기/계정에서도 체어 상태 동기화
+  useEffect(() => {
+    for (const chair of initialChairs) {
+      getUnlinkedChairRecords(chair.id).then((records) => {
+        dispatch({ type: "SET_UNLINKED_COUNT", chairId: chair.id, count: records.length });
+        if (records.length > 0) {
+          dispatch({ type: "SET_STATUS", chairId: chair.id, status: "has_records" });
+        }
+      });
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // MediaRecorder refs keyed by chairId — survive overlay close
   const mediaRefsMap = useRef<Record<string, MediaRefs>>({});
