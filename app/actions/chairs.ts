@@ -305,6 +305,88 @@ export async function searchPatientsForChair(
   return (data ?? []) as PatientSearchResult[];
 }
 
+// ─── createPatientAndLink ─────────────────────────────────────────────────────
+// 환자 프로필 신규 생성 후 체어 기록에 즉시 연결 (이름만 필수)
+type CreatePatientAndLinkResult =
+  | { ok: true; patientId: number }
+  | { ok: false; message: string };
+
+export async function createPatientAndLink(params: {
+  consultationId: string;
+  name: string;
+  chartNo?: string;
+  phone?: string;
+}): Promise<CreatePatientAndLinkResult> {
+  const supabase = await createServerSupabaseClient();
+  const institutionId = await getMyInstitutionId();
+  if (!institutionId) return { ok: false, message: "기관 정보를 찾을 수 없습니다." };
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false, message: "로그인이 필요합니다." };
+
+  const name = params.name.trim();
+  if (!name) return { ok: false, message: "이름을 입력해 주세요." };
+
+  // 미연결 기록 확인
+  const { data: consultation } = await supabase
+    .from("consultation")
+    .select("id, chair_id")
+    .eq("id", params.consultationId)
+    .eq("institution_id", institutionId)
+    .is("patient_id", null)
+    .maybeSingle();
+
+  if (!consultation) return { ok: false, message: "연결 가능한 기록이 없습니다." };
+
+  // 환자 생성
+  const { data: patient, error: patientError } = await supabase
+    .from("patient")
+    .insert({
+      institution_id: institutionId,
+      name,
+      chart_no: params.chartNo?.trim() || null,
+      phone: params.phone?.trim() || null,
+    })
+    .select("id")
+    .single();
+
+  if (patientError || !patient) {
+    return { ok: false, message: "환자 등록에 실패했습니다." };
+  }
+
+  const patientId = patient.id as number;
+  const now = new Date().toISOString();
+
+  // 기록 연결
+  const { error: linkError } = await supabase
+    .from("consultation")
+    .update({
+      patient_id: patientId,
+      status: "confirmed",
+      linked_at: now,
+      linked_by: user.id,
+    })
+    .eq("id", params.consultationId);
+
+  if (linkError) return { ok: false, message: "환자 연결에 실패했습니다." };
+
+  await supabase.from("chair_audit_logs").insert({
+    institution_id: institutionId,
+    chair_id: consultation.chair_id,
+    consultation_id: params.consultationId,
+    event_type: "patient_linked",
+    actor_user_id: user.id,
+    patient_id_before: null,
+    patient_id_after: patientId,
+  });
+
+  revalidatePath(`/patients/${patientId}`);
+  revalidatePath("/");
+  return { ok: true, patientId };
+}
+
 // ─── upsertChair ─────────────────────────────────────────────────────────────
 type UpsertChairResult = { ok: true; chairId: string } | { ok: false; message: string };
 
