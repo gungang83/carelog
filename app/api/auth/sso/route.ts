@@ -121,24 +121,27 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    // 3. magic link 발급 → /auth/callback으로 리다이렉트
-    const redirectTo = `${req.nextUrl.origin}/auth/callback`;
-    console.log("[SSO] generating magic link, redirectTo:", redirectTo);
+    // 3. OTP 토큰 발급 → /auth/callback으로 token_hash 직접 전달 (PKCE 우회)
+    console.log("[SSO] generating link for:", email);
 
     const { data: linkData, error: linkError } =
       await admin.auth.admin.generateLink({
         type: "magiclink",
         email,
-        options: { redirectTo },
+        options: { redirectTo: `${req.nextUrl.origin}/` },
       });
 
-    if (linkError || !linkData?.properties?.action_link) {
-      console.error("[SSO] generateLink error:", linkError?.message, "linkData:", JSON.stringify(linkData));
+    if (linkError || !linkData?.properties?.hashed_token) {
+      console.error("[SSO] generateLink error:", linkError?.message, "props:", JSON.stringify(linkData?.properties));
       return NextResponse.redirect(`${EO_APP_URL}?sso_error=magic_link`);
     }
 
-    console.log("[SSO] action_link:", linkData.properties.action_link);
-    return NextResponse.redirect(linkData.properties.action_link);
+    // PKCE code verifier 없이 서버에서 직접 OTP 검증할 수 있게 token_hash 전달
+    const callbackUrl = new URL(`${req.nextUrl.origin}/auth/callback`);
+    callbackUrl.searchParams.set("token_hash", linkData.properties.hashed_token);
+    callbackUrl.searchParams.set("type", "magiclink");
+    console.log("[SSO] redirecting to callback with token_hash");
+    return NextResponse.redirect(callbackUrl.toString());
   } catch (e) {
     console.error("[SSO] unhandled error:", e);
     return NextResponse.redirect(`${EO_APP_URL}?sso_error=unexpected`);
