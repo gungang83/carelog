@@ -1,0 +1,370 @@
+"use server";
+
+import { createServerSupabaseClient } from "@/lib/supabase/server";
+import { getMyInstitutionId } from "@/lib/auth/institution";
+import { revalidatePath } from "next/cache";
+import { sanitizeRichHtml } from "@/lib/sanitize-html";
+import type { ChairRow } from "@/lib/types/database";
+import { transcribeAndSummarize, type TranscribeResult } from "@/app/actions/transcribe";
+
+// ─── transcribeChairAudio ─────────────────────────────────────────────────────
+// Server Action 파일 간 임포트 — client component는 이 파일만 참조
+export async function transcribeChairAudio(
+  formData: FormData,
+): Promise<TranscribeResult> {
+  return transcribeAndSummarize(formData);
+}
+
+// ─── getChairs ────────────────────────────────────────────────────────────────
+export async function getChairs(): Promise<ChairRow[]> {
+  const supabase = await createServerSupabaseClient();
+  const institutionId = await getMyInstitutionId();
+  if (!institutionId) return [];
+
+  const { data } = await supabase
+    .from("chairs")
+    .select("*")
+    .eq("institution_id", institutionId)
+    .eq("is_active", true)
+    .order("display_order", { ascending: true });
+
+  return (data ?? []) as ChairRow[];
+}
+
+// ─── saveChairRecord ──────────────────────────────────────────────────────────
+type SaveChairRecordResult =
+  | { ok: true; consultationId: string }
+  | { ok: false; message: string };
+
+export async function saveChairRecord(params: {
+  chairId: string;
+  content: string;
+}): Promise<SaveChairRecordResult> {
+  const supabase = await createServerSupabaseClient();
+  const institutionId = await getMyInstitutionId();
+  if (!institutionId) return { ok: false, message: "기관 정보를 찾을 수 없습니다." };
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false, message: "로그인이 필요합니다." };
+
+  // 체어가 해당 기관 소속인지 확인
+  const { data: chair } = await supabase
+    .from("chairs")
+    .select("id")
+    .eq("id", params.chairId)
+    .eq("institution_id", institutionId)
+    .maybeSingle();
+
+  if (!chair) return { ok: false, message: "유효하지 않은 체어입니다." };
+
+  const sanitized = sanitizeRichHtml(params.content);
+
+  const { data: consultation, error } = await supabase
+    .from("consultation")
+    .insert({
+      institution_id: institutionId,
+      patient_id: null,
+      chair_id: params.chairId,
+      content: sanitized,
+      status: "draft",
+    })
+    .select("id")
+    .single();
+
+  if (error || !consultation) {
+    return { ok: false, message: "기록 저장에 실패했습니다." };
+  }
+
+  await supabase.from("chair_audit_logs").insert({
+    institution_id: institutionId,
+    chair_id: params.chairId,
+    consultation_id: consultation.id,
+    event_type: "record_created",
+    actor_user_id: user.id,
+  });
+
+  revalidatePath("/");
+  return { ok: true, consultationId: consultation.id };
+}
+
+// ─── updateChairRecordContent ─────────────────────────────────────────────────
+type UpdateChairRecordContentResult = { ok: true } | { ok: false; message: string };
+
+export async function updateChairRecordContent(params: {
+  consultationId: string;
+  content: string;
+}): Promise<UpdateChairRecordContentResult> {
+  const supabase = await createServerSupabaseClient();
+  const institutionId = await getMyInstitutionId();
+  if (!institutionId) return { ok: false, message: "기관 정보를 찾을 수 없습니다." };
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false, message: "로그인이 필요합니다." };
+
+  // 미연결 기록인지 + 소속 기관인지 확인
+  const { data: existing } = await supabase
+    .from("consultation")
+    .select("id, chair_id")
+    .eq("id", params.consultationId)
+    .eq("institution_id", institutionId)
+    .is("patient_id", null)
+    .maybeSingle();
+
+  if (!existing) return { ok: false, message: "수정 권한이 없거나 이미 연결된 기록입니다." };
+
+  const sanitized = sanitizeRichHtml(params.content);
+
+  const { error } = await supabase
+    .from("consultation")
+    .update({ content: sanitized })
+    .eq("id", params.consultationId);
+
+  if (error) return { ok: false, message: "기록 수정에 실패했습니다." };
+
+  await supabase.from("chair_audit_logs").insert({
+    institution_id: institutionId,
+    chair_id: existing.chair_id,
+    consultation_id: params.consultationId,
+    event_type: "record_edited",
+    actor_user_id: user.id,
+  });
+
+  revalidatePath("/");
+  return { ok: true };
+}
+
+// ─── getUnlinkedChairRecords ──────────────────────────────────────────────────
+type UnlinkedRecord = { id: string; content: string; created_at: string };
+
+export async function getUnlinkedChairRecords(
+  chairId: string,
+): Promise<UnlinkedRecord[]> {
+  const supabase = await createServerSupabaseClient();
+  const institutionId = await getMyInstitutionId();
+  if (!institutionId) return [];
+
+  const { data } = await supabase
+    .from("consultation")
+    .select("id, content, created_at")
+    .eq("chair_id", chairId)
+    .eq("institution_id", institutionId)
+    .is("patient_id", null)
+    .order("created_at", { ascending: false });
+
+  return (data ?? []).map((r) => ({
+    id: r.id as string,
+    content:
+      typeof r.content === "string" && r.content.length > 200
+        ? r.content.slice(0, 200) + "…"
+        : (r.content as string),
+    created_at: r.created_at as string,
+  }));
+}
+
+// ─── linkChairRecordToPatient ─────────────────────────────────────────────────
+type LinkChairRecordResult = { ok: true } | { ok: false; message: string };
+
+export async function linkChairRecordToPatient(params: {
+  consultationId: string;
+  patientId: number;
+}): Promise<LinkChairRecordResult> {
+  const supabase = await createServerSupabaseClient();
+  const institutionId = await getMyInstitutionId();
+  if (!institutionId) return { ok: false, message: "기관 정보를 찾을 수 없습니다." };
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false, message: "로그인이 필요합니다." };
+
+  // 미연결 기록 확인
+  const { data: consultation } = await supabase
+    .from("consultation")
+    .select("id, chair_id")
+    .eq("id", params.consultationId)
+    .eq("institution_id", institutionId)
+    .is("patient_id", null)
+    .maybeSingle();
+
+  if (!consultation) return { ok: false, message: "연결 가능한 기록이 없습니다." };
+
+  // 환자가 같은 기관 소속인지 확인
+  const { data: patient } = await supabase
+    .from("patient")
+    .select("id")
+    .eq("id", params.patientId)
+    .eq("institution_id", institutionId)
+    .maybeSingle();
+
+  if (!patient) return { ok: false, message: "유효하지 않은 환자입니다." };
+
+  const now = new Date().toISOString();
+
+  const { error } = await supabase
+    .from("consultation")
+    .update({
+      patient_id: params.patientId,
+      status: "confirmed",
+      linked_at: now,
+      linked_by: user.id,
+    })
+    .eq("id", params.consultationId);
+
+  if (error) return { ok: false, message: "환자 연결에 실패했습니다." };
+
+  await supabase.from("chair_audit_logs").insert({
+    institution_id: institutionId,
+    chair_id: consultation.chair_id,
+    consultation_id: params.consultationId,
+    event_type: "patient_linked",
+    actor_user_id: user.id,
+    patient_id_before: null,
+    patient_id_after: params.patientId,
+  });
+
+  revalidatePath(`/patients/${params.patientId}`);
+  revalidatePath("/");
+  return { ok: true };
+}
+
+// ─── deleteChairRecord ────────────────────────────────────────────────────────
+type DeleteChairRecordResult = { ok: true } | { ok: false; message: string };
+
+export async function deleteChairRecord(params: {
+  consultationId: string;
+}): Promise<DeleteChairRecordResult> {
+  const supabase = await createServerSupabaseClient();
+  const institutionId = await getMyInstitutionId();
+  if (!institutionId) return { ok: false, message: "기관 정보를 찾을 수 없습니다." };
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false, message: "로그인이 필요합니다." };
+
+  const { data: consultation } = await supabase
+    .from("consultation")
+    .select("id, chair_id")
+    .eq("id", params.consultationId)
+    .eq("institution_id", institutionId)
+    .is("patient_id", null)
+    .maybeSingle();
+
+  if (!consultation) return { ok: false, message: "삭제 권한이 없거나 이미 연결된 기록입니다." };
+
+  // 감사 로그 먼저 삽입 (삭제 전에)
+  await supabase.from("chair_audit_logs").insert({
+    institution_id: institutionId,
+    chair_id: consultation.chair_id,
+    consultation_id: params.consultationId,
+    event_type: "record_deleted",
+    actor_user_id: user.id,
+  });
+
+  const { error } = await supabase
+    .from("consultation")
+    .delete()
+    .eq("id", params.consultationId);
+
+  if (error) return { ok: false, message: "기록 삭제에 실패했습니다." };
+
+  revalidatePath("/");
+  return { ok: true };
+}
+
+// ─── searchPatientsForChair ───────────────────────────────────────────────────
+type PatientSearchResult = {
+  id: number;
+  name: string;
+  chart_no: string | null;
+  phone: string | null;
+};
+
+export async function searchPatientsForChair(
+  query: string,
+): Promise<PatientSearchResult[]> {
+  const supabase = await createServerSupabaseClient();
+  const institutionId = await getMyInstitutionId();
+  if (!institutionId) return [];
+
+  const q = query.trim();
+  if (!q) return [];
+
+  const { data } = await supabase
+    .from("patient")
+    .select("id, name, chart_no, phone")
+    .eq("institution_id", institutionId)
+    .or(`name.ilike.%${q}%,chart_no.ilike.%${q}%`)
+    .order("name", { ascending: true })
+    .limit(20);
+
+  return (data ?? []) as PatientSearchResult[];
+}
+
+// ─── upsertChair ─────────────────────────────────────────────────────────────
+type UpsertChairResult = { ok: true; chairId: string } | { ok: false; message: string };
+
+export async function upsertChair(params: {
+  id?: string;
+  name: string;
+  displayOrder: number;
+  isActive: boolean;
+}): Promise<UpsertChairResult> {
+  const supabase = await createServerSupabaseClient();
+  const institutionId = await getMyInstitutionId();
+  if (!institutionId) return { ok: false, message: "기관 정보를 찾을 수 없습니다." };
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false, message: "로그인이 필요합니다." };
+
+  // admin/owner 권한 확인
+  const { data: member } = await supabase
+    .from("institution_members")
+    .select("role")
+    .eq("user_id", user.id)
+    .eq("institution_id", institutionId)
+    .maybeSingle();
+
+  if (!member || !["admin", "owner"].includes(member.role)) {
+    return { ok: false, message: "체어 관리는 관리자만 가능합니다." };
+  }
+
+  const payload = {
+    institution_id: institutionId,
+    name: params.name.trim(),
+    display_order: params.displayOrder,
+    is_active: params.isActive,
+  };
+
+  let chairId: string;
+
+  if (params.id) {
+    const { data, error } = await supabase
+      .from("chairs")
+      .update(payload)
+      .eq("id", params.id)
+      .eq("institution_id", institutionId)
+      .select("id")
+      .single();
+    if (error || !data) return { ok: false, message: "체어 수정에 실패했습니다." };
+    chairId = data.id as string;
+  } else {
+    const { data, error } = await supabase
+      .from("chairs")
+      .insert(payload)
+      .select("id")
+      .single();
+    if (error || !data) return { ok: false, message: "체어 추가에 실패했습니다." };
+    chairId = data.id as string;
+  }
+
+  revalidatePath("/");
+  revalidatePath("/settings");
+  return { ok: true, chairId };
+}

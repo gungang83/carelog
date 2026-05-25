@@ -6,6 +6,7 @@ Supabase(PostgreSQL) 기반. 전체 스키마는 `supabase/schema.sql` 참고.
 - `supabase/migrations/20260509000001_staff_auth_institution.sql`
 - `supabase/migrations/20260510000001_patient_portal.sql`
 - `supabase/migrations/20260517000001_push_subscriptions.sql`
+- `supabase/migrations/20260526000001_chair_quick_record.sql`
 
 ## 테이블 목록
 
@@ -15,7 +16,9 @@ Supabase(PostgreSQL) 기반. 전체 스키마는 `supabase/schema.sql` 참고.
 | `institution_members` | 기관-사용자 매핑 (역할 포함) |
 | `institution_invitations` | 직원 초대 토큰 관리 |
 | `patient` | 환자 기본 정보 (institution_id 필터) |
-| `consultation` | 상담 기록 (patient 1:N, institution_id 필터) |
+| `consultation` | 상담 기록 (patient 1:N, institution_id 필터; patient_id nullable — 체어 임시 기록) |
+| `chairs` | 진료 공간 단위 (A/B/C 등), 기관별 관리 |
+| `chair_audit_logs` | 체어 기록 감사 로그 (삽입 전용, 불변) |
 | `patient_invitations` | 환자 포털 SMS 초대 기록 (72시간 유효) |
 | `patient_accounts` | 환자 포털 계정 (주민번호 해시 기반, Supabase Auth 분리) |
 | `patient_otps` | 환자 OTP 인증 코드 (5분 만료) |
@@ -105,19 +108,27 @@ create policy "staff sees own institution patients" on public.patient
 
 ## `consultation`
 
+`patient_id`는 nullable — 체어 즉시 기록 시 환자 미연결 상태로 저장, 이후 연결.
+
 | 컬럼 | 타입 | 설명 |
 |---|---|---|
 | `id` | uuid PK | gen_random_uuid() |
 | `institution_id` | uuid NOT NULL FK → institutions.id | 소속 기관 |
-| `patient_id` | bigint FK → patient.id | 연결 환자 (CASCADE DELETE) |
+| `patient_id` | bigint FK → patient.id | 연결 환자 (CASCADE DELETE). **NULL 허용** — 체어 임시 기록 |
 | `content` | text | 상담 내용 |
 | `image_urls` | jsonb | 이미지 URL 배열 (`["url1", "url2"]`) |
 | `prescriptions` | jsonb | 처방 메모 배열 |
-| `station_name` | text | 작성한 체어 번호 |
+| `station_name` | text | 작성한 체어 번호 (레거시, 신규는 chair_id 사용) |
+| `status` | text | `'draft'` (임시) / `'confirmed'` (확정). DEFAULT 'confirmed' |
+| `sms_sent_at` | timestamptz | 환자 SMS 발송 시각 |
+| `chair_id` | uuid FK → chairs.id | 체어 임시 기록 시 사용 (SET NULL on delete) |
+| `linked_at` | timestamptz | 환자 연결 완료 시각 |
+| `linked_by` | uuid FK → auth.users.id | 환자 연결 처리한 직원 |
 | `created_at` | timestamptz | 기록 시각 |
 
 **인덱스**
 - `consultation_patient_id_idx` — patient_id 검색 최적화
+- `idx_consultation_chair` — chair_id WHERE NOT NULL
 
 **RLS 정책**
 ```sql
@@ -125,6 +136,77 @@ create policy "staff sees own institution consultations" on public.consultation
   for all
   using (institution_id = public.get_my_institution_id())
   with check (institution_id = public.get_my_institution_id());
+```
+
+---
+
+## `chairs` *(신규 — migration 20260526000001)*
+
+기관 내 진료 공간(체어) 목록. 기본값 A/B/C 자동 시드.
+
+| 컬럼 | 타입 | 설명 |
+|---|---|---|
+| `id` | uuid PK | gen_random_uuid() |
+| `institution_id` | uuid NOT NULL FK → institutions.id | 소속 기관 (CASCADE DELETE) |
+| `name` | text NOT NULL | 체어 표시명 (예: A, B, C) |
+| `display_order` | integer NOT NULL DEFAULT 0 | 정렬 순서 |
+| `is_active` | boolean NOT NULL DEFAULT true | 활성 여부 |
+| `created_at` | timestamptz | 생성 시각 |
+
+**제약**: UNIQUE(institution_id, name)
+**인덱스**: `idx_chairs_institution`
+
+**RLS 정책**
+```sql
+-- 직원: SELECT
+create policy "staff reads own institution chairs" on public.chairs
+  for select using (institution_id = public.get_my_institution_id());
+-- 관리자: ALL (admin/owner만)
+create policy "admin manages chairs" on public.chairs
+  for all using (
+    institution_id = public.get_my_institution_id()
+    and exists (
+      select 1 from public.institution_members
+      where user_id = auth.uid()
+        and institution_id = public.get_my_institution_id()
+        and role in ('admin', 'owner')
+    )
+  );
+```
+
+---
+
+## `chair_audit_logs` *(신규 — migration 20260526000001)*
+
+체어 기록 감사 로그. **INSERT 전용 — UPDATE/DELETE 정책 없음 (불변)**.
+
+| 컬럼 | 타입 | 설명 |
+|---|---|---|
+| `id` | uuid PK | gen_random_uuid() |
+| `institution_id` | uuid NOT NULL FK → institutions.id | 소속 기관 (CASCADE DELETE) |
+| `chair_id` | uuid FK → chairs.id | 관련 체어 (SET NULL on delete) |
+| `consultation_id` | uuid FK → consultation.id | 관련 상담 기록 (SET NULL on delete) |
+| `event_type` | text NOT NULL | `record_created` / `record_transcribed` / `record_edited` / `patient_linked` / `record_deleted` |
+| `actor_user_id` | uuid NOT NULL FK → auth.users.id | 작업 수행 직원 |
+| `patient_id_before` | bigint | 환자 연결 변경 전 patient_id |
+| `patient_id_after` | bigint | 환자 연결 변경 후 patient_id |
+| `metadata` | jsonb NOT NULL DEFAULT '{}' | 추가 컨텍스트 |
+| `created_at` | timestamptz | 이벤트 발생 시각 |
+
+**인덱스**: `idx_cal_institution`, `idx_cal_chair`, `idx_cal_consultation`
+
+**RLS 정책**
+```sql
+-- SELECT: 소속 기관 직원
+create policy "staff reads own institution audit logs" on public.chair_audit_logs
+  for select using (institution_id = public.get_my_institution_id());
+-- INSERT: 소속 기관 직원 본인 actor만
+create policy "staff inserts audit logs" on public.chair_audit_logs
+  for insert with check (
+    institution_id = public.get_my_institution_id()
+    and actor_user_id = auth.uid()
+  );
+-- UPDATE/DELETE 정책 없음 → 레코드 불변 보장
 ```
 
 ---

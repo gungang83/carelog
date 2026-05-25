@@ -1,5 +1,5 @@
 -- Carelog 전체 스키마 (참조용)
--- 마지막 동기화: 2026-05-10
+-- 마지막 동기화: 2026-05-25
 -- 실제 마이그레이션 파일:
 --   supabase/migrations/20260509000001_staff_auth_institution.sql
 --   supabase/migrations/20260510000001_patient_portal.sql
@@ -69,17 +69,98 @@ create unique index if not exists patient_resident_no_hash_uidx
 create table if not exists public.consultation (
   id              uuid primary key default gen_random_uuid(),
   institution_id  uuid not null references public.institutions(id),
-  patient_id      bigint not null references public.patient(id) on delete cascade,
+  patient_id      bigint references public.patient(id) on delete cascade,  -- nullable: 체어 임시 기록
   content         text not null default '',
   image_urls      jsonb not null default '[]'::jsonb,
   prescriptions   jsonb not null default '[]'::jsonb,
   station_name    text,
   status          text not null default 'confirmed' check (status in ('draft', 'confirmed')),
   sms_sent_at     timestamptz,
-  created_at      timestamptz not null default now()
+  created_at      timestamptz not null default now(),
+  -- 체어 임시 기록 필드 (migration: 20260526000001_chair_quick_record.sql)
+  chair_id        uuid references public.chairs(id) on delete set null,
+  linked_at       timestamptz,
+  linked_by       uuid references auth.users(id)
 );
 
 create index if not exists consultation_patient_id_idx on public.consultation(patient_id);
+create index if not exists idx_consultation_chair on public.consultation(chair_id) where chair_id is not null;
+
+-- ============================================================
+-- 체어 (진료 공간 단위)
+-- ============================================================
+create table if not exists public.chairs (
+  id             uuid primary key default gen_random_uuid(),
+  institution_id uuid not null references public.institutions(id) on delete cascade,
+  name           text not null,
+  display_order  integer not null default 0,
+  is_active      boolean not null default true,
+  created_at     timestamptz not null default now(),
+  unique(institution_id, name)
+);
+
+create index if not exists idx_chairs_institution on public.chairs(institution_id);
+
+alter table public.chairs enable row level security;
+drop policy if exists "staff reads own institution chairs" on public.chairs;
+create policy "staff reads own institution chairs" on public.chairs
+  for select using (institution_id = public.get_my_institution_id());
+drop policy if exists "admin manages chairs" on public.chairs;
+create policy "admin manages chairs" on public.chairs
+  for all
+  using (
+    institution_id = public.get_my_institution_id()
+    and exists (
+      select 1 from public.institution_members
+      where user_id = auth.uid()
+        and institution_id = public.get_my_institution_id()
+        and role in ('admin', 'owner')
+    )
+  )
+  with check (
+    institution_id = public.get_my_institution_id()
+    and exists (
+      select 1 from public.institution_members
+      where user_id = auth.uid()
+        and institution_id = public.get_my_institution_id()
+        and role in ('admin', 'owner')
+    )
+  );
+
+-- ============================================================
+-- 체어 감사 로그 (삽입 전용, 불변)
+-- ============================================================
+create table if not exists public.chair_audit_logs (
+  id                uuid primary key default gen_random_uuid(),
+  institution_id    uuid not null references public.institutions(id) on delete cascade,
+  chair_id          uuid references public.chairs(id) on delete set null,
+  consultation_id   bigint references public.consultation(id) on delete set null,
+  event_type        text not null check (event_type in (
+                      'record_created', 'record_transcribed', 'record_edited',
+                      'patient_linked', 'record_deleted'
+                    )),
+  actor_user_id     uuid not null references auth.users(id),
+  patient_id_before bigint,
+  patient_id_after  bigint,
+  metadata          jsonb not null default '{}',
+  created_at        timestamptz not null default now()
+);
+
+create index if not exists idx_cal_institution on public.chair_audit_logs(institution_id);
+create index if not exists idx_cal_chair on public.chair_audit_logs(chair_id);
+create index if not exists idx_cal_consultation on public.chair_audit_logs(consultation_id);
+
+alter table public.chair_audit_logs enable row level security;
+drop policy if exists "staff reads own institution audit logs" on public.chair_audit_logs;
+create policy "staff reads own institution audit logs" on public.chair_audit_logs
+  for select using (institution_id = public.get_my_institution_id());
+drop policy if exists "staff inserts audit logs" on public.chair_audit_logs;
+create policy "staff inserts audit logs" on public.chair_audit_logs
+  for insert with check (
+    institution_id = public.get_my_institution_id()
+    and actor_user_id = auth.uid()
+  );
+-- UPDATE/DELETE 정책 없음 → 불변
 
 -- ============================================================
 -- RLS 헬퍼 함수

@@ -2,6 +2,7 @@ import Link from "next/link";
 import { HamburgerDrawer } from "@/components/layout/hamburger-drawer";
 import { ProfileDropdown } from "@/components/layout/profile-dropdown";
 import { RefreshButton } from "@/components/layout/refresh-button";
+import { ChairButtons } from "@/components/chair/chair-buttons";
 import type { InstitutionWithRole } from "@/lib/auth/institution";
 
 interface HeaderProps {
@@ -53,8 +54,9 @@ export function Header({
           </div>
         </Link>
 
-        {/* 오른쪽: 새로고침 + 프로필 */}
+        {/* 오른쪽: 체어 버튼 + 새로고침 + 프로필 */}
         <div className="ml-auto flex items-center gap-2">
+          <ChairButtons />
           <RefreshButton />
           <ProfileDropdown
             userEmail={userEmail}

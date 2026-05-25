@@ -1,3 +1,5 @@
+export const maxDuration = 120;
+
 import { redirect } from "next/navigation";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { Header } from "@/components/layout/header";
@@ -5,6 +7,9 @@ import { Footer } from "@/components/footer";
 import { SessionRefresher } from "@/components/layout/session-refresher";
 import { BadgeManager } from "@/components/layout/badge-manager";
 import { getMyInstitutions, getMyInstitutionId } from "@/lib/auth/institution";
+import { getChairs } from "@/app/actions/chairs";
+import { ChairProvider } from "@/components/chair/chair-provider";
+import { ChairOverlay } from "@/components/chair/chair-overlay";
 
 export default async function DashboardLayout({
   children,
@@ -20,9 +25,10 @@ export default async function DashboardLayout({
     redirect("/login");
   }
 
-  const [institutions, activeInstitutionId] = await Promise.all([
+  const [institutions, activeInstitutionId, chairs] = await Promise.all([
     getMyInstitutions(),
     getMyInstitutionId(),
+    getChairs(),
   ]);
 
   const userEmail = user.email ?? "";
@@ -51,9 +57,10 @@ export default async function DashboardLayout({
   }
 
   return (
-    <>
+    <ChairProvider initialChairs={chairs}>
       <SessionRefresher />
       <BadgeManager />
+      <ChairOverlay />
       <Header
         institutions={institutions}
         activeInstitutionId={activeInstitutionId ?? ""}
@@ -63,6 +70,6 @@ export default async function DashboardLayout({
       />
       <main className="flex-1">{children}</main>
       <Footer />
-    </>
+    </ChairProvider>
   );
 }

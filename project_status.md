@@ -1,6 +1,6 @@
 # Carelog 프로젝트 상태
 
-**최종 업데이트**: 2026-05-17 (세션 7)
+**최종 업데이트**: 2026-05-25 (세션 8)
 **현재 버전**: main 브랜치
 
 ---
@@ -49,6 +49,29 @@
 | 이중 역할 전환 | ✅ 완료 | 직원 헤더 "내 진료 기록" → /portal/records, 환자 화면 "직원 화면" → / |
 | 환자 푸시 알림 | ✅ 완료 | patient_push_subscriptions + sendPushToPatient, 상담 저장 시 fire-and-forget |
 | 환자 계정 연결 오류 안내 | ✅ 완료 | /portal/link-account — OTP 없이 Google 로그인 시도 시 안내 |
+| 체어 즉시 기록 (Chair Quick Record) | ✅ 완료 | 체어 선택 → 즉시 녹음 → AI 변환 → 임시 저장 → 환자 연결 |
+
+---
+
+## 2026-05-25 세션 8 작업 내용 (체어 즉시 기록 — spec 006)
+
+| 작업 | 결과 |
+|---|---|
+| speckit 006 전체 실행 | spec.md → plan.md → tasks.md → 구현 완료 |
+| DB 마이그레이션 | `chairs`, `chair_audit_logs` 테이블 추가; `consultation` 수정 (patient_id nullable, chair_id/linked_at/linked_by 추가) |
+| `app/actions/chairs.ts` | 체어 CRUD + 체어 기록 CRUD + 환자 연결 + 감사 로그 Server Actions |
+| `components/chair/chair-provider.tsx` | Context + useReducer 전역 상태; MediaRecorder ref 보관 |
+| `components/chair/chair-buttons.tsx` | 헤더 내 체어 상태 버튼 (idle/recording/has_records 배지) |
+| `components/chair/chair-overlay.tsx` | createPortal(body) 다이얼로그; 4단계 상태 UI |
+| `components/chair/chair-record-list.tsx` | 미연결 기록 목록 + 삭제 |
+| `components/chair/chair-patient-search.tsx` | 환자 검색 + 연결 |
+| `components/chair/chair-settings.tsx` | 설정 페이지 체어 관리 (admin/owner) |
+| `app/(dashboard)/layout.tsx` 수정 | maxDuration=120, ChairProvider 래핑, ChairOverlay 삽입 |
+| `components/layout/header.tsx` 수정 | ChairButtons 추가 |
+| `app/(dashboard)/settings/page.tsx` 수정 | ChairSettings 섹션 추가 |
+| `lib/types/database.ts` 수정 | ChairRow, ChairAuditLogRow 타입 추가; ConsultationRow 필드 갱신 |
+| `supabase/schema.sql` 업데이트 | chairs, chair_audit_logs DDL + RLS; consultation 변경 반영 |
+| 빌드 검증 | `npm run build` ✅ 통과 (TypeScript 포함, 19 static pages) |
 
 ---
 
@@ -171,15 +194,17 @@
 | NEXT_PUBLIC_SITE_URL 환경변수 미설정 | 낮음 | Vercel에 https://carelog-tau.vercel.app 추가 권장 |
 | spec 002 quickstart 시나리오 수동 검증 | 낮음 | ⏳ Solapi 키 설정 후 전체 흐름 테스트 필요 |
 | 어드민 패널 DB 마이그레이션 | 완료 | ✅ 20260514000001_admin_panel.sql 적용 완료 |
+| **chair_quick_record DB 마이그레이션** | 높음 | ⏳ 20260526000001_chair_quick_record.sql Supabase에 적용 필요 |
 
 ---
 
 ## 다음 우선순위
 
-1. **Google OAuth 외부 설정** — Google Cloud Console + Supabase Dashboard 설정 (아래 설명 참조)
-2. **Solapi 계정 생성** + 발신번호 등록 후 `.env.local` 및 Vercel에 API 키 입력
-3. **spec 002 quickstart 7개 시나리오** 수동 검증 (환자 포털 전체 흐름)
-4. **어드민 패널 수동 검증** — `/settings`, `/admin` 페이지 실제 동작 확인
+1. **chair_quick_record DB 마이그레이션 적용** — Supabase SQL Editor에서 `supabase/migrations/20260526000001_chair_quick_record.sql` 실행
+2. **체어 기록 기능 수동 검증** — 헤더 A/B/C 버튼 → 녹음 → AI 변환 → 환자 연결 전체 흐름
+3. **Google OAuth 외부 설정** — Google Cloud Console + Supabase Dashboard 설정 (아래 설명 참조)
+4. **Solapi 계정 생성** + 발신번호 등록 후 `.env.local` 및 Vercel에 API 키 입력
+5. **spec 002 quickstart 7개 시나리오** 수동 검증 (환자 포털 전체 흐름)
 
 ### Google OAuth 설정 가이드
 
@@ -207,7 +232,8 @@
 | Phase 2.5 | 리치 에디터 + 인라인 이미지 + 주석 도구 | ✅ 완료 |
 | Phase 3 (spec 003) | 어드민 패널 — 기관 전환 + 직원 권한 관리 + 최고 관리자 | ✅ 완료 |
 | Phase 4 | 콘텐츠 블록 모델 + Audit log | 미착수 |
-| Phase 4 | AI 기능 (오디오 전사, 상담 요약) | 미착수 |
+| Phase 4 | AI 기능 (오디오 전사, 상담 요약) | ✅ 체어 기록 통해 구현 완료 |
+| Phase 5 (spec 006) | 체어 즉시 기록 — 헤더 오버레이 + 환자 연결 + 감사 로그 | ✅ 완료 |
 
 ---
 

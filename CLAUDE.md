@@ -3,7 +3,7 @@
 <!-- SPECKIT START -->
 For additional context about technologies to be used, project structure,
 shell commands, and other important information, read the current plan at:
-specs/005-patient-app/plan.md
+specs/006-chair-quick-record/plan.md
 <!-- SPECKIT END -->
 
 ## 문서 관리 원칙

@@ -3,11 +3,13 @@ import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { getMyInstitution } from "@/lib/auth/institution";
 import { getStaffList } from "@/app/actions/admin";
 import { getMyPatientLinkStatus } from "@/app/actions/patient-portal";
+import { getChairs } from "@/app/actions/chairs";
 import { StaffList } from "@/components/settings/staff-list";
 import { StaffInviteForm } from "@/components/settings/staff-invite-form";
 import { InstitutionNameForm } from "@/components/settings/institution-name-form";
 import { NotificationSettings } from "@/components/settings/notification-settings";
 import { PatientAccountLink } from "@/components/settings/patient-account-link";
+import { ChairSettings } from "@/components/settings/chair-settings";
 
 export default async function SettingsPage() {
   const supabase = await createServerSupabaseClient();
@@ -23,9 +25,10 @@ export default async function SettingsPage() {
 
   const isOwnerOrAdmin = role === "owner" || role === "admin";
 
-  const [staffResult, patientLinkStatus] = await Promise.all([
+  const [staffResult, patientLinkStatus, chairs] = await Promise.all([
     isOwnerOrAdmin ? getStaffList() : Promise.resolve(null),
     getMyPatientLinkStatus(),
+    isOwnerOrAdmin ? getChairs() : Promise.resolve([]),
   ]);
   const members = staffResult?.ok ? staffResult.members : [];
 
@@ -40,6 +43,13 @@ export default async function SettingsPage() {
         <section className="space-y-4">
           <h2 className="text-base font-semibold text-slate-800">기관 프로필</h2>
           <InstitutionNameForm currentName={institution.name} />
+        </section>
+      )}
+
+      {isOwnerOrAdmin && (
+        <section className="space-y-4">
+          <h2 className="text-base font-semibold text-slate-800">체어 관리</h2>
+          <ChairSettings initialChairs={chairs} />
         </section>
       )}
 

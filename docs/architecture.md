@@ -53,6 +53,7 @@ app/
 │   ├── institutions.ts            # getMyInstitution, inviteStaff, acceptInvitation
 │   ├── patients.ts                # 환자 CRUD, 검색 (institution_id 필터)
 │   ├── consultations.ts           # 상담 기록 CRUD + 환자 푸시 fire-and-forget
+│   ├── chairs.ts                  # 체어 CRUD, 체어 임시 기록, 환자 연결, 검색, 감사 로그
 │   ├── push.ts                    # subscribePush, unsubscribePush, sendPushToInstitution (직원 Web Push)
 │   └── patient-portal.ts          # 환자 포털 Server Actions (초대·OTP·Google가입·환자푸시)
 ├── globals.css
@@ -63,8 +64,15 @@ components/
 │   ├── login-form.tsx             # 이메일+비밀번호 로그인 폼 + Google 로그인 버튼
 │   ├── signup-form.tsx            # 이메일+비밀번호+기관명 가입 폼
 │   └── onboarding-form.tsx        # Google 신규 사용자 기관명 입력 폼
+├── chair/
+│   ├── chair-provider.tsx         # ChairProvider (Context + useReducer) — 체어 전역 상태, MediaRecorder refs
+│   ├── chair-buttons.tsx          # 헤더 체어 버튼들 (상태별 색상 + 배지)
+│   ├── chair-overlay.tsx          # 체어 기록 다이얼로그 (createPortal → body)
+│   ├── chair-record-list.tsx      # 미연결 기록 목록 (삭제 + 환자 연결 진입)
+│   ├── chair-patient-search.tsx   # 환자 검색 + linkChairRecordToPatient
+│   └── chair-settings.tsx         # 설정 페이지 내 체어 관리 (admin/owner 전용)
 ├── layout/
-│   ├── header.tsx                 # 기관명 + StationManager + RefreshButton + 로그아웃
+│   ├── header.tsx                 # 기관명 + ChairButtons + RefreshButton + 로그아웃
 │   ├── refresh-button.tsx         # router.refresh() 클라이언트 컴포넌트
 │   ├── institution-switcher.tsx   # 복수 기관 전환 드롭다운
 │   └── session-refresher.tsx      # onAuthStateChange 리스너 (SIGNED_OUT → /login)
@@ -121,7 +129,8 @@ supabase/
 │   ├── 20260509000001_staff_auth_institution.sql  # 기관 구조 + RLS 마이그레이션
 │   ├── 20260510000001_patient_portal.sql          # 환자 포털 5개 테이블
 │   ├── 20260517000001_push_subscriptions.sql      # 직원 Web Push 구독 정보
-│   └── 20260517000002_patient_auth_links.sql      # 환자 Google OAuth 연결 + 환자 푸시 구독
+│   ├── 20260517000002_patient_auth_links.sql      # 환자 Google OAuth 연결 + 환자 푸시 구독
+│   └── 20260526000001_chair_quick_record.sql      # chairs, chair_audit_logs 테이블 + consultation 수정
 └── schema.sql                     # 전체 스키마 (참조용)
 ```
 
@@ -292,6 +301,55 @@ ConsultationForm (Client)
     → 있으면 → { patientAccountId } 반환
 ```
 
+### 체어 즉시 기록 (Chair Quick Record)
+
+```
+ChairProvider (Context + useReducer, MediaRecorder refs in useRef)
+  ── 대시보드 layout 전체 래핑 → 페이지 이동에도 상태 유지
+
+Header
+  └── ChairButtons (Client)
+        ── 체어별 상태 표시 (idle/recording/has_records)
+        ── 클릭 → openOverlay(chairId)
+
+ChairOverlay (Client, createPortal → document.body)
+  ── backdrop-filter 스택 컨텍스트 탈출을 위해 portal 사용
+  ── idle: 녹음 시작 버튼 (+ 마이크 실패 시 텍스트 직접 입력)
+  ── recording: 타이머 + 중지 버튼 (overlay 닫아도 녹음 유지)
+  ── processing: 변환 중 스피너
+  ── has_records: 텍스트 편집 + 저장 + ChairRecordList
+
+ChairRecordList (Client)
+  └── getUnlinkedChairRecords(chairId) → 미연결 기록 목록
+        ── 삭제: deleteChairRecord → 감사 로그 먼저, 이후 delete
+        └── 환자 연결: ChairPatientSearch
+              ── searchPatientsForChair(query)
+              └── linkChairRecordToPatient({ consultationId, patientId })
+                    ── patient_id / status / linked_at / linked_by 업데이트
+                    ── chair_audit_logs INSERT (patient_id_before/after 기록)
+                    ── revalidatePath('/patients/[id]')
+
+app/(dashboard)/layout.tsx
+  └── export const maxDuration = 120  ← Server Action 타임아웃 (transcription용)
+```
+
+**체어 기록 저장 흐름**
+```
+handleStopRecording()
+  → stopRecording(chairId) → Blob (MediaRecorder chunks)
+  → transcribeChairAudio(formData) [Server Action]
+      → transcribeAndSummarize() → Whisper + GPT 요약
+  → setTranscriptionResult(chairId, summary)
+
+handleSave()
+  → saveChairRecord({ chairId, content }) [Server Action]
+      → consultation INSERT (patient_id: null, status: 'draft', chair_id)
+      → chair_audit_logs INSERT (record_created)
+      → revalidatePath('/')
+```
+
+---
+
 ## 핵심 설계 결정
 
 | 결정 | 이유 |
@@ -303,3 +361,7 @@ ConsultationForm (Client)
 | `/auth/callback` 라우트 | PKCE 이메일 인증 코드 교환 처리 (`@supabase/ssr` 표준 패턴) |
 | Server Actions만으로 DB 접근 | 클라이언트에 Supabase 자격증명 노출 방지, RLS + 서버 검증 이중화 |
 | `resident_no_hash` 별도 컬럼 | 평문 주민번호로 unique index 불가(개인정보 보호), 해시로 중복 방지 |
+| `ChairOverlay` → `createPortal(body)` | 헤더에 `backdrop-filter` 있어 자식 z-index가 클리핑됨 — portal로 DOM 트리 탈출 필요 |
+| MediaRecorder refs (`useRef`) | React state에 넣으면 re-render 시 recorder 중단됨; ref에 보관해야 overlay 닫기/열기에도 녹음 유지 |
+| `maxDuration = 120` in layout.tsx | `"use server"` 파일에서 async 함수 아닌 export 불가 — Route Segment Config는 page/layout 파일에만 허용 |
+| `chair_audit_logs` INSERT-only RLS | UPDATE/DELETE 정책 없음 → DB 레벨에서 레코드 불변성 강제 |

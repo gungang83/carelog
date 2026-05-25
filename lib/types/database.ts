@@ -11,12 +11,45 @@ export type PatientRow = {
 
 export type ConsultationRow = {
   id: string;
-  patient_id: string;
+  patient_id: number | null;
   institution_id: string;
   content: string;
   /** Supabase에서 jsonb 또는 text[] 등으로 저장 가능. 배열로 주고받습니다. */
   image_urls: string[] | null;
   prescriptions: string[] | null;
+  station_name: string | null;
+  status: "draft" | "confirmed";
+  sms_sent_at: string | null;
+  created_at: string;
+  chair_id: string | null;
+  linked_at: string | null;
+  linked_by: string | null;
+};
+
+export type ChairRow = {
+  id: string;
+  institution_id: string;
+  name: string;
+  display_order: number;
+  is_active: boolean;
+  created_at: string;
+};
+
+export type ChairAuditLogRow = {
+  id: string;
+  institution_id: string;
+  chair_id: string | null;
+  consultation_id: string | null;
+  event_type:
+    | "record_created"
+    | "record_transcribed"
+    | "record_edited"
+    | "patient_linked"
+    | "record_deleted";
+  actor_user_id: string;
+  patient_id_before: number | null;
+  patient_id_after: number | null;
+  metadata: Record<string, unknown>;
   created_at: string;
 };
 
