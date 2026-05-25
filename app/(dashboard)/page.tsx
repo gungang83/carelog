@@ -2,6 +2,7 @@ import { PatientHome } from "@/components/patient-home";
 import { ActivityFeed } from "@/components/activity/activity-feed";
 import { PushNotificationBanner } from "@/components/push-notification-banner";
 import { QuickRecordTrigger } from "@/components/chair/quick-record-trigger";
+import { UnlinkedRecordsSection } from "@/components/chair/unlinked-records-section";
 import { getActivityLogs } from "@/app/actions/activity";
 
 export default async function Home() {
@@ -25,6 +26,8 @@ export default async function Home() {
       <PushNotificationBanner />
 
       <QuickRecordTrigger />
+
+      <UnlinkedRecordsSection />
 
       <PatientHome />
 

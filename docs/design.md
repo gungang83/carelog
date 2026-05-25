@@ -231,25 +231,31 @@ rounded-2xl border border-dashed border-sky-200 bg-white/80 p-6 shadow-sm
 
 ## 체어 즉시 기록 UI 패턴
 
-### 체어 버튼 (헤더)
-
-헤더 우측에 기관 내 활성 체어마다 버튼 하나. 상태별 색상:
-
-| 상태 | 배경/테두리 | 텍스트 | 추가 요소 |
-|---|---|---|---|
-| `idle` | `border-slate-200 bg-white` | `text-slate-600` | — |
-| `recording` | `border-red-200 bg-red-50` | `text-red-700` | 1.5×1.5 빨간 pulse 점 |
-| `processing` | `border-sky-200 bg-sky-50` | `text-sky-700` | 3×3 sky spin 링 |
-| `has_records` | `border-amber-200 bg-amber-50` | `text-amber-700` | 앰버 배지 (미연결 수) |
+### 빠른 기록 시작 버튼 (홈 화면)
 
 ```
-relative flex items-center justify-center rounded-xl border px-2 py-1.5 text-xs font-medium transition
+flex w-full items-center justify-center gap-3 rounded-2xl bg-sky-600 px-6 py-4
+text-sm font-semibold text-white shadow-sm shadow-sky-200 transition hover:bg-sky-700
 ```
 
-### 미연결 기록 배지
+클릭 시 위치 선택 UI 펼침 → 등록된 위치 칩 목록 + 직접 입력 필드 → 체어 오버레이 오픈.
+
+### 미연결 기록 섹션 헤더 배지
 
 ```
-inline-flex size-4 items-center justify-center rounded-full bg-amber-500 text-[9px] font-bold text-white
+inline-flex size-5 items-center justify-center rounded-full bg-amber-500 text-[10px] font-bold text-white
+```
+
+### 처방 칩 (PrescriptionPicker)
+
+**미선택**:
+```
+border-slate-200 bg-white text-slate-600 hover:border-sky-300 hover:bg-sky-50
+```
+
+**선택됨**:
+```
+border-sky-400 bg-sky-50 text-sky-700
 ```
 
 ### 오버레이 다이얼로그

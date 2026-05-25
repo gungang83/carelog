@@ -8,7 +8,8 @@ import {
   saveChairRecord,
   updateChairRecordContent,
 } from "@/app/actions/chairs";
-import { ChairRecordList } from "@/components/chair/chair-record-list";
+import { PrescriptionPicker } from "@/components/chair/prescription-picker";
+import { ChairPatientSearch } from "@/components/chair/chair-patient-search";
 
 export function ChairOverlay() {
   const [mounted, setMounted] = useState(false);
@@ -36,18 +37,27 @@ function OverlayContent() {
   const [elapsed, setElapsed] = useState(0);
   const [micError, setMicError] = useState("");
   const [editText, setEditText] = useState("");
+  const [prescriptions, setPrescriptions] = useState<string[]>([]);
   const [saveMsg, setSaveMsg] = useState("");
+  const [showLink, setShowLink] = useState(false);
   const [isPending, startTransition] = useTransition();
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const chair = chairs.find((c) => c.id === openChairId);
-  const status = openChairId ? getChairStatus(openChairId) : "idle";
+  const rawStatus = openChairId ? getChairStatus(openChairId) : "idle";
   const transcribedText = openChairId ? getTranscribedText(openChairId) : "";
   const savedId = openChairId ? getSavedConsultationId(openChairId) : null;
+
+  // has_records from DB alone (no current session text) → treat as idle in overlay
+  const status =
+    rawStatus === "has_records" && !transcribedText && !editText
+      ? "idle"
+      : rawStatus;
 
   // Sync editText when transcription arrives
   useEffect(() => {
     if (transcribedText && editText === "") setEditText(transcribedText);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [transcribedText]);
 
   // Reset per-session state when overlay opens to a fresh chair
@@ -56,12 +66,16 @@ function OverlayContent() {
       setElapsed(0);
       setMicError("");
       setSaveMsg("");
+      setShowLink(false);
     }
-    if (openChairId && status === "idle") {
+    if (openChairId && rawStatus === "idle") {
       setEditText("");
+      setPrescriptions([]);
       setSaveMsg("");
+      setShowLink(false);
     }
-  }, [openChairId, status]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [openChairId, rawStatus]);
 
   // Timer for recording
   useEffect(() => {
@@ -115,10 +129,10 @@ function OverlayContent() {
     setSaveMsg("");
     startTransition(async () => {
       if (savedId) {
-        // 기존 기록 수정
         const result = await updateChairRecordContent({
           consultationId: savedId,
           content: editText,
+          prescriptions,
         });
         if (result.ok) {
           setSaveMsg("수정 저장됨 ✓");
@@ -127,10 +141,10 @@ function OverlayContent() {
           setSaveMsg(result.message);
         }
       } else {
-        // 최초 저장
         const result = await saveChairRecord({
           chairId: openChairId,
           content: editText,
+          prescriptions,
         });
         if (result.ok) {
           setSavedConsultationId(openChairId, result.consultationId);
@@ -147,36 +161,36 @@ function OverlayContent() {
     if (!openChairId) return;
     resetChair(openChairId);
     setEditText("");
+    setPrescriptions([]);
     setSaveMsg("");
+    setShowLink(false);
     closeOverlay();
   };
 
   const handleClose = () => {
-    if (status === "recording") {
-      // 녹음 중 닫기 — 녹음은 계속됨
-      setSaveMsg("");
-    }
+    if (status === "recording") setSaveMsg("");
+    setShowLink(false);
     closeOverlay();
   };
 
-  const handleRecordedAndLinked = async () => {
+  const handleLinked = async () => {
     if (!openChairId) return;
     await refreshUnlinkedCount(openChairId);
+    setShowLink(false);
+    closeOverlay();
   };
 
   return (
     <>
-      {/* 배경 딤 */}
       <div
         className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm"
         onClick={handleClose}
         aria-hidden="true"
       />
-      {/* 다이얼로그 패널 */}
       <div
         role="dialog"
         aria-modal="true"
-        aria-label={`체어 ${chair.name} 기록`}
+        aria-label={`${chair.name} 기록`}
         className="fixed inset-0 z-50 flex items-end justify-center p-4 sm:items-center"
         onClick={(e) => e.stopPropagation()}
       >
@@ -185,7 +199,7 @@ function OverlayContent() {
           <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4">
             <div className="flex items-center gap-2">
               <div className="flex size-8 items-center justify-center rounded-xl bg-sky-600 text-sm font-bold text-white">
-                {chair.name}
+                {chair.name.slice(0, 2)}
               </div>
               <span className="text-sm font-semibold text-slate-800">
                 {statusHeading(status)}
@@ -202,7 +216,7 @@ function OverlayContent() {
           </div>
 
           {/* 본문 */}
-          <div className="px-5 py-4">
+          <div className="max-h-[70vh] overflow-y-auto px-5 py-4">
             {/* ── idle 상태 ── */}
             {status === "idle" && (
               <div className="flex flex-col gap-3">
@@ -220,22 +234,24 @@ function OverlayContent() {
                   녹음 시작
                 </button>
                 {micError && (
-                  <textarea
-                    className="min-h-24 w-full resize-none rounded-xl border border-slate-200 px-3 py-2 text-sm text-slate-800 focus:border-sky-400 focus:outline-none"
-                    placeholder="텍스트로 직접 입력하세요…"
-                    value={editText}
-                    onChange={(e) => setEditText(e.target.value)}
-                  />
-                )}
-                {micError && editText && (
-                  <button
-                    type="button"
-                    onClick={handleSave}
-                    disabled={isPending}
-                    className="rounded-xl bg-sky-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-sky-700 disabled:opacity-50"
-                  >
-                    {isPending ? "저장 중…" : "임시 저장"}
-                  </button>
+                  <>
+                    <textarea
+                      className="min-h-24 w-full resize-none rounded-xl border border-slate-200 px-3 py-2 text-sm text-slate-800 focus:border-sky-400 focus:outline-none"
+                      placeholder="텍스트로 직접 입력하세요…"
+                      value={editText}
+                      onChange={(e) => setEditText(e.target.value)}
+                    />
+                    {editText && (
+                      <button
+                        type="button"
+                        onClick={handleSave}
+                        disabled={isPending}
+                        className="rounded-xl bg-sky-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-sky-700 disabled:opacity-50"
+                      >
+                        {isPending ? "저장 중…" : "임시 저장"}
+                      </button>
+                    )}
+                  </>
                 )}
               </div>
             )}
@@ -267,24 +283,33 @@ function OverlayContent() {
               <div className="flex flex-col items-center gap-3 py-4">
                 <span className="inline-block size-8 animate-spin rounded-full border-2 border-sky-400 border-t-transparent" />
                 <p className="text-sm text-slate-600">음성 인식 및 요약 중…</p>
-                {micError && (
-                  <p className="mt-2 text-xs text-red-500">{micError}</p>
-                )}
+                {micError && <p className="mt-2 text-xs text-red-500">{micError}</p>}
               </div>
             )}
 
-            {/* ── has_records 상태 (저장 후 편집/환자연결) ── */}
+            {/* ── has_records 상태 (전사 완료 후 편집) ── */}
             {status === "has_records" && (
-              <div className="flex flex-col gap-3">
-                {transcribedText || editText ? (
+              <div className="flex flex-col gap-4">
+                {showLink && savedId ? (
+                  <ChairPatientSearch
+                    consultationId={savedId}
+                    onLinked={handleLinked}
+                    onCancel={() => setShowLink(false)}
+                  />
+                ) : (
                   <>
-                    <label className="text-xs font-medium text-slate-500">상담 내용</label>
-                    <textarea
-                      className="min-h-28 w-full resize-none rounded-xl border border-slate-200 px-3 py-2 text-sm text-slate-800 focus:border-sky-400 focus:outline-none"
-                      value={editText}
-                      onChange={(e) => setEditText(e.target.value)}
-                    />
-                    <div className="flex gap-2">
+                    <div className="flex flex-col gap-1.5">
+                      <label className="text-xs font-medium text-slate-500">상담 내용</label>
+                      <textarea
+                        className="min-h-32 w-full resize-none rounded-xl border border-slate-200 px-3 py-2 text-sm text-slate-800 focus:border-sky-400 focus:outline-none"
+                        value={editText}
+                        onChange={(e) => setEditText(e.target.value)}
+                      />
+                    </div>
+
+                    <PrescriptionPicker value={prescriptions} onChange={setPrescriptions} />
+
+                    <div className="flex flex-wrap gap-2">
                       <button
                         type="button"
                         onClick={handleSave}
@@ -293,6 +318,15 @@ function OverlayContent() {
                       >
                         {isPending ? "저장 중…" : savedId ? "수정 저장" : "임시 저장"}
                       </button>
+                      {savedId && (
+                        <button
+                          type="button"
+                          onClick={() => setShowLink(true)}
+                          className="rounded-xl border border-sky-200 bg-sky-50 px-3 py-2 text-sm font-semibold text-sky-700 transition hover:bg-sky-100"
+                        >
+                          환자 연결
+                        </button>
+                      )}
                       <button
                         type="button"
                         onClick={handleDiscard}
@@ -301,20 +335,14 @@ function OverlayContent() {
                         버리기
                       </button>
                     </div>
+
                     {saveMsg && (
                       <p className={`text-xs ${saveMsg.includes("✓") ? "text-green-600" : "text-red-500"}`}>
                         {saveMsg}
                       </p>
                     )}
-                    <hr className="border-slate-100" />
                   </>
-                ) : null}
-
-                {/* 미연결 기록 목록 */}
-                <ChairRecordList
-                  chairId={openChairId}
-                  onLinked={handleRecordedAndLinked}
-                />
+                )}
               </div>
             )}
           </div>
@@ -329,7 +357,7 @@ function statusHeading(status: string): string {
     case "idle":       return "녹음 시작";
     case "recording":  return "녹음 중";
     case "processing": return "변환 중";
-    case "has_records": return "기록 관리";
+    case "has_records": return "기록 편집";
     default:           return "체어 기록";
   }
 }

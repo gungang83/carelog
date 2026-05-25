@@ -7,6 +7,11 @@ import {
   sendConsultationSms,
   updateDraftConsultation,
 } from "@/app/actions/consultations";
+import {
+  searchPatientsForChair,
+  unlinkChairRecord,
+  relinkChairRecord,
+} from "@/app/actions/chairs";
 import { RichTextEditor, type RichTextEditorHandle } from "@/components/rich-text-editor";
 
 export type ConsultationHistoryItem = {
@@ -15,6 +20,7 @@ export type ConsultationHistoryItem = {
   image_urls: string[] | null;
   prescriptions: string[] | null;
   station_name: string | null;
+  chair_id: string | null;
   status: string;
   sms_sent_at: string | null;
   created_at: string;
@@ -153,6 +159,133 @@ function DraftActions({
           {message}
         </p>
       ) : null}
+    </div>
+  );
+}
+
+// ─── 체어 기록 재연결 / 연결 해제 ────────────────────────────────────────────
+function RelinkControls({
+  item,
+  patientId,
+}: {
+  item: ConsultationHistoryItem;
+  patientId: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const [mode, setMode] = useState<"menu" | "search">("menu");
+  const [query, setQuery] = useState("");
+  const [results, setResults] = useState<{ id: number; name: string; chart_no: string | null }[]>([]);
+  const [msg, setMsg] = useState<string | null>(null);
+  const [isPending, startTransition] = useTransition();
+
+  const handleSearch = (q: string) => {
+    setQuery(q);
+    if (!q.trim()) { setResults([]); return; }
+    startTransition(async () => {
+      const data = await searchPatientsForChair(q);
+      setResults(data);
+    });
+  };
+
+  const handleRelink = (newPatientId: number) => {
+    setMsg(null);
+    startTransition(async () => {
+      const res = await relinkChairRecord({ consultationId: item.id, newPatientId });
+      if (res.ok) {
+        setOpen(false);
+        setMode("menu");
+      } else {
+        setMsg(res.message);
+      }
+    });
+  };
+
+  const handleUnlink = () => {
+    if (!confirm("이 상담 기록을 미연결 상태로 되돌리겠습니까?")) return;
+    setMsg(null);
+    startTransition(async () => {
+      const res = await unlinkChairRecord({ consultationId: item.id });
+      if (!res.ok) setMsg(res.message);
+    });
+  };
+
+  if (!open) {
+    return (
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        className="inline-flex min-h-8 items-center justify-center rounded-lg border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-600 hover:bg-slate-50"
+      >
+        연결 변경
+      </button>
+    );
+  }
+
+  if (mode === "search") {
+    return (
+      <div className="mt-2 flex flex-col gap-2">
+        <input
+          type="text"
+          placeholder="다른 환자 이름 또는 차트번호 검색"
+          value={query}
+          onChange={(e) => handleSearch(e.target.value)}
+          className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm text-slate-800 focus:border-sky-400 focus:outline-none"
+          autoFocus
+        />
+        {results.length > 0 && (
+          <ul className="flex flex-col gap-1">
+            {results.map((p) => (
+              <li key={p.id}>
+                <button
+                  type="button"
+                  onClick={() => handleRelink(p.id)}
+                  disabled={isPending}
+                  className="w-full rounded-xl border border-slate-100 bg-slate-50 px-3 py-2 text-left text-sm text-slate-700 hover:border-sky-200 hover:bg-sky-50 disabled:opacity-50"
+                >
+                  {p.name}
+                  {p.chart_no && <span className="ml-2 text-xs text-slate-400">#{p.chart_no}</span>}
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+        <button
+          type="button"
+          onClick={() => setMode("menu")}
+          className="text-xs text-slate-400 hover:text-slate-600"
+        >
+          취소
+        </button>
+        {msg && <p className="text-xs text-red-500">{msg}</p>}
+      </div>
+    );
+  }
+
+  return (
+    <div className="mt-2 flex flex-wrap gap-2">
+      <button
+        type="button"
+        onClick={() => setMode("search")}
+        className="inline-flex min-h-8 items-center justify-center rounded-lg border border-sky-200 bg-sky-50 px-3 text-xs font-semibold text-sky-700 hover:bg-sky-100"
+      >
+        다른 환자로 재연결
+      </button>
+      <button
+        type="button"
+        onClick={handleUnlink}
+        disabled={isPending}
+        className="inline-flex min-h-8 items-center justify-center rounded-lg border border-amber-200 bg-amber-50 px-3 text-xs font-semibold text-amber-700 hover:bg-amber-100 disabled:opacity-50"
+      >
+        {isPending ? "처리 중…" : "미연결로 되돌리기"}
+      </button>
+      <button
+        type="button"
+        onClick={() => { setOpen(false); setMode("menu"); }}
+        className="inline-flex min-h-8 items-center justify-center rounded-lg border border-slate-200 px-3 text-xs text-slate-500 hover:bg-slate-50"
+      >
+        취소
+      </button>
+      {msg && <p className="text-xs text-red-500">{msg}</p>}
     </div>
   );
 }
@@ -355,7 +488,12 @@ export function ConsultationHistory({ consultations, patientId }: Props) {
               {isDraft ? (
                 <DraftActions item={c} patientId={patientId} />
               ) : (
-                <SmsControls item={c} patientId={patientId} />
+                <div className="flex flex-col gap-2">
+                  <SmsControls item={c} patientId={patientId} />
+                  {c.chair_id && (
+                    <RelinkControls item={c} patientId={patientId} />
+                  )}
+                </div>
               )}
             </li>
           );

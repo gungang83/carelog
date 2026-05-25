@@ -66,13 +66,14 @@ components/
 │   └── onboarding-form.tsx        # Google 신규 사용자 기관명 입력 폼
 ├── chair/
 │   ├── chair-provider.tsx         # ChairProvider (Context + useReducer) — 체어 전역 상태, MediaRecorder refs
-│   ├── chair-buttons.tsx          # 헤더 체어 버튼들 (상태별 색상 + 배지)
-│   ├── chair-overlay.tsx          # 체어 기록 다이얼로그 (createPortal → body)
-│   ├── chair-record-list.tsx      # 미연결 기록 목록 (삭제 + 환자 연결 진입)
-│   ├── chair-patient-search.tsx   # 환자 검색 + linkChairRecordToPatient
-│   └── chair-settings.tsx         # 설정 페이지 내 체어 관리 (admin/owner 전용)
+│   ├── chair-overlay.tsx          # 체어 기록 다이얼로그 (createPortal → body); 현재 세션 녹음/편집 전용
+│   ├── chair-patient-search.tsx   # 환자 검색 + linkChairRecordToPatient + 인라인 신규 등록
+│   ├── chair-settings.tsx         # 설정 페이지 내 체어 관리 (admin/owner 전용)
+│   ├── quick-record-trigger.tsx   # 홈 화면 빠른 기록 시작 버튼 + 위치 선택 UI
+│   ├── unlinked-records-section.tsx # 홈 화면 미연결 기록 통합 인라인 목록 (RichTextEditor 편집)
+│   └── prescription-picker.tsx    # 컴팩트 처방 칩 선택 컴포넌트 (오버레이·미연결 섹션 공용)
 ├── layout/
-│   ├── header.tsx                 # 기관명 + ChairButtons + RefreshButton + 로그아웃
+│   ├── header.tsx                 # 기관명 + RefreshButton + 프로필 드롭다운
 │   ├── refresh-button.tsx         # router.refresh() 클라이언트 컴포넌트
 │   ├── institution-switcher.tsx   # 복수 기관 전환 드롭다운
 │   └── session-refresher.tsx      # onAuthStateChange 리스너 (SIGNED_OUT → /login)

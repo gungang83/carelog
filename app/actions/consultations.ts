@@ -344,6 +344,7 @@ export async function getConsultationsByPatientId(
         image_urls: string[] | null;
         prescriptions: string[] | null;
         station_name: string | null;
+        chair_id: string | null;
         status: string;
         sms_sent_at: string | null;
         created_at: string;
@@ -358,7 +359,7 @@ export async function getConsultationsByPatientId(
     const supabase = await createServerSupabaseClient();
     const { data, error } = await supabase
       .from(consultationTable)
-      .select("id, patient_id, content, image_urls, prescriptions, station_name, status, sms_sent_at, created_at")
+      .select("id, patient_id, content, image_urls, prescriptions, station_name, status, sms_sent_at, created_at, chair_id")
       .eq("patient_id", patientId)
       .eq("institution_id", institutionId)
       .order("created_at", { ascending: false })
@@ -374,6 +375,7 @@ export async function getConsultationsByPatientId(
         image_urls: string[] | null;
         prescriptions: string[] | null;
         station_name: string | null;
+        chair_id: string | null;
         status: string;
         sms_sent_at: string | null;
         created_at: string;

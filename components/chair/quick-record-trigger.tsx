@@ -5,13 +5,11 @@ import { useChairContext } from "@/components/chair/chair-provider";
 import { getOrCreateChairByName } from "@/app/actions/chairs";
 
 export function QuickRecordTrigger() {
-  const { chairs, openOverlay, unlinkedCounts } = useChairContext();
+  const { chairs, openOverlay } = useChairContext();
   const [picking, setPicking] = useState(false);
   const [customName, setCustomName] = useState("");
   const [error, setError] = useState("");
   const [isPending, startTransition] = useTransition();
-
-  const totalUnlinked = Object.values(unlinkedCounts).reduce((s, n) => s + n, 0);
 
   const handlePickChair = (chairId: string) => {
     setPicking(false);
@@ -50,31 +48,21 @@ export function QuickRecordTrigger() {
           </button>
         </div>
 
-        {/* 등록된 위치 */}
         {chairs.length > 0 && (
           <div className="mb-4 flex flex-wrap gap-2">
-            {chairs.map((chair) => {
-              const count = unlinkedCounts[chair.id] ?? 0;
-              return (
-                <button
-                  key={chair.id}
-                  type="button"
-                  onClick={() => handlePickChair(chair.id)}
-                  className="relative flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 transition hover:border-sky-300 hover:bg-sky-50 hover:text-sky-700"
-                >
-                  {chair.name}
-                  {count > 0 && (
-                    <span className="inline-flex size-4 items-center justify-center rounded-full bg-amber-500 text-[9px] font-bold text-white">
-                      {count > 9 ? "9+" : count}
-                    </span>
-                  )}
-                </button>
-              );
-            })}
+            {chairs.map((chair) => (
+              <button
+                key={chair.id}
+                type="button"
+                onClick={() => handlePickChair(chair.id)}
+                className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 transition hover:border-sky-300 hover:bg-sky-50 hover:text-sky-700"
+              >
+                {chair.name}
+              </button>
+            ))}
           </div>
         )}
 
-        {/* 직접 입력 */}
         <div className="border-t border-slate-100 pt-4">
           <p className="mb-2 text-xs text-slate-500">직접 입력</p>
           <div className="flex gap-2">
@@ -103,28 +91,14 @@ export function QuickRecordTrigger() {
   }
 
   return (
-    <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-      <button
-        type="button"
-        onClick={() => setPicking(true)}
-        className="flex flex-1 items-center justify-center gap-3 rounded-2xl bg-sky-600 px-6 py-4 text-sm font-semibold text-white shadow-sm shadow-sky-200 transition hover:bg-sky-700 active:scale-[0.98]"
-      >
-        <MicIcon className="size-5 shrink-0" />
-        빠른 기록 시작
-      </button>
-      {totalUnlinked > 0 && (
-        <button
-          type="button"
-          onClick={() => setPicking(true)}
-          className="flex items-center justify-center gap-2 rounded-2xl border border-amber-200 bg-amber-50 px-5 py-4 text-sm font-medium text-amber-700 transition hover:bg-amber-100 sm:shrink-0"
-        >
-          <span className="inline-flex size-5 items-center justify-center rounded-full bg-amber-500 text-[10px] font-bold text-white">
-            {totalUnlinked > 9 ? "9+" : totalUnlinked}
-          </span>
-          미연결 기록 확인
-        </button>
-      )}
-    </div>
+    <button
+      type="button"
+      onClick={() => setPicking(true)}
+      className="flex w-full items-center justify-center gap-3 rounded-2xl bg-sky-600 px-6 py-4 text-sm font-semibold text-white shadow-sm shadow-sky-200 transition hover:bg-sky-700 active:scale-[0.98]"
+    >
+      <MicIcon className="size-5 shrink-0" />
+      빠른 기록 시작
+    </button>
   );
 }
 

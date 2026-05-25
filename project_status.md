@@ -1,6 +1,6 @@
 # Carelog 프로젝트 상태
 
-**최종 업데이트**: 2026-05-25 (세션 8)
+**최종 업데이트**: 2026-05-25 (세션 9)
 **현재 버전**: main 브랜치
 
 ---
@@ -50,6 +50,31 @@
 | 환자 푸시 알림 | ✅ 완료 | patient_push_subscriptions + sendPushToPatient, 상담 저장 시 fire-and-forget |
 | 환자 계정 연결 오류 안내 | ✅ 완료 | /portal/link-account — OTP 없이 Google 로그인 시도 시 안내 |
 | 체어 즉시 기록 (Chair Quick Record) | ✅ 완료 | 체어 선택 → 즉시 녹음 → AI 변환 → 임시 저장 → 환자 연결 |
+| 미연결 기록 관리 (홈 인라인) | ✅ 완료 | 전체 체어 통합 조회 · 인라인 RichTextEditor 편집 · 처방 선택 · 환자 연결 |
+| 체어 기록 재연결/해제 | ✅ 완료 | 환자 상담 기록에서 다른 환자로 재연결 또는 미연결 상태로 되돌리기 |
+
+---
+
+## 2026-05-25 세션 9 작업 내용 (빠른 기록 UX 고도화)
+
+| 작업 | 결과 |
+|---|---|
+| 헤더 A/B/C 체어 버튼 제거 | `header.tsx`에서 `ChairButtons` 완전 제거 |
+| `chair-buttons.tsx` 삭제 | 불필요 파일 삭제 |
+| `chair-record-list.tsx` 삭제 | 홈 인라인 섹션으로 대체되어 삭제 |
+| `getAllUnlinkedRecords` 액션 | 모든 체어 미연결 기록 통합 조회 (chair_id, prescriptions 포함) |
+| `unlinkChairRecord` 액션 | 연결된 기록을 미연결 상태로 되돌리기 + 감사 로그 |
+| `relinkChairRecord` 액션 | 다른 환자로 재연결 + 감사 로그 |
+| `saveChairRecord` / `updateChairRecordContent` 업데이트 | prescriptions 파라미터 추가 |
+| `prescription-picker.tsx` 생성 | 컴팩트 칩 형태의 처방 선택 컴포넌트 |
+| `chair-overlay.tsx` 업그레이드 | has_records 상태에 PrescriptionPicker 추가; DB 기록만 있는 경우 idle 표시 |
+| `unlinked-records-section.tsx` 생성 | 홈 화면 미연결 기록 인라인 섹션 (RichTextEditor + PrescriptionPicker + 환자 연결 + 삭제) |
+| `quick-record-trigger.tsx` 단순화 | amber 배지 버튼 제거, "빠른 기록 시작" 단일 버튼 |
+| 홈 페이지 업데이트 | `UnlinkedRecordsSection` 추가 (QuickRecordTrigger와 PatientHome 사이) |
+| `getConsultationsByPatientId` 업데이트 | `chair_id` 컬럼 포함 조회 |
+| `ConsultationHistoryItem` 타입 업데이트 | `chair_id: string \| null` 추가 |
+| `consultation-history.tsx` 업데이트 | `RelinkControls` 컴포넌트 추가 (체어 기록에만 표시) |
+| 빌드 검증 | `npm run build` ✅ 통과 (TypeScript 포함) |
 
 ---
 

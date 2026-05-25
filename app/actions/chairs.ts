@@ -40,6 +40,7 @@ type SaveChairRecordResult =
 export async function saveChairRecord(params: {
   chairId: string;
   content: string;
+  prescriptions?: string[];
 }): Promise<SaveChairRecordResult> {
   const supabase = await createServerSupabaseClient();
   const institutionId = await getMyInstitutionId();
@@ -69,6 +70,7 @@ export async function saveChairRecord(params: {
       patient_id: null,
       chair_id: params.chairId,
       content: sanitized,
+      prescriptions: params.prescriptions ?? [],
       status: "draft",
     })
     .select("id")
@@ -96,6 +98,7 @@ type UpdateChairRecordContentResult = { ok: true } | { ok: false; message: strin
 export async function updateChairRecordContent(params: {
   consultationId: string;
   content: string;
+  prescriptions?: string[];
 }): Promise<UpdateChairRecordContentResult> {
   const supabase = await createServerSupabaseClient();
   const institutionId = await getMyInstitutionId();
@@ -121,7 +124,7 @@ export async function updateChairRecordContent(params: {
 
   const { error } = await supabase
     .from("consultation")
-    .update({ content: sanitized })
+    .update({ content: sanitized, prescriptions: params.prescriptions ?? [] })
     .eq("id", params.consultationId);
 
   if (error) return { ok: false, message: "기록 수정에 실패했습니다." };
@@ -134,6 +137,161 @@ export async function updateChairRecordContent(params: {
     actor_user_id: user.id,
   });
 
+  revalidatePath("/");
+  return { ok: true };
+}
+
+// ─── getAllUnlinkedRecords ────────────────────────────────────────────────────
+// 모든 체어의 미연결 기록을 통합 조회 (홈 화면 인라인 섹션용)
+export type AllUnlinkedRecord = {
+  id: string;
+  content: string;
+  created_at: string;
+  chair_id: string;
+  prescriptions: string[] | null;
+};
+
+export async function getAllUnlinkedRecords(): Promise<AllUnlinkedRecord[]> {
+  const supabase = await createServerSupabaseClient();
+  const institutionId = await getMyInstitutionId();
+  if (!institutionId) return [];
+
+  const { data } = await supabase
+    .from("consultation")
+    .select("id, content, created_at, chair_id, prescriptions")
+    .eq("institution_id", institutionId)
+    .is("patient_id", null)
+    .not("chair_id", "is", null)
+    .order("created_at", { ascending: false });
+
+  return (data ?? []).map((r) => ({
+    id: r.id as string,
+    content: r.content as string,
+    created_at: r.created_at as string,
+    chair_id: r.chair_id as string,
+    prescriptions: r.prescriptions as string[] | null,
+  }));
+}
+
+// ─── unlinkChairRecord ────────────────────────────────────────────────────────
+// 연결된 체어 기록을 미연결 상태로 되돌리기 (잘못 연결한 경우 복구)
+type UnlinkChairRecordResult = { ok: true } | { ok: false; message: string };
+
+export async function unlinkChairRecord(params: {
+  consultationId: string;
+}): Promise<UnlinkChairRecordResult> {
+  const supabase = await createServerSupabaseClient();
+  const institutionId = await getMyInstitutionId();
+  if (!institutionId) return { ok: false, message: "기관 정보를 찾을 수 없습니다." };
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false, message: "로그인이 필요합니다." };
+
+  // 체어에서 온 기록인지 + 현재 연결된 환자 확인
+  const { data: consultation } = await supabase
+    .from("consultation")
+    .select("id, chair_id, patient_id")
+    .eq("id", params.consultationId)
+    .eq("institution_id", institutionId)
+    .not("chair_id", "is", null)
+    .maybeSingle();
+
+  if (!consultation) return { ok: false, message: "대상 기록을 찾을 수 없습니다." };
+
+  const prevPatientId = consultation.patient_id as number | null;
+
+  const { error } = await supabase
+    .from("consultation")
+    .update({
+      patient_id: null,
+      status: "draft",
+      linked_at: null,
+      linked_by: null,
+    })
+    .eq("id", params.consultationId);
+
+  if (error) return { ok: false, message: "연결 해제에 실패했습니다." };
+
+  await supabase.from("chair_audit_logs").insert({
+    institution_id: institutionId,
+    chair_id: consultation.chair_id,
+    consultation_id: params.consultationId,
+    event_type: "patient_unlinked",
+    actor_user_id: user.id,
+    patient_id_before: prevPatientId,
+    patient_id_after: null,
+  });
+
+  if (prevPatientId) revalidatePath(`/patients/${prevPatientId}`);
+  revalidatePath("/");
+  return { ok: true };
+}
+
+// ─── relinkChairRecord ────────────────────────────────────────────────────────
+// 잘못 연결된 체어 기록을 다른 환자로 재연결
+type RelinkChairRecordResult = { ok: true } | { ok: false; message: string };
+
+export async function relinkChairRecord(params: {
+  consultationId: string;
+  newPatientId: number;
+}): Promise<RelinkChairRecordResult> {
+  const supabase = await createServerSupabaseClient();
+  const institutionId = await getMyInstitutionId();
+  if (!institutionId) return { ok: false, message: "기관 정보를 찾을 수 없습니다." };
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false, message: "로그인이 필요합니다." };
+
+  const { data: consultation } = await supabase
+    .from("consultation")
+    .select("id, chair_id, patient_id")
+    .eq("id", params.consultationId)
+    .eq("institution_id", institutionId)
+    .not("chair_id", "is", null)
+    .maybeSingle();
+
+  if (!consultation) return { ok: false, message: "대상 기록을 찾을 수 없습니다." };
+
+  const { data: newPatient } = await supabase
+    .from("patient")
+    .select("id")
+    .eq("id", params.newPatientId)
+    .eq("institution_id", institutionId)
+    .maybeSingle();
+
+  if (!newPatient) return { ok: false, message: "유효하지 않은 환자입니다." };
+
+  const prevPatientId = consultation.patient_id as number | null;
+  const now = new Date().toISOString();
+
+  const { error } = await supabase
+    .from("consultation")
+    .update({
+      patient_id: params.newPatientId,
+      status: "confirmed",
+      linked_at: now,
+      linked_by: user.id,
+    })
+    .eq("id", params.consultationId);
+
+  if (error) return { ok: false, message: "재연결에 실패했습니다." };
+
+  await supabase.from("chair_audit_logs").insert({
+    institution_id: institutionId,
+    chair_id: consultation.chair_id,
+    consultation_id: params.consultationId,
+    event_type: "patient_relinked",
+    actor_user_id: user.id,
+    patient_id_before: prevPatientId,
+    patient_id_after: params.newPatientId,
+  });
+
+  if (prevPatientId) revalidatePath(`/patients/${prevPatientId}`);
+  revalidatePath(`/patients/${params.newPatientId}`);
   revalidatePath("/");
   return { ok: true };
 }
