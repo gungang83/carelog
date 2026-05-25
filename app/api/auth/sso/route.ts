@@ -68,8 +68,8 @@ export async function GET(req: NextRequest) {
     });
 
   if (createError) {
-    // 이미 존재하는 경우 listUsers로 찾기
-    const { data: { users } } = await admin.auth.admin.listUsers();
+    // 이미 존재하는 경우 email로 검색 (perPage 1000으로 pagination 문제 방지)
+    const { data: { users } } = await admin.auth.admin.listUsers({ perPage: 1000 });
     const existing = users.find((u) => u.email === email);
     if (!existing) {
       return NextResponse.redirect(`${EO_APP_URL}?sso_error=user_lookup`);
