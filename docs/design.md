@@ -1,6 +1,6 @@
 # Carelog Design System
 
-**최종 업데이트**: 2026-05-09  
+**최종 업데이트**: 2026-05-25  
 **상태**: 현행 앱 기준 (Sticky, Claude Design 등 AI 디자인 도구 연동용)
 
 ---
@@ -43,6 +43,9 @@
 | Error | `red-600` | `#dc2626` | 에러 메시지 |
 | Success | `green-600` | `#16a34a` | 성공 피드백 |
 | Warning | `amber-500` | `#f59e0b` | 경고 |
+| Recording | `red-500` | `#ef4444` | 녹음 중 상태 (체어 버튼·오버레이) |
+| Processing | `sky-400` | `#38bdf8` | 변환 중 스피너 |
+| Unlinked | `amber-500` | `#f59e0b` | 미연결 기록 배지 |
 
 ### Background
 
@@ -221,6 +224,63 @@ rounded-2xl border border-dashed border-sky-200 bg-white/80 p-6 shadow-sm
   - owner: `bg-sky-100 text-sky-800`
   - admin: `bg-slate-100 text-slate-700`
   - staff: `bg-white border border-slate-200 text-slate-600`
+
+---
+
+---
+
+## 체어 즉시 기록 UI 패턴
+
+### 체어 버튼 (헤더)
+
+헤더 우측에 기관 내 활성 체어마다 버튼 하나. 상태별 색상:
+
+| 상태 | 배경/테두리 | 텍스트 | 추가 요소 |
+|---|---|---|---|
+| `idle` | `border-slate-200 bg-white` | `text-slate-600` | — |
+| `recording` | `border-red-200 bg-red-50` | `text-red-700` | 1.5×1.5 빨간 pulse 점 |
+| `processing` | `border-sky-200 bg-sky-50` | `text-sky-700` | 3×3 sky spin 링 |
+| `has_records` | `border-amber-200 bg-amber-50` | `text-amber-700` | 앰버 배지 (미연결 수) |
+
+```
+relative flex items-center justify-center rounded-xl border px-2 py-1.5 text-xs font-medium transition
+```
+
+### 미연결 기록 배지
+
+```
+inline-flex size-4 items-center justify-center rounded-full bg-amber-500 text-[9px] font-bold text-white
+```
+
+### 오버레이 다이얼로그
+
+`createPortal(content, document.body)` 사용 — 헤더 `backdrop-filter` 스택 컨텍스트 탈출 필수.
+
+**구조**:
+```
+backdrop:  fixed inset-0 z-50 bg-black/40 backdrop-blur-sm
+container: fixed inset-0 z-50 flex items-end justify-center p-4 sm:items-center
+panel:     w-full max-w-lg rounded-2xl bg-white shadow-2xl
+```
+
+**헤더 영역**: `flex items-center justify-between border-b border-slate-100 px-5 py-4`
+- 왼쪽: 체어 이름 아이콘(size-8 rounded-xl bg-sky-600) + 상태 텍스트
+- 오른쪽: X 닫기 버튼
+
+**본문 상태별 UI**:
+- `idle` — "녹음 시작" sky-600 버튼 (마이크 실패 시 textarea 폴백)
+- `recording` — red-50 배경 박스 + pulse 표시 + 경과 시간 + "중지 및 변환" red-500 버튼
+- `processing` — 중앙 정렬 sky spin 스피너
+- `has_records` — 상담 내용 textarea + 저장/버리기 버튼 + 미연결 기록 목록
+
+### 환자 연결 인라인 등록 폼
+
+검색 결과 없을 때 노출:
+```
+flex w-full items-center justify-center gap-1.5 rounded-xl 
+border border-sky-200 bg-sky-50 px-3 py-2.5 
+text-sm font-medium text-sky-700 transition hover:bg-sky-100
+```
 
 ---
 
