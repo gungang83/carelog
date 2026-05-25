@@ -1,6 +1,7 @@
 "use server";
 
 import { createServerSupabaseClient } from "@/lib/supabase/server";
+import { createAdminSupabaseClient } from "@/lib/supabase/admin";
 import { getMyInstitutionId } from "@/lib/auth/institution";
 import { revalidatePath } from "next/cache";
 import { sanitizeRichHtml } from "@/lib/sanitize-html";
@@ -385,6 +386,57 @@ export async function createPatientAndLink(params: {
   revalidatePath(`/patients/${patientId}`);
   revalidatePath("/");
   return { ok: true, patientId };
+}
+
+// ─── getOrCreateChairByName ───────────────────────────────────────────────────
+// 이름으로 체어 조회 — 없으면 생성 (직접 입력 위치용)
+type GetOrCreateChairResult =
+  | { ok: true; chairId: string }
+  | { ok: false; message: string };
+
+export async function getOrCreateChairByName(
+  name: string,
+): Promise<GetOrCreateChairResult> {
+  const trimmed = name.trim();
+  if (!trimmed) return { ok: false, message: "위치 이름을 입력해 주세요." };
+
+  const supabase = await createServerSupabaseClient();
+  const institutionId = await getMyInstitutionId();
+  if (!institutionId) return { ok: false, message: "기관 정보를 찾을 수 없습니다." };
+
+  // 기존 체어 조회
+  const { data: existing } = await supabase
+    .from("chairs")
+    .select("id")
+    .eq("institution_id", institutionId)
+    .eq("name", trimmed)
+    .maybeSingle();
+
+  if (existing) return { ok: true, chairId: existing.id as string };
+
+  // 없으면 admin client로 생성 (staff가 현장에서 위치 추가 허용)
+  const admin = createAdminSupabaseClient();
+  const { data: last } = await supabase
+    .from("chairs")
+    .select("display_order")
+    .eq("institution_id", institutionId)
+    .order("display_order", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  const nextOrder = ((last?.display_order as number | null) ?? -1) + 1;
+
+  const { data, error } = await admin
+    .from("chairs")
+    .insert({ institution_id: institutionId, name: trimmed, display_order: nextOrder })
+    .select("id")
+    .single();
+
+  if (error || !data) return { ok: false, message: "위치 생성에 실패했습니다." };
+
+  revalidatePath("/");
+  revalidatePath("/settings");
+  return { ok: true, chairId: data.id as string };
 }
 
 // ─── upsertChair ─────────────────────────────────────────────────────────────
