@@ -6,6 +6,7 @@ Supabase(PostgreSQL) 기반. 전체 스키마는 `supabase/schema.sql` 참고.
 - `supabase/migrations/20260509000001_staff_auth_institution.sql`
 - `supabase/migrations/20260510000001_patient_portal.sql`
 - `supabase/migrations/20260517000001_push_subscriptions.sql`
+- `supabase/migrations/20260517000002_patient_auth_links.sql`
 - `supabase/migrations/20260526000001_chair_quick_record.sql`
 
 ## 테이블 목록
@@ -186,7 +187,7 @@ create policy "admin manages chairs" on public.chairs
 | `institution_id` | uuid NOT NULL FK → institutions.id | 소속 기관 (CASCADE DELETE) |
 | `chair_id` | uuid FK → chairs.id | 관련 체어 (SET NULL on delete) |
 | `consultation_id` | uuid FK → consultation.id | 관련 상담 기록 (SET NULL on delete) |
-| `event_type` | text NOT NULL | `record_created` / `record_transcribed` / `record_edited` / `patient_linked` / `record_deleted` |
+| `event_type` | text NOT NULL | `record_created` / `record_transcribed` / `record_edited` / `patient_linked` / `patient_unlinked` / `patient_relinked` / `record_deleted` |
 | `actor_user_id` | uuid NOT NULL FK → auth.users.id | 작업 수행 직원 |
 | `patient_id_before` | bigint | 환자 연결 변경 전 patient_id |
 | `patient_id_after` | bigint | 환자 연결 변경 후 patient_id |

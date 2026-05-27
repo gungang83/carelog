@@ -1,6 +1,6 @@
 # Carelog 프로젝트 상태
 
-**최종 업데이트**: 2026-05-25 (세션 9)
+**최종 업데이트**: 2026-05-27 (세션 10)
 **현재 버전**: main 브랜치
 
 ---
@@ -52,6 +52,18 @@
 | 체어 즉시 기록 (Chair Quick Record) | ✅ 완료 | 체어 선택 → 즉시 녹음 → AI 변환 → 임시 저장 → 환자 연결 |
 | 미연결 기록 관리 (홈 인라인) | ✅ 완료 | 전체 체어 통합 조회 · 인라인 RichTextEditor 편집 · 처방 선택 · 환자 연결 |
 | 체어 기록 재연결/해제 | ✅ 완료 | 환자 상담 기록에서 다른 환자로 재연결 또는 미연결 상태로 되돌리기 |
+
+---
+
+## 2026-05-27 세션 10 작업 내용 (문서 정리 + 미연결 기록 성능 개선)
+
+| 작업 | 결과 |
+|---|---|
+| `README.md` 업데이트 | 주요 기능 목록 현행화 (체어 즉시 기록·환자 포털·Web Push·다중 테넌트 추가); 프로젝트 구조 라우트 그룹 반영; 문서 표에 `docs/design.md` 추가 |
+| `docs/architecture.md` 수정 | 체어 즉시 기록 데이터 흐름 전면 재작성 — 삭제된 ChairButtons·ChairRecordList 제거, QuickRecordTrigger·UnlinkedRecordsSection·RelinkControls 반영; unlinkChairRecord·relinkChairRecord 흐름 추가 |
+| `docs/database.md` 수정 | 마이그레이션 목록에 `20260517000002_patient_auth_links.sql` 추가; `chair_audit_logs.event_type`에 `patient_unlinked` / `patient_relinked` 추가 |
+| 미연결 기록 로딩 성능 개선 | `page.tsx`에서 `getAllUnlinkedRecords`를 서버 사이드로 병렬 페칭 후 prop으로 전달 → 클라이언트 `useEffect` 왕복 제거, 화면 로드 즉시 표시 |
+| 빌드 검증 | `npm run build` ✅ 통과 |
 
 ---
 

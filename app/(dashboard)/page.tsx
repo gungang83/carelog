@@ -4,9 +4,13 @@ import { PushNotificationBanner } from "@/components/push-notification-banner";
 import { QuickRecordTrigger } from "@/components/chair/quick-record-trigger";
 import { UnlinkedRecordsSection } from "@/components/chair/unlinked-records-section";
 import { getActivityLogs } from "@/app/actions/activity";
+import { getAllUnlinkedRecords } from "@/app/actions/chairs";
 
 export default async function Home() {
-  const activityResult = await getActivityLogs(50);
+  const [activityResult, initialUnlinked] = await Promise.all([
+    getActivityLogs(50),
+    getAllUnlinkedRecords(),
+  ]);
   const logs = activityResult.ok ? activityResult.logs : [];
 
   return (
@@ -27,7 +31,7 @@ export default async function Home() {
 
       <QuickRecordTrigger />
 
-      <UnlinkedRecordsSection />
+      <UnlinkedRecordsSection initialRecords={initialUnlinked} />
 
       <PatientHome />
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState, useTransition } from "react";
+import { useRef, useState, useTransition } from "react";
 import { useChairContext } from "@/components/chair/chair-provider";
 import {
   getAllUnlinkedRecords,
@@ -12,10 +12,9 @@ import { ChairPatientSearch } from "@/components/chair/chair-patient-search";
 import { PrescriptionPicker } from "@/components/chair/prescription-picker";
 import { RichTextEditor, type RichTextEditorHandle } from "@/components/rich-text-editor";
 
-export function UnlinkedRecordsSection() {
+export function UnlinkedRecordsSection({ initialRecords }: { initialRecords: AllUnlinkedRecord[] }) {
   const { chairs, openOverlay, refreshUnlinkedCount } = useChairContext();
-  const [records, setRecords] = useState<AllUnlinkedRecord[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [records, setRecords] = useState<AllUnlinkedRecord[]>(initialRecords);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [linkingId, setLinkingId] = useState<string | null>(null);
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
@@ -25,23 +24,10 @@ export function UnlinkedRecordsSection() {
   const [isPending, startTransition] = useTransition();
   const editorRef = useRef<RichTextEditorHandle>(null);
 
-  const load = useCallback(async () => {
-    setLoading(true);
+  const reload = async () => {
     const data = await getAllUnlinkedRecords();
     setRecords(data);
-    setLoading(false);
-  }, []);
-
-  useEffect(() => { void load(); }, [load]);
-
-  if (loading) {
-    return (
-      <div className="flex items-center gap-2 text-sm text-slate-400">
-        <span className="inline-block size-3 animate-spin rounded-full border border-slate-300 border-t-slate-500" />
-        미연결 기록 확인 중…
-      </div>
-    );
-  }
+  };
 
   if (records.length === 0) return null;
 
@@ -71,7 +57,7 @@ export function UnlinkedRecordsSection() {
         prescriptions: editPrescriptions,
       });
       if (result.ok) {
-        await load();
+        await reload();
         setEditingId(null);
       } else {
         setMsg(result.message);
@@ -84,13 +70,13 @@ export function UnlinkedRecordsSection() {
     startTransition(async () => {
       await deleteChairRecord({ consultationId: id });
       await refreshUnlinkedCount(chairId);
-      await load();
+      await reload();
     });
   };
 
   const handleLinked = async (chairId: string) => {
     await refreshUnlinkedCount(chairId);
-    await load();
+    await reload();
     setLinkingId(null);
   };
 

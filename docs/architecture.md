@@ -308,27 +308,33 @@ ConsultationForm (Client)
 ChairProvider (Context + useReducer, MediaRecorder refs in useRef)
   ── 대시보드 layout 전체 래핑 → 페이지 이동에도 상태 유지
 
-Header
-  └── ChairButtons (Client)
-        ── 체어별 상태 표시 (idle/recording/has_records)
-        ── 클릭 → openOverlay(chairId)
+app/(dashboard)/page.tsx (홈 화면)
+  ├── QuickRecordTrigger (Client)
+  │     ── "빠른 기록 시작" sky-600 버튼 (헤더 버튼 없음)
+  │     ── 클릭 → 체어 목록 칩 표시 (등록된 chairs 또는 직접 입력)
+  │     ── 체어 선택 → openOverlay(chairId)
+  │
+  └── UnlinkedRecordsSection (Client)
+        ── getAllUnlinkedRecords() → 모든 체어의 미연결 기록 통합 목록
+        ── 체어 이름 배지 + 타임스탬프 + 내용 미리보기
+        ── 인라인 편집: RichTextEditor + PrescriptionPicker
+        ── 인라인 환자 연결: ChairPatientSearch
+              └── linkChairRecordToPatient({ consultationId, patientId })
+        ── 삭제: deleteChairRecord → 감사 로그 먼저, 이후 delete
 
 ChairOverlay (Client, createPortal → document.body)
   ── backdrop-filter 스택 컨텍스트 탈출을 위해 portal 사용
-  ── idle: 녹음 시작 버튼 (+ 마이크 실패 시 텍스트 직접 입력)
-  ── recording: 타이머 + 중지 버튼 (overlay 닫아도 녹음 유지)
+  ── 현재 세션 녹음/편집 전용 (과거 기록 목록 없음)
+  ── idle: 녹음 시작 버튼 (+ 마이크 실패 시 텍스트 직접 입력 폴백)
+  ── recording: 타이머 + 중지 버튼 (overlay 닫아도 백그라운드 녹음 유지)
   ── processing: 변환 중 스피너
-  ── has_records: 텍스트 편집 + 저장 + ChairRecordList
+  ── has_records: 텍스트 편집 + PrescriptionPicker + [임시저장] [환자연결] [버리기]
 
-ChairRecordList (Client)
-  └── getUnlinkedChairRecords(chairId) → 미연결 기록 목록
-        ── 삭제: deleteChairRecord → 감사 로그 먼저, 이후 delete
-        └── 환자 연결: ChairPatientSearch
-              ── searchPatientsForChair(query)
-              └── linkChairRecordToPatient({ consultationId, patientId })
-                    ── patient_id / status / linked_at / linked_by 업데이트
-                    ── chair_audit_logs INSERT (patient_id_before/after 기록)
-                    ── revalidatePath('/patients/[id]')
+app/(dashboard)/patients/[patientId]/page.tsx
+  └── ConsultationHistory → RelinkControls (체어 기록에만 표시)
+        ── "다른 환자로 재연결" → relinkChairRecord({ consultationId, newPatientId })
+        ── "미연결로 되돌리기" → unlinkChairRecord({ consultationId })
+              ── patient_id = null 복원 + chair_audit_logs INSERT (patient_unlinked)
 
 app/(dashboard)/layout.tsx
   └── export const maxDuration = 120  ← Server Action 타임아웃 (transcription용)
@@ -343,10 +349,24 @@ handleStopRecording()
   → setTranscriptionResult(chairId, summary)
 
 handleSave()
-  → saveChairRecord({ chairId, content }) [Server Action]
+  → saveChairRecord({ chairId, content, prescriptions }) [Server Action]
       → consultation INSERT (patient_id: null, status: 'draft', chair_id)
       → chair_audit_logs INSERT (record_created)
       → revalidatePath('/')
+
+환자 연결
+  → linkChairRecordToPatient({ consultationId, patientId }) [Server Action]
+      → patient_id / status='confirmed' / linked_at / linked_by 업데이트
+      → chair_audit_logs INSERT (patient_linked, patient_id_before/after)
+      → revalidatePath('/patients/[id]')
+
+연결 해지 / 재연결 (환자 상세 페이지에서)
+  → unlinkChairRecord({ consultationId })
+      → patient_id = null, status='draft', linked_at/by = null
+      → chair_audit_logs INSERT (patient_unlinked)
+  → relinkChairRecord({ consultationId, newPatientId })
+      → patient_id 교체, status='confirmed', linked_at/by 갱신
+      → chair_audit_logs INSERT (patient_relinked, patient_id_before/after)
 ```
 
 ---
