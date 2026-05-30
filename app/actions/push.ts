@@ -4,11 +4,24 @@ import webpush from "web-push";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { createClient } from "@supabase/supabase-js";
 
-webpush.setVapidDetails(
-  process.env.VAPID_SUBJECT!,
-  process.env.VAPID_PUBLIC_KEY!,
-  process.env.VAPID_PRIVATE_KEY!,
-);
+// VAPID 설정은 지연 초기화한다. 모듈 로드 시점에 setVapidDetails를 호출하면
+// 환경변수가 없는 환경(예: Vercel Preview 빌드)에서 빌드 자체가 깨진다.
+let vapidConfigured: boolean | null = null;
+
+function ensureVapidConfigured(): boolean {
+  if (vapidConfigured !== null) return vapidConfigured;
+  const subject = process.env.VAPID_SUBJECT;
+  const publicKey = process.env.VAPID_PUBLIC_KEY;
+  const privateKey = process.env.VAPID_PRIVATE_KEY;
+  if (!subject || !publicKey || !privateKey) {
+    console.warn("[push] VAPID 환경변수 미설정 — 푸시 알림을 건너뜁니다.");
+    vapidConfigured = false;
+    return false;
+  }
+  webpush.setVapidDetails(subject, publicKey, privateKey);
+  vapidConfigured = true;
+  return true;
+}
 
 export type PushResult = { ok: true } | { ok: false; message: string };
 
@@ -69,6 +82,8 @@ export async function sendPushToInstitution(
   institutionId: string,
   payload: PushPayload
 ): Promise<void> {
+  if (!ensureVapidConfigured()) return;
+
   // Service role bypasses RLS to read all subscriptions for the institution
   const adminClient = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,

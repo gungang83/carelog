@@ -774,12 +774,16 @@ export async function sendPushToPatient(
 
   if (!subs || subs.length === 0) return;
 
+  const subject = process.env.VAPID_SUBJECT;
+  const publicKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
+  const privateKey = process.env.VAPID_PRIVATE_KEY;
+  if (!subject || !publicKey || !privateKey) {
+    console.warn("[push] 환자 푸시 VAPID 환경변수 미설정 — 건너뜁니다.");
+    return;
+  }
+
   const webpush = await import("web-push");
-  webpush.setVapidDetails(
-    process.env.VAPID_SUBJECT!,
-    process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY!,
-    process.env.VAPID_PRIVATE_KEY!,
-  );
+  webpush.setVapidDetails(subject, publicKey, privateKey);
 
   const staleEndpoints: string[] = [];
 

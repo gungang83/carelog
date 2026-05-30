@@ -67,6 +67,8 @@
 | `CLAUDE.local.md` 신규 | **다온(🟣) 정체성 — 기획 PM + 시니어 개발·배포 겸임** |
 | `dev` 브랜치 생성 | main/dev 2단 브랜치 구조 확립 |
 | 운영 체제 확정 | 현재 다온이 기획·개발·배포 전 역할 겸임 (추후 분리 가능) |
+| **VAPID 빌드 취약점 수정** | `push.ts`·`patient-portal.ts`가 모듈 로드/호출 시 `setVapidDetails`를 비널 단언으로 호출 → 환경변수 없는 환경(Vercel Preview)에서 빌드 붕괴. 지연 초기화 + env 가드로 변경(없으면 푸시만 건너뜀, 빌드는 통과) |
+| dev Preview 배포 실패 대응 | `dev` 브랜치 push가 Preview 배포를 트리거했으나 Preview 환경에 `VAPID_*` 미설정으로 실패 → 위 코드 가드로 해결 |
 
 ---
 
@@ -247,6 +249,7 @@
 | spec 002 quickstart 시나리오 수동 검증 | 낮음 | ⏳ Solapi 키 설정 후 전체 흐름 테스트 필요 |
 | 어드민 패널 DB 마이그레이션 | 완료 | ✅ 20260514000001_admin_panel.sql 적용 완료 |
 | **chair_quick_record DB 마이그레이션** | 높음 | ⏳ 20260526000001_chair_quick_record.sql Supabase에 적용 필요 |
+| Vercel Preview 환경 VAPID 미설정 | 낮음 | dev/Preview 빌드는 코드 가드로 통과하나 Preview에서 푸시는 비활성. 필요 시 Vercel Preview 스코프에 VAPID_* 추가 |
 
 ---
 
