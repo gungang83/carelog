@@ -62,7 +62,7 @@ specs/006-chair-quick-record/plan.md
 
 > 전체 지침: `docs/multi-agent-playbook-template.md` (이식용 템플릿 원본)
 > 에이전트별 **정체성·전용 마무리 루틴**은 각 브랜치의 `CLAUDE.local.md`(`.gitattributes`의 `merge=ours`로 보호)에 둔다.
-> _역할 라벨(이름·이모지)은 추후 확정 → 확정 시 부록 B로 각 브랜치에 `CLAUDE.local.md` 생성._
+> **현재 운영: 다온(🟣)이 기획 PM + 시니어 개발·배포를 겸임한다.** 추후 역할 분리 시 부록 B로 추가 에이전트 `CLAUDE.local.md`를 생성한다.
 
 ### 역할 & 파일 소유권
 
@@ -79,12 +79,12 @@ specs/006-chair-quick-record/plan.md
 main = 프로덕션 (Vercel 배포 대상)
 dev  = 개발/통합
 
-기획 PM        : {{기획PM 브랜치}}/docs → main → dev 동기화
-시니어 개발·배포 : dev → main 배포
+다온(겸임) : claude/zen-cerf-hWuUw → dev → main 배포
+            (역할 분리 시) 기획 PM: {{기획PM 브랜치}}/docs → main → dev 동기화
 ```
 
 - 각 에이전트는 자기 전용 브랜치에서만 작업. 남의 브랜치에 직접 push 금지.
-- **배포(main 머지)는 시니어 개발·배포 담당 전속.** 기획 PM은 자기 docs 브랜치에 push하고 main 머지는 하지 않는다.
+- **배포(main 머지)는 시니어 개발·배포 담당 전속.** 현재는 다온이 겸임하므로 다온이 배포한다. (역할 분리 시 기획 PM은 docs 브랜치에 push하고 main 머지는 하지 않는다.)
 
 ### 커밋 컨벤션 (말머리 필수)
 
