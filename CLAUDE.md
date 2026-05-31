@@ -1,5 +1,8 @@
 @AGENTS.md
 
+> **조직 공통 운영 규칙은 `PLAYBOOK.md`를 먼저 읽을 것.** (커뮤니케이션·에이전트 정의·커밋 컨벤션·협업 규칙·핸드오프·배포 정책·운영 철학)
+> 이 `CLAUDE.md`는 **Carelog 특화 사항만** 다룬다.
+
 <!-- SPECKIT START -->
 For additional context about technologies to be used, project structure,
 shell commands, and other important information, read the current plan at:
@@ -58,53 +61,25 @@ specs/006-chair-quick-record/plan.md
 위 5단계를 완료한 뒤 사용자에게 완료 요약 보고:
 > "마무리 완료. 빌드 ✅ | GitHub ✅ | Vercel 배포 진행 중"
 
-## 멀티 에이전트 협업 모델 (2역할)
+## Carelog 특화 — 운영 주체 · 브랜치 · 배포
 
-> 전체 지침: `docs/multi-agent-playbook-template.md` (이식용 템플릿 원본)
-> 에이전트별 **정체성·전용 마무리 루틴**은 각 브랜치의 `CLAUDE.local.md`(`.gitattributes`의 `merge=ours`로 보호)에 둔다.
-> **현재 운영: 다온(🟣)이 기획 PM + 시니어 개발·배포를 겸임한다.** 추후 역할 분리 시 부록 B로 추가 에이전트 `CLAUDE.local.md`를 생성한다.
+> 조직 공통 협업 규칙·커밋 컨벤션·에이전트 정의는 `PLAYBOOK.md` 참조. 여기엔 Carelog만의 사항만 둔다.
 
-### 역할 & 파일 소유권
+- **운영 주체**: Carelog는 **다온(🟣)이 기획·구현·배포를 겸임**한다. (PLAYBOOK §2 Daon)
+  PLAYBOOK §4-10의 "main 배포는 CTO(Theo) 전속"은 EO 조직 기본값이며, **Carelog 레포의 배포 전속자는 다온**이다(별도 Vercel·Supabase로 격리 운영).
 
-| 역할 | 책임 | 소유 파일 | 코드/배포 |
-|------|------|----------|-----------|
-| **기획 PM** | 스펙·UX·로드맵·우선순위 | `specs/`, `roadmap.md`, `project_status.md` | 코드 읽기만 · main 머지 ❌ |
-| **시니어 개발·배포** | 구현·DB·배포·인프라 | `src/`, `package.json`, `supabase/`, 설정 | 코드 ✅ · **main 배포 전속** |
-
-- 기획 PM은 `src/`를 수정하지 않고, 시니어 개발은 기획 문서(`specs/`·`roadmap.md`)를 수정하지 않는다 → 두 영역의 머지가 구조적으로 안 부딪힌다.
-
-### 브랜치 전략
+### 브랜치 전략 (Carelog)
 
 ```
 main = 프로덕션 (Vercel 배포 대상)
 dev  = 개발/통합
-
-다온(겸임) : claude/zen-cerf-hWuUw → dev → main 배포
-            (역할 분리 시) 기획 PM: {{기획PM 브랜치}}/docs → main → dev 동기화
+다온 작업 브랜치 : claude/zen-cerf-hWuUw → dev → main 배포
 ```
 
-- 각 에이전트는 자기 전용 브랜치에서만 작업. 남의 브랜치에 직접 push 금지.
-- **배포(main 머지)는 시니어 개발·배포 담당 전속.** 현재는 다온이 겸임하므로 다온이 배포한다. (역할 분리 시 기획 PM은 docs 브랜치에 push하고 main 머지는 하지 않는다.)
+- 배포(main 머지)는 다온 전속. 머지 직전 `git config merge.ours.driver true`를 1회 실행한다(원격 컨테이너는 매 세션 초기화 → `CLAUDE.local.md` 머지 보호용).
+- 다온 정체성·전용 마무리 루틴은 `CLAUDE.local.md`에 둔다(`.gitattributes`의 `merge=ours`로 보호). ⚠️ Carelog는 원격 web 세션이라 매 세션 레포가 새로 클론되므로, 정체성 유지를 위해 `CLAUDE.local.md`를 **레포에 커밋**한다(PLAYBOOK §2의 "git 미추적"과 달리 Carelog는 추적).
 
-### 커밋 컨벤션 (말머리 필수)
+### Vercel 배포 (Carelog)
 
-모든 커밋 맨 앞에 에이전트 말머리 `[이름]`. 타입은 `feat`/`fix`/`chore`/`refactor`/`docs`.
-예: `[시니어] feat: SMS 수집 회계 자동화`
-
-### 협업 규칙
-
-```
-1. 동일 파일 동시 수정 금지 — 작업 전 어떤 파일 건드는지 공유.
-2. 핸드오프 — 기획 PM이 specs/NNN/tasks.md 완성 → 개발자가 확인 후 구현 착수.
-3. 장기 세션 중엔 작업 시작 전 git fetch/pull origin <내 브랜치>.
-4. 기획 PM은 기능 완료 시 project_status.md(사실 기록) 업데이트.
-5. 개발자는 구현 완료 시 tasks.md 해당 항목 완료 표시.
-6. DB 마이그레이션·인프라 변경은 시니어 개발·배포 담당이 수행.
-7. CLAUDE.local.md는 각 브랜치에 커밋 — .gitattributes merge=ours로 보호.
-8. 새 spec/문서 채번 전 git fetch origin → 전 브랜치 통틀어 최고 번호 +1. 충돌 시 늦게 만든 쪽 양보.
-```
-
-### 위 "마무리 프로토콜"과의 관계
-
-마무리 프로토콜 4단계의 `git push origin main`은 **시니어 개발·배포 담당** 전용 동작이다.
-머지 직전 `git config merge.ours.driver true`를 1회 실행한다(원격 컨테이너는 매 세션 초기화되므로 — `CLAUDE.local.md` 머지 보호용).
+- **`main`(Production)만 자동 배포.** `dev`·작업 브랜치는 `vercel.json`의 `git.deploymentEnabled`로 Preview 배포 비활성.
+- 마무리 프로토콜 4단계 `git push origin main`은 다온(배포 전속) 동작이다.
