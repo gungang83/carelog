@@ -69,6 +69,7 @@
 | 운영 체제 확정 | 현재 다온이 기획·개발·배포 전 역할 겸임 (추후 분리 가능) |
 | **VAPID 빌드 취약점 수정** | `push.ts`·`patient-portal.ts`가 모듈 로드/호출 시 `setVapidDetails`를 비널 단언으로 호출 → 환경변수 없는 환경(Vercel Preview)에서 빌드 붕괴. 지연 초기화 + env 가드로 변경(없으면 푸시만 건너뜀, 빌드는 통과) |
 | dev Preview 배포 실패 대응 | `dev` 브랜치 push가 Preview 배포를 트리거했으나 Preview 환경에 `VAPID_*` 미설정으로 실패 → 위 코드 가드로 해결 |
+| `vercel.json` 신규 | `git.deploymentEnabled`로 `dev`·작업 브랜치 자동 배포 비활성 → **main(Production)만 배포**, Preview 노이즈/크레딧 제거 |
 
 ---
 
