@@ -65,7 +65,7 @@
 | ④ 연결 후 최근 활동 미노출/클릭불가 | `activity_logs` INSERT 트리거가 draft(patient_id NULL)는 건너뛰고, **UPDATE 트리거 신설**로 연결/재연결/해제 시 동기화. 기존 NULL 로그 정리 (migration 20260601000001) |
 | 문서 | `supabase/schema.sql`에 activity_logs 섹션 현행화, `docs/database.md` 갱신 |
 
-> ⚠️ **DB 마이그레이션 적용 필요**: `supabase/migrations/20260601000001_activity_log_patient_sync.sql` — 대표님이 Supabase SQL Editor에서 실행해야 ④/③(기존기록)이 반영됨. (세션 응답에 전체 SQL 출력함)
+> ✅ **DB 마이그레이션 적용 완료**: `20260601000001_activity_log_patient_sync.sql` — Supabase SQL Editor 실행 완료, 폰 테스트로 ①~④ 정상 확인됨.
 
 ---
 
@@ -279,7 +279,7 @@
 | spec 002 quickstart 시나리오 수동 검증 | 낮음 | ⏳ Solapi 키 설정 후 전체 흐름 테스트 필요 |
 | 어드민 패널 DB 마이그레이션 | 완료 | ✅ 20260514000001_admin_panel.sql 적용 완료 |
 | **chair_quick_record DB 마이그레이션** | 높음 | ⏳ 20260526000001_chair_quick_record.sql Supabase에 적용 필요 |
-| **activity_log_patient_sync 마이그레이션** | 높음 | ⏳ 20260601000001 Supabase 적용 필요 — 최근 활동 환자 연결 동기화 + 기존 줄바꿈 변환 |
+| **activity_log_patient_sync 마이그레이션** | — | ✅ 20260601000001 적용 완료 (세션 13) — 최근 활동 환자 연결 동기화 + 기존 줄바꿈 변환 |
 | Vercel Preview 환경 VAPID 미설정 | 낮음 | dev/Preview 빌드는 코드 가드로 통과하나 Preview에서 푸시는 비활성. 필요 시 Vercel Preview 스코프에 VAPID_* 추가 |
 
 ---
