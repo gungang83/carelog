@@ -107,6 +107,12 @@ type MediaRefs = {
   chunks: Blob[];
 };
 
+// Wake Lock API 타입 (tsconfig lib에 없을 수 있어 최소 정의)
+type WakeLockLike = { release: () => Promise<void> };
+type NavigatorWithWakeLock = Navigator & {
+  wakeLock?: { request: (type: "screen") => Promise<WakeLockLike> };
+};
+
 type ChairContextValue = {
   chairs: ChairRow[];
   openChairId: string | null;
@@ -169,6 +175,39 @@ export function ChairProvider({
     return mediaRefsMap.current[chairId];
   };
 
+  // ── Screen Wake Lock ──────────────────────────────────────────────
+  // 모바일은 화면이 잠기면 마이크 스트림·MediaRecorder를 OS가 정지시켜
+  // 녹음이 손상된다. 녹음 중에는 화면 꺼짐을 막는다.
+  const wakeLockRef = useRef<WakeLockLike | null>(null);
+  const wantWakeLockRef = useRef(false);
+
+  const acquireWakeLock = useCallback(async () => {
+    const nav = navigator as NavigatorWithWakeLock;
+    if (!nav.wakeLock) return;
+    try {
+      wakeLockRef.current = await nav.wakeLock.request("screen");
+    } catch {
+      // 권한 거부/미지원 — 무시 (녹음은 계속)
+    }
+  }, []);
+
+  const releaseWakeLock = useCallback(() => {
+    wantWakeLockRef.current = false;
+    wakeLockRef.current?.release().catch(() => {});
+    wakeLockRef.current = null;
+  }, []);
+
+  // 탭이 백그라운드로 갔다 돌아오면 wake lock이 해제되므로 재획득
+  useEffect(() => {
+    const onVisible = () => {
+      if (document.visibilityState === "visible" && wantWakeLockRef.current && !wakeLockRef.current) {
+        acquireWakeLock();
+      }
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => document.removeEventListener("visibilitychange", onVisible);
+  }, [acquireWakeLock]);
+
   const openOverlay = useCallback((chairId: string) => {
     dispatch({ type: "OPEN_OVERLAY", chairId });
   }, []);
@@ -207,17 +246,25 @@ export function ChairProvider({
         recorder.ondataavailable = (e) => {
           if (e.data.size > 0) refs.chunks.push(e.data);
         };
+        recorder.onerror = () => {
+          // 백그라운드/잠금으로 OS가 녹음을 끊은 경우 등 — 트랙 정리
+          recorder.stream.getTracks().forEach((t) => t.stop());
+        };
         recorder.start(250);
+        // 녹음 중 화면 꺼짐 방지 (모바일 잠금으로 인한 녹음 손상 방지)
+        wantWakeLockRef.current = true;
+        void acquireWakeLock();
         dispatch({ type: "SET_STATUS", chairId, status: "recording" });
         return { ok: true };
       } catch {
         return { ok: false, error: "마이크 접근 권한이 필요합니다." };
       }
     },
-    [],
+    [acquireWakeLock],
   );
 
   const stopRecording = useCallback((chairId: string): Blob | null => {
+    releaseWakeLock();
     const refs = mediaRefsMap.current[chairId];
     if (!refs?.mediaRecorder) return null;
 
@@ -231,7 +278,7 @@ export function ChairProvider({
     const blob = new Blob(refs.chunks, { type: mimeType });
     refs.chunks = [];
     return blob;
-  }, []);
+  }, [releaseWakeLock]);
 
   const setTranscriptionResult = useCallback(
     (chairId: string, text: string) => {

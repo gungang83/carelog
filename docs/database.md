@@ -7,7 +7,9 @@ Supabase(PostgreSQL) 기반. 전체 스키마는 `supabase/schema.sql` 참고.
 - `supabase/migrations/20260510000001_patient_portal.sql`
 - `supabase/migrations/20260517000001_push_subscriptions.sql`
 - `supabase/migrations/20260517000002_patient_auth_links.sql`
+- `supabase/migrations/20260515000001_activity_logs.sql`
 - `supabase/migrations/20260526000001_chair_quick_record.sql`
+- `supabase/migrations/20260601000001_activity_log_patient_sync.sql`
 
 ## 테이블 목록
 
@@ -20,6 +22,7 @@ Supabase(PostgreSQL) 기반. 전체 스키마는 `supabase/schema.sql` 참고.
 | `consultation` | 상담 기록 (patient 1:N, institution_id 필터; patient_id nullable — 체어 임시 기록) |
 | `chairs` | 진료 공간 단위 (A/B/C 등), 기관별 관리 |
 | `chair_audit_logs` | 체어 기록 감사 로그 (삽입 전용, 불변) |
+| `activity_logs` | 최근 활동 피드용 상담 이벤트 로그 (트리거 자동 기록) |
 | `patient_invitations` | 환자 포털 SMS 초대 기록 (72시간 유효) |
 | `patient_accounts` | 환자 포털 계정 (주민번호 해시 기반, Supabase Auth 분리) |
 | `patient_otps` | 환자 OTP 인증 코드 (5분 만료) |
@@ -209,6 +212,33 @@ create policy "staff inserts audit logs" on public.chair_audit_logs
   );
 -- UPDATE/DELETE 정책 없음 → 레코드 불변 보장
 ```
+
+---
+
+## `activity_logs` *(migration 20260515000001 + 20260601000001)*
+
+홈 "최근 활동" 피드용 상담 이벤트 로그. 트리거로 자동 기록된다.
+
+| 컬럼 | 타입 | 설명 |
+|---|---|---|
+| `id` | uuid PK | |
+| `institution_id` | uuid NOT NULL | 기관 |
+| `event_type` | text | `consultation.created` |
+| `patient_id` | bigint | 연결 환자 (NULL이면 피드에 미노출) |
+| `consultation_id` | bigint | 상담 |
+| `metadata` | jsonb | `content_preview` 등 |
+| `created_at` | timestamptz | |
+
+**트리거 (20260601000001에서 개정)**
+
+- `trg_consultation_created_log` (AFTER INSERT): `patient_id`가 있을 때만 로그 기록.
+  **미연결 체어 draft(patient_id NULL)는 활동 피드에서 제외.**
+- `trg_consultation_patient_changed_log` (AFTER UPDATE OF patient_id): 체어 기록의
+  환자 **연결/재연결/해제** 시 활동로그를 동기화한다. 연결되면 `created_at=now()`로 새 로그를
+  기록(최근 활동 상단 노출), 해제(NULL)되면 로그 삭제.
+
+> 개정 배경: 체어 즉시 기록은 `patient_id=NULL`(draft)로 먼저 insert되어 INSERT 트리거만으로는
+> 연결 후에도 활동 피드가 "알 수 없는 환자"로 남고 클릭이 안 되던 버그를 해결.
 
 ---
 

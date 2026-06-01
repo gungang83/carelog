@@ -147,6 +147,15 @@ export function ChairPatientSearch({
         className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm text-slate-800 focus:border-sky-400 focus:outline-none"
         autoFocus
       />
+      {/* 신규 환자 등록은 항상 접근 가능 */}
+      <button
+        type="button"
+        onClick={() => { setNewName(query.trim()); setMode("create"); }}
+        className="flex items-center gap-1.5 self-start rounded-lg px-1 py-0.5 text-xs font-medium text-sky-700 hover:text-sky-800"
+      >
+        <PlusIcon className="size-3.5" />
+        새 환자 등록
+      </button>
       {searching && (
         <p className="text-xs text-slate-500">검색 중…</p>
       )}

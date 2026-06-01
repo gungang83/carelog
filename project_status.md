@@ -1,6 +1,6 @@
 # Carelog 프로젝트 상태
 
-**최종 업데이트**: 2026-05-31 (세션 12)
+**최종 업데이트**: 2026-06-01 (세션 13)
 **현재 버전**: main 브랜치
 
 ---
@@ -52,6 +52,20 @@
 | 체어 즉시 기록 (Chair Quick Record) | ✅ 완료 | 체어 선택 → 즉시 녹음 → AI 변환 → 임시 저장 → 환자 연결 |
 | 미연결 기록 관리 (홈 인라인) | ✅ 완료 | 전체 체어 통합 조회 · 인라인 RichTextEditor 편집 · 처방 선택 · 환자 연결 |
 | 체어 기록 재연결/해제 | ✅ 완료 | 환자 상담 기록에서 다른 환자로 재연결 또는 미연결 상태로 되돌리기 |
+
+---
+
+## 2026-06-01 세션 13 작업 내용 (빠른 기록 4종 개선/버그픽스)
+
+| 작업 | 결과 |
+|---|---|
+| ① 녹음 중 화면 잠금 대응 | `chair-provider.tsx`에 Screen Wake Lock 추가(녹음 중 화면 꺼짐 방지) + 복귀 시 재획득 + `recorder.onerror` 트랙 정리. 모바일 잠금으로 인한 녹음 손상/에러 방지 |
+| ② 신규 환자 임시 등록 | `createPatientAndLink`는 기존 구현 — 검색 화면에 "새 환자 등록" 버튼을 **항상** 노출하도록 개선(`chair-patient-search.tsx`) |
+| ③ 줄바꿈 손실 | 저장 시 평문 전사 텍스트를 HTML로 정규화(`ensureHtml`/`plainTextToHtml` in `sanitize-html.ts`) → `saveChairRecord`/`updateChairRecordContent` 적용. 기존 평문 기록도 마이그레이션에서 일괄 변환 |
+| ④ 연결 후 최근 활동 미노출/클릭불가 | `activity_logs` INSERT 트리거가 draft(patient_id NULL)는 건너뛰고, **UPDATE 트리거 신설**로 연결/재연결/해제 시 동기화. 기존 NULL 로그 정리 (migration 20260601000001) |
+| 문서 | `supabase/schema.sql`에 activity_logs 섹션 현행화, `docs/database.md` 갱신 |
+
+> ⚠️ **DB 마이그레이션 적용 필요**: `supabase/migrations/20260601000001_activity_log_patient_sync.sql` — 대표님이 Supabase SQL Editor에서 실행해야 ④/③(기존기록)이 반영됨. (세션 응답에 전체 SQL 출력함)
 
 ---
 
@@ -265,6 +279,7 @@
 | spec 002 quickstart 시나리오 수동 검증 | 낮음 | ⏳ Solapi 키 설정 후 전체 흐름 테스트 필요 |
 | 어드민 패널 DB 마이그레이션 | 완료 | ✅ 20260514000001_admin_panel.sql 적용 완료 |
 | **chair_quick_record DB 마이그레이션** | 높음 | ⏳ 20260526000001_chair_quick_record.sql Supabase에 적용 필요 |
+| **activity_log_patient_sync 마이그레이션** | 높음 | ⏳ 20260601000001 Supabase 적용 필요 — 최근 활동 환자 연결 동기화 + 기존 줄바꿈 변환 |
 | Vercel Preview 환경 VAPID 미설정 | 낮음 | dev/Preview 빌드는 코드 가드로 통과하나 Preview에서 푸시는 비활성. 필요 시 Vercel Preview 스코프에 VAPID_* 추가 |
 
 ---

@@ -355,6 +355,75 @@ create policy "patient can read own auth link"
   on public.patient_auth_links for select
   using (auth_user_id = auth.uid());
 
+-- ============================================================
+-- 활동 로그 (migration: 20260515000001_activity_logs.sql
+--            + 20260601000001_activity_log_patient_sync.sql)
+-- ============================================================
+
+create table if not exists public.activity_logs (
+  id              uuid        primary key default gen_random_uuid(),
+  institution_id  uuid        not null,
+  event_type      text        not null,
+  patient_id      bigint,
+  consultation_id bigint,
+  metadata        jsonb,
+  created_at      timestamptz not null default now()
+);
+
+create index if not exists activity_logs_institution_created
+  on public.activity_logs(institution_id, created_at desc);
+
+alter table public.activity_logs enable row level security;
+drop policy if exists "institution members can read activity_logs" on public.activity_logs;
+create policy "institution members can read activity_logs"
+  on public.activity_logs for select
+  using (institution_id = public.get_my_institution_id());
+
+-- INSERT 시 자동 로그 — 단, 미연결(draft, patient_id is null)은 활동피드에서 제외
+create or replace function public._log_consultation_created()
+returns trigger language plpgsql security definer set search_path = public as $$
+begin
+  if new.patient_id is null then
+    return new;
+  end if;
+  insert into public.activity_logs (institution_id, event_type, patient_id, consultation_id, metadata)
+  values (
+    new.institution_id, 'consultation.created', new.patient_id, new.id,
+    jsonb_build_object('content_preview', left(regexp_replace(new.content, '<[^>]*>', '', 'g'), 80))
+  );
+  return new;
+end;
+$$;
+
+drop trigger if exists trg_consultation_created_log on public.consultation;
+create trigger trg_consultation_created_log
+  after insert on public.consultation
+  for each row execute function public._log_consultation_created();
+
+-- patient_id 변경(체어 기록 연결/재연결/해제) 시 활동로그 동기화
+create or replace function public._log_consultation_patient_changed()
+returns trigger language plpgsql security definer set search_path = public as $$
+begin
+  if new.patient_id is distinct from old.patient_id then
+    delete from public.activity_logs where consultation_id = new.id;
+    if new.patient_id is not null then
+      insert into public.activity_logs (institution_id, event_type, patient_id, consultation_id, metadata, created_at)
+      values (
+        new.institution_id, 'consultation.created', new.patient_id, new.id,
+        jsonb_build_object('content_preview', left(regexp_replace(new.content, '<[^>]*>', '', 'g'), 80)),
+        now()
+      );
+    end if;
+  end if;
+  return new;
+end;
+$$;
+
+drop trigger if exists trg_consultation_patient_changed_log on public.consultation;
+create trigger trg_consultation_patient_changed_log
+  after update of patient_id on public.consultation
+  for each row execute function public._log_consultation_patient_changed();
+
 -- 환자 전용 Web Push 구독 (patient_account_id 기준)
 create table if not exists public.patient_push_subscriptions (
   id                  uuid primary key default gen_random_uuid(),

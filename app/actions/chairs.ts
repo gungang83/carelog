@@ -4,7 +4,7 @@ import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { createAdminSupabaseClient } from "@/lib/supabase/admin";
 import { getMyInstitutionId } from "@/lib/auth/institution";
 import { revalidatePath } from "next/cache";
-import { sanitizeRichHtml } from "@/lib/sanitize-html";
+import { sanitizeRichHtml, ensureHtml } from "@/lib/sanitize-html";
 import type { ChairRow } from "@/lib/types/database";
 import { transcribeAndSummarize, type TranscribeResult } from "@/app/actions/transcribe";
 
@@ -61,7 +61,8 @@ export async function saveChairRecord(params: {
 
   if (!chair) return { ok: false, message: "유효하지 않은 체어입니다." };
 
-  const sanitized = sanitizeRichHtml(params.content);
+  // 전사 평문은 줄바꿈 보존을 위해 HTML로 정규화 후 sanitize
+  const sanitized = sanitizeRichHtml(ensureHtml(params.content));
 
   const { data: consultation, error } = await supabase
     .from("consultation")
@@ -120,7 +121,7 @@ export async function updateChairRecordContent(params: {
 
   if (!existing) return { ok: false, message: "수정 권한이 없거나 이미 연결된 기록입니다." };
 
-  const sanitized = sanitizeRichHtml(params.content);
+  const sanitized = sanitizeRichHtml(ensureHtml(params.content));
 
   const { error } = await supabase
     .from("consultation")
