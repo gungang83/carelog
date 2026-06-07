@@ -1,7 +1,11 @@
 # Carelog
 
-치과 클리닉 전용 환자 상담 기록 관리 앱.
-환자 등록·검색, 상담 내용 기록, 이미지 첨부, 체어(station) 관리를 지원합니다.
+**환자 전용 서비스가 아닙니다.** 의료기관의 상담을 STT·AI·상담보드로 빠르게 기록·시각화해
+의무기록으로 잇고(B2B), 그 상담·자료를 환자가 빠짐없이 받아 평생 보관·활용하게 하는(B2C),
+**의료기관 ↔ 환자 연결고리**이자 환자 **생애주기 건강관리** 서비스입니다.
+(현재 적용 도메인: 치과 클리닉 — 비전은 의료기관 일반으로 확장)
+
+> 제품 정체성 SSOT: **[docs/product-vision.md](docs/product-vision.md)** — 세 기둥(의료기관 기록 / 연결고리 / 환자 통합·생애주기)
 
 ## 기술 스택
 
@@ -42,6 +46,7 @@ npm run dev
 
 | 문서 | 내용 |
 |---|---|
+| [docs/product-vision.md](docs/product-vision.md) | **제품 비전·정체성 SSOT** (세 기둥, 환자 전용 아님) |
 | [docs/architecture.md](docs/architecture.md) | 시스템 구조, 디렉터리 레이아웃, 데이터 흐름 |
 | [docs/database.md](docs/database.md) | DB 스키마, 테이블 정의, RLS 정책 |
 | [docs/development.md](docs/development.md) | 로컬 개발 환경, 환경변수, 배포 |
