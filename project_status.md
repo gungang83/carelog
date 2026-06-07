@@ -1,6 +1,6 @@
 # Carelog 프로젝트 상태
 
-**최종 업데이트**: 2026-06-01 (세션 13)
+**최종 업데이트**: 2026-06-07 (세션 15)
 **현재 버전**: main 브랜치
 
 ---
@@ -67,6 +67,22 @@
 > 후보(미착수): #2 저장 버튼/동의 정리, #3 검색결과 행 전체 탭, #5 에러 문구 친화화, #4 체어 저장+연결 통합, #6 홈/환자목록 역할 분리. 환자 여정 단계적 가입(#7·#8)은 EO 보안/층위 합의 후 `specs/007`로.
 >
 > ⏳ **대기**: EO 실비 회신(층위 6문항) → `specs/007-eo-bridge-feedback` 착수.
+
+---
+
+## 2026-06-07 세션 15 작업 내용 (EO 통합 — 카드224 회신 반영)
+
+실비 핸드오프 카드224(제안 카드25 회신) 수신 → `docs/eo-carelog-integration.md` 갱신.
+
+| 작업 | 결과 |
+|---|---|
+| 미결 6문항 회신 반영 | **확정**: 클리닉·직원 마스터=EO 이관(Q1) / 환자 SSOT=Carelog(Q2) / 피드백 직원식별 O(Q4) / EO에 `sso-token`+`workspace_carelog_links` 기존재→재사용·중복금지(Q6). **방향확정·세부TBD**: 전송 관문=헤임달(카드219) 일원화·`sso-token` 재사용(Q5). **미결**: 암호화 lib/KMS·키공유(Q3) |
+| 브리지 계약 1차 초안 | EO→CL 마스터(읽기)·CL→EO 환자 이벤트(`feedback.submitted`/`consent.updated`/`engagement.signal`) 공통 봉투·payload 초안. EO 소유 영역·헤임달 인증은 TBD 표기 |
+
+> ⚠️ **세션 환경 한계**: 이 세션은 `carelog` 단독 클론(`../eo`·`../iris` 미존재) + GitHub MCP 범위 `gungang83/carelog` 한정. 카드26 지시1(EO 암호화·RRN 처리 이식)·지시2(EO 기존 피드백 기획 대조)는 **EO 소스 접근 확보 후** 수행 — 추측 산출물 배제.
+>
+> ⏳ **다음**: 헤임달 관문계약(카드219·spec-048) 확인 → Q3·전송 스키마 확정 → `specs/007-eo-bridge-feedback` 스펙 착수.
+> 🌿 작업 브랜치: 이 세션은 `claude/dreamy-cerf-7LI1q` (CLAUDE.local.md 표기 `claude/zen-cerf-hWuUw`와 상이 — 세션별 브랜치 차이 확인 요).
 
 ---
 
