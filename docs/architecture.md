@@ -310,10 +310,10 @@ ChairProvider (Context + useReducer, MediaRecorder refs in useRef)
   ── 대시보드 layout 전체 래핑 → 페이지 이동에도 상태 유지
 
 app/(dashboard)/page.tsx (홈 화면)
-  ├── QuickRecordTrigger (Client)
-  │     ── "빠른 기록 시작" sky-600 버튼 (헤더 버튼 없음)
+  ├── ConsultHero (Client) — 최상단 히어로 (Living Consult 톤, 이전 QuickRecordTrigger 대체)
+  │     ── "오늘 진료, 기록으로 남겨서 환자에게 전달해요" 헤드라인 + "상담 기록 시작" CTA
   │     ── 클릭 → 체어 목록 칩 표시 (등록된 chairs 또는 직접 입력)
-  │     ── 체어 선택 → openOverlay(chairId)
+  │     ── 체어 선택 → openOverlay(chairId)  (기능은 기존과 동일)
   │
   └── UnlinkedRecordsSection (Client)
         ── getAllUnlinkedRecords() → 모든 체어의 미연결 기록 통합 목록
