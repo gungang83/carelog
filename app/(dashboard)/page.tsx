@@ -5,18 +5,20 @@ import { ConsultHero } from "@/components/chair/consult-hero";
 import { UnlinkedRecordsSection } from "@/components/chair/unlinked-records-section";
 import { getActivityLogs } from "@/app/actions/activity";
 import { getAllUnlinkedRecords } from "@/app/actions/chairs";
+import { getClinicMembers } from "@/app/actions/clinic-members";
 
 export default async function Home() {
-  const [activityResult, initialUnlinked] = await Promise.all([
+  const [activityResult, initialUnlinked, members] = await Promise.all([
     getActivityLogs(50),
     getAllUnlinkedRecords(),
+    getClinicMembers(),
   ]);
   const logs = activityResult.ok ? activityResult.logs : [];
 
   return (
     <div className="mx-auto flex w-full max-w-3xl flex-col gap-8 px-4 py-10 sm:px-6">
       {/* 최상단 히어로 — 진료 기록 진입점 */}
-      <ConsultHero />
+      <ConsultHero members={members} />
 
       {/* 아래로 펼쳐지는 대시보드 요소들 */}
       <PushNotificationBanner />

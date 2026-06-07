@@ -24,6 +24,7 @@ export type ConsultationRow = {
   chair_id: string | null;
   linked_at: string | null;
   linked_by: string | null;
+  participants: Participant[];
 };
 
 export type ChairRow = {
@@ -33,6 +34,24 @@ export type ChairRow = {
   display_order: number;
   is_active: boolean;
   created_at: string;
+};
+
+export type ClinicMemberRow = {
+  id: string;
+  institution_id: string;
+  name: string;
+  /** 예: 원장 / 직원 / 위생사 (선택) */
+  role: string | null;
+  display_order: number;
+  is_active: boolean;
+  created_at: string;
+};
+
+/** 상담 기록에 저장되는 참여자 스냅샷(기록 시점 값 보존) */
+export type Participant = {
+  id: string;
+  name: string;
+  role: string | null;
 };
 
 export type ChairAuditLogRow = {

@@ -128,6 +128,7 @@ create policy "staff sees own institution patients" on public.patient
 | `chair_id` | uuid FK → chairs.id | 체어 임시 기록 시 사용 (SET NULL on delete) |
 | `linked_at` | timestamptz | 환자 연결 완료 시각 |
 | `linked_by` | uuid FK → auth.users.id | 환자 연결 처리한 직원 |
+| `participants` | jsonb NOT NULL DEFAULT `[]` | 상담 참여자 스냅샷 `[{id,name,role}]` (migration 20260607000001). 이름 변경/EO 이관에도 기록 시점 보존 |
 | `created_at` | timestamptz | 기록 시각 |
 
 **인덱스**
@@ -177,6 +178,27 @@ create policy "admin manages chairs" on public.chairs
     )
   );
 ```
+
+---
+
+## `clinic_members` *(신규 — migration 20260607000001)*
+
+워크스페이스 참여자(원장·직원·담당자) 디렉터리. 체어와 동일 패턴. 녹음 시작 시 참여자 선택용.
+이름은 추후 EO에서 이관 예정 — 현재는 설정에서 직접 등록.
+
+| 컬럼 | 타입 | 설명 |
+|---|---|---|
+| `id` | uuid PK | gen_random_uuid() |
+| `institution_id` | uuid NOT NULL FK → institutions.id | 소속 기관 (CASCADE DELETE) |
+| `name` | text NOT NULL | 멤버 이름 (환자 화면엔 마스킹: 송정훈 → 송정*) |
+| `role` | text | 역할 (예: 원장 / 직원 / 위생사, 선택) |
+| `display_order` | integer NOT NULL DEFAULT 0 | 정렬 순서 |
+| `is_active` | boolean NOT NULL DEFAULT true | 활성 여부 |
+| `created_at` | timestamptz | 생성 시각 |
+
+**제약**: UNIQUE(institution_id, name)
+**인덱스**: `idx_clinic_members_institution`
+**RLS**: 직원 SELECT / admin·owner ALL (chairs와 동일 구조)
 
 ---
 

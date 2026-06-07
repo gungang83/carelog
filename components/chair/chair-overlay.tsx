@@ -10,6 +10,7 @@ import {
 } from "@/app/actions/chairs";
 import { PrescriptionPicker } from "@/components/chair/prescription-picker";
 import { ChairPatientSearch } from "@/components/chair/chair-patient-search";
+import { maskName } from "@/lib/mask-name";
 
 export function ChairOverlay() {
   const [mounted, setMounted] = useState(false);
@@ -24,6 +25,7 @@ function OverlayContent() {
     openChairId,
     closeOverlay,
     getChairStatus,
+    getParticipants,
     getTranscribedText,
     getSavedConsultationId,
     startRecording,
@@ -47,6 +49,7 @@ function OverlayContent() {
   const rawStatus = openChairId ? getChairStatus(openChairId) : "idle";
   const transcribedText = openChairId ? getTranscribedText(openChairId) : "";
   const savedId = openChairId ? getSavedConsultationId(openChairId) : null;
+  const participants = openChairId ? getParticipants(openChairId) : [];
 
   // has_records from DB alone (no current session text) → treat as idle in overlay
   const status =
@@ -145,6 +148,7 @@ function OverlayContent() {
           chairId: openChairId,
           content: editText,
           prescriptions,
+          participants,
         });
         if (result.ok) {
           setSavedConsultationId(openChairId, result.consultationId);
@@ -217,6 +221,21 @@ function OverlayContent() {
 
           {/* 본문 */}
           <div className="max-h-[70vh] overflow-y-auto px-5 py-4">
+            {participants.length > 0 && (
+              <div className="mb-4 flex flex-wrap items-center gap-1.5">
+                <span className="text-xs font-medium text-slate-400">참여</span>
+                {participants.map((p) => (
+                  <span
+                    key={p.id}
+                    className="rounded-lg bg-slate-100 px-2 py-0.5 text-xs font-semibold text-slate-600"
+                  >
+                    {maskName(p.name)}
+                    {p.role ? ` · ${p.role}` : ""}
+                  </span>
+                ))}
+              </div>
+            )}
+
             {/* ── idle 상태 ── */}
             {status === "idle" && (
               <div className="flex flex-col gap-3">

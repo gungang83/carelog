@@ -41,6 +41,7 @@ export async function saveChairRecord(params: {
   chairId: string;
   content: string;
   prescriptions?: string[];
+  participants?: { id: string; name: string; role: string | null }[];
 }): Promise<SaveChairRecordResult> {
   const supabase = await createServerSupabaseClient();
   const institutionId = await getMyInstitutionId();
@@ -72,6 +73,7 @@ export async function saveChairRecord(params: {
       chair_id: params.chairId,
       content: sanitized,
       prescriptions: params.prescriptions ?? [],
+      participants: params.participants ?? [],
       status: "draft",
     })
     .select("id")

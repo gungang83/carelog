@@ -3,6 +3,8 @@
 import { useState, useTransition } from "react";
 import { useChairContext } from "@/components/chair/chair-provider";
 import { getOrCreateChairByName } from "@/app/actions/chairs";
+import { maskName } from "@/lib/mask-name";
+import type { ClinicMemberRow, Participant } from "@/lib/types/database";
 
 /**
  * 홈 최상단 히어로 — 진료 기록의 진입점.
@@ -13,29 +15,48 @@ import { getOrCreateChairByName } from "@/app/actions/chairs";
  *
  * 기능은 기존 QuickRecordTrigger와 동일: 체어 칩 선택 또는 직접 입력 → openOverlay.
  */
-export function ConsultHero() {
+export function ConsultHero({ members = [] }: { members?: ClinicMemberRow[] }) {
   const { chairs, openOverlay } = useChairContext();
   const [picking, setPicking] = useState(false);
   const [customName, setCustomName] = useState("");
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [error, setError] = useState("");
   const [isPending, startTransition] = useTransition();
 
-  const handlePickChair = (chairId: string) => {
+  const toggleMember = (id: string) => {
+    setSelectedIds((prev) =>
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id],
+    );
+  };
+
+  // 선택한 멤버를 기록 시점 스냅샷으로 변환
+  const buildParticipants = (): Participant[] =>
+    members
+      .filter((m) => selectedIds.includes(m.id))
+      .map((m) => ({ id: m.id, name: m.name, role: m.role }));
+
+  const resetPicking = () => {
     setPicking(false);
     setCustomName("");
+    setSelectedIds([]);
     setError("");
-    openOverlay(chairId);
+  };
+
+  const handlePickChair = (chairId: string) => {
+    const participants = buildParticipants();
+    resetPicking();
+    openOverlay(chairId, participants);
   };
 
   const handleCustomSubmit = () => {
     if (!customName.trim()) return;
     setError("");
+    const participants = buildParticipants();
     startTransition(async () => {
       const result = await getOrCreateChairByName(customName.trim());
       if (result.ok) {
-        setPicking(false);
-        setCustomName("");
-        openOverlay(result.chairId);
+        resetPicking();
+        openOverlay(result.chairId, participants);
       } else {
         setError(result.message);
       }
@@ -73,14 +94,11 @@ export function ConsultHero() {
         <div className="mt-6 rounded-2xl border border-sky-100 bg-white p-5 shadow-sm">
           <div className="mb-4 flex items-center justify-between">
             <p className="text-sm font-semibold text-slate-800">
-              어느 체어에서 시작할까요?
+              참여자와 체어를 선택하세요
             </p>
             <button
               type="button"
-              onClick={() => {
-                setPicking(false);
-                setError("");
-              }}
+              onClick={resetPicking}
               className="rounded-lg p-1 text-slate-400 hover:bg-slate-100"
               aria-label="취소"
             >
@@ -88,6 +106,47 @@ export function ConsultHero() {
             </button>
           </div>
 
+          {/* 참여자 (선택) */}
+          <div className="mb-4">
+            <p className="mb-2 text-xs font-medium text-slate-500">
+              참여자 <span className="text-slate-400">(선택)</span>
+            </p>
+            {members.length > 0 ? (
+              <div className="flex flex-wrap gap-2">
+                {members.map((m) => {
+                  const active = selectedIds.includes(m.id);
+                  return (
+                    <button
+                      key={m.id}
+                      type="button"
+                      onClick={() => toggleMember(m.id)}
+                      className={`rounded-xl px-3 py-2 text-sm font-medium transition ${
+                        active
+                          ? "bg-sky-600 text-white shadow-sm"
+                          : "border border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
+                      }`}
+                    >
+                      {maskName(m.name)}
+                      {m.role ? (
+                        <span
+                          className={active ? "text-sky-100" : "text-slate-400"}
+                        >
+                          {" · "}
+                          {m.role}
+                        </span>
+                      ) : null}
+                    </button>
+                  );
+                })}
+              </div>
+            ) : (
+              <p className="text-xs text-slate-400">
+                설정 → 멤버 관리에서 등록하면 참여자를 선택할 수 있어요.
+              </p>
+            )}
+          </div>
+
+          <p className="mb-2 text-xs font-medium text-slate-500">체어</p>
           {chairs.length > 0 && (
             <div className="mb-4 flex flex-wrap gap-2">
               {chairs.map((chair) => (

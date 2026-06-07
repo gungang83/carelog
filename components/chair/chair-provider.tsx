@@ -9,7 +9,7 @@ import {
   useRef,
   type ReactNode,
 } from "react";
-import type { ChairRow } from "@/lib/types/database";
+import type { ChairRow, Participant } from "@/lib/types/database";
 import { getUnlinkedChairRecords } from "@/app/actions/chairs";
 
 export type ChairStatus = "idle" | "recording" | "processing" | "has_records";
@@ -25,6 +25,7 @@ type ChairState = {
   openChairId: string | null;
   recording: Record<string, ChairRecordingState>;
   unlinkedCounts: Record<string, number>;
+  participants: Record<string, Participant[]>;
 };
 
 type ChairAction =
@@ -34,6 +35,7 @@ type ChairAction =
   | { type: "SET_TRANSCRIPTION"; chairId: string; text: string }
   | { type: "SET_SAVED_ID"; chairId: string; consultationId: string }
   | { type: "SET_UNLINKED_COUNT"; chairId: string; count: number }
+  | { type: "SET_PARTICIPANTS"; chairId: string; participants: Participant[] }
   | { type: "RESET_CHAIR"; chairId: string };
 
 function getDefaultRecording(): ChairRecordingState {
@@ -88,6 +90,14 @@ function reducer(state: ChairState, action: ChairAction): ChairState {
           [action.chairId]: action.count,
         },
       };
+    case "SET_PARTICIPANTS":
+      return {
+        ...state,
+        participants: {
+          ...state.participants,
+          [action.chairId]: action.participants,
+        },
+      };
     case "RESET_CHAIR":
       return {
         ...state,
@@ -96,6 +106,7 @@ function reducer(state: ChairState, action: ChairAction): ChairState {
           [action.chairId]: getDefaultRecording(),
         },
         unlinkedCounts: { ...state.unlinkedCounts, [action.chairId]: 0 },
+        participants: { ...state.participants, [action.chairId]: [] },
       };
     default:
       return state;
@@ -116,8 +127,9 @@ type NavigatorWithWakeLock = Navigator & {
 type ChairContextValue = {
   chairs: ChairRow[];
   openChairId: string | null;
-  openOverlay: (chairId: string) => void;
+  openOverlay: (chairId: string, participants?: Participant[]) => void;
   closeOverlay: () => void;
+  getParticipants: (chairId: string) => Participant[];
   getChairStatus: (chairId: string) => ChairStatus;
   getTranscribedText: (chairId: string) => string;
   getSavedConsultationId: (chairId: string) => string | null;
@@ -150,6 +162,7 @@ export function ChairProvider({
     openChairId: null,
     recording: {},
     unlinkedCounts: {},
+    participants: {},
   });
 
   // 마운트 시 DB에서 미연결 기록 수 초기 로드 — 다른 기기/계정에서도 체어 상태 동기화
@@ -208,9 +221,16 @@ export function ChairProvider({
     return () => document.removeEventListener("visibilitychange", onVisible);
   }, [acquireWakeLock]);
 
-  const openOverlay = useCallback((chairId: string) => {
-    dispatch({ type: "OPEN_OVERLAY", chairId });
-  }, []);
+  const openOverlay = useCallback(
+    (chairId: string, participants?: Participant[]) => {
+      dispatch({ type: "OPEN_OVERLAY", chairId });
+      // 히어로에서 참여자를 함께 넘긴 경우에만 갱신(기존 호출은 영향 없음)
+      if (participants) {
+        dispatch({ type: "SET_PARTICIPANTS", chairId, participants });
+      }
+    },
+    [],
+  );
 
   const closeOverlay = useCallback(() => {
     dispatch({ type: "CLOSE_OVERLAY" });
@@ -220,6 +240,11 @@ export function ChairProvider({
     (chairId: string): ChairStatus =>
       state.recording[chairId]?.status ?? "idle",
     [state.recording],
+  );
+
+  const getParticipants = useCallback(
+    (chairId: string): Participant[] => state.participants[chairId] ?? [],
+    [state.participants],
   );
 
   const getTranscribedText = useCallback(
@@ -320,6 +345,7 @@ export function ChairProvider({
     openChairId: state.openChairId,
     openOverlay,
     closeOverlay,
+    getParticipants,
     getChairStatus,
     getTranscribedText,
     getSavedConsultationId,

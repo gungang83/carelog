@@ -80,7 +80,9 @@ create table if not exists public.consultation (
   -- 체어 임시 기록 필드 (migration: 20260526000001_chair_quick_record.sql)
   chair_id        uuid references public.chairs(id) on delete set null,
   linked_at       timestamptz,
-  linked_by       uuid references auth.users(id)
+  linked_by       uuid references auth.users(id),
+  -- 상담 참여자 스냅샷 [{id,name,role}] (migration: 20260607000001_clinic_members.sql)
+  participants    jsonb not null default '[]'::jsonb
 );
 
 create index if not exists consultation_patient_id_idx on public.consultation(patient_id);
@@ -107,6 +109,48 @@ create policy "staff reads own institution chairs" on public.chairs
   for select using (institution_id = public.get_my_institution_id());
 drop policy if exists "admin manages chairs" on public.chairs;
 create policy "admin manages chairs" on public.chairs
+  for all
+  using (
+    institution_id = public.get_my_institution_id()
+    and exists (
+      select 1 from public.institution_members
+      where user_id = auth.uid()
+        and institution_id = public.get_my_institution_id()
+        and role in ('admin', 'owner')
+    )
+  )
+  with check (
+    institution_id = public.get_my_institution_id()
+    and exists (
+      select 1 from public.institution_members
+      where user_id = auth.uid()
+        and institution_id = public.get_my_institution_id()
+        and role in ('admin', 'owner')
+    )
+  );
+
+-- ============================================================
+-- 클리닉 멤버 (참여자 디렉터리) — 체어와 동일 패턴, 이름은 추후 EO 이관
+-- ============================================================
+create table if not exists public.clinic_members (
+  id             uuid primary key default gen_random_uuid(),
+  institution_id uuid not null references public.institutions(id) on delete cascade,
+  name           text not null,
+  role           text,
+  display_order  integer not null default 0,
+  is_active      boolean not null default true,
+  created_at     timestamptz not null default now(),
+  unique(institution_id, name)
+);
+
+create index if not exists idx_clinic_members_institution on public.clinic_members(institution_id);
+
+alter table public.clinic_members enable row level security;
+drop policy if exists "staff reads own institution clinic_members" on public.clinic_members;
+create policy "staff reads own institution clinic_members" on public.clinic_members
+  for select using (institution_id = public.get_my_institution_id());
+drop policy if exists "admin manages clinic_members" on public.clinic_members;
+create policy "admin manages clinic_members" on public.clinic_members
   for all
   using (
     institution_id = public.get_my_institution_id()
