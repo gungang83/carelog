@@ -82,7 +82,7 @@
 | 브리지 계약 1차 초안 | EO→CL 마스터(읽기)·CL→EO 환자 이벤트(`feedback.submitted`/`consent.updated`/`engagement.signal`) 공통 봉투·payload 초안. EO 소유 영역·헤임달 인증은 TBD 표기 |
 | Living Consult 온보딩 기획 (카드229·달리) | `docs/living-consult-onboarding.md` — 진료 중 진입 부담↓: ①환자 설명화면+빠른녹음 버튼 ②의료진 멘트. **다온 결정**: 모니터=2기기+Realtime 읽기전용 `/present/[chairId]`, 동의='녹음·기록 동의'를 진료시점 캡처(개인정보 동의와 분리·거절도 기록), 기기=2기기 기본+1기기 폴백. 카피/멘트는 달리 브리프 확정안으로 대체 예정 |
 | 제품 비전·정체성 SSOT 확정 (대표님 정의) | `docs/product-vision.md` 신규 — **환자 전용 아님**. 세 기둥: ①의료기관 상담 기록·시각화(STT/AI/상담보드→의무기록, B2B) ②연결고리(상담·사진·처방내역 환자 전달) ③환자 통합 보관·소통·생애주기 건강관리(B2C). README 첫 정의 교체 + project_status 상단 앵커 + 문서표 링크 |
-| 빠른 녹음 설명화면 **구현** (Living Consult MVP) | `app/present/[chairId]` 신규 라우트(로그인 불요) + `components/chair/present-screen.tsx` — 상태머신(설명→기록중→완료/거절), 기록 경과 타이머, sky/slate 디자인. 미들웨어 `/present/` 공개경로 추가. **빌드 통과**(placeholder env), 4개 상태 스크린샷 확인. ⏳ 실제 녹음/AI변환(006 파이프라인)·직원기기↔모니터 Realtime 동기화·동의 컬럼 저장은 후속 |
+| 빠른 녹음 설명화면 **구현** (Living Consult MVP) | `app/present/[chairId]` 신규 라우트(로그인 불요) + `components/chair/present-screen.tsx`. 흐름: 설명→선택(체어·담당의사·담당자, 선택 안 해도 진행)→**"같이 이야기 나누고 있어요"**(녹음 표현 X·sky 톤)→**상담 요약 시각화**(처방/다음방문 등)→**진료기록 받아보기 유도**. 메인카피 "기록으로 남겨서 저희가 전달해드릴게요", '삭제' 표현 배제(병원 보관). 미들웨어 `/present/` 공개경로. **빌드 통과**, 5개 상태 스크린샷 확인. ⏳ 실제 음성 듣기·AI 요약(006 파이프라인)·Realtime 동기화·동의 컬럼 저장은 후속 |
 
 > ⚠️ **세션 환경 한계**: 이 세션은 `carelog` 단독 클론(`../eo`·`../iris` 미존재) + GitHub MCP 범위 `gungang83/carelog` 한정. 카드26 지시1(EO 암호화·RRN 처리 이식)·지시2(EO 기존 피드백 기획 대조)는 **EO 소스 접근 확보 후** 수행 — 추측 산출물 배제.
 >
