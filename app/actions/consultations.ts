@@ -9,7 +9,6 @@ import { getMyInstitutionId } from "@/lib/auth/institution";
 import { resolveResidentMatchHashForPatient } from "@/app/actions/patients";
 import { revalidatePath } from "next/cache";
 import { sanitizeRichHtml } from "@/lib/sanitize-html";
-import { redirect } from "next/navigation";
 import { sendPushToInstitution } from "@/app/actions/push";
 import { sendPushToPatient } from "@/app/actions/patient-portal";
 import { createAdminSupabaseClient } from "@/lib/supabase/admin";
@@ -88,7 +87,7 @@ export async function saveConsultation(
   patientId: string,
   content: string,
   formData: FormData,
-): Promise<{ ok: false; message: string } | never> {
+): Promise<{ ok: true; mode: "draft" | "save" | "send" } | { ok: false; message: string }> {
   const trimmed = sanitizeRichHtml(content.trim());
   if (!trimmed) {
     return { ok: false, message: "상담 내용을 입력해 주세요." };
@@ -191,9 +190,11 @@ export async function saveConsultation(
     return { ok: false, message };
   }
 
-  // redirect()는 항상 try-catch 밖에서 호출 (NEXT_REDIRECT 에러가 catch에 잡히지 않도록)
+  // 성공: redirect 대신 결과를 반환해 클라이언트가 명시적 피드백(토스트)을 보여준다.
   revalidatePath(`/patients/${patientId}`);
-  redirect(`/patients/${patientId}`);
+  const mode: "draft" | "save" | "send" =
+    submitMode === "draft" ? "draft" : submitMode === "send" ? "send" : "save";
+  return { ok: true, mode };
 }
 
 // ─── 임시저장 수정 ────────────────────────────────────────────────────────────

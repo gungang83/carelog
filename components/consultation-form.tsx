@@ -1,18 +1,20 @@
 "use client";
 
 import { useMemo, useRef, useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import { saveConsultation } from "@/app/actions/consultations";
 import { CARELOG_STATION_STORAGE_KEY } from "@/lib/station-storage";
-import { isRedirectError } from "next/dist/client/components/redirect-error";
 import { RichTextEditor, type RichTextEditorHandle } from "@/components/rich-text-editor";
 import { VoiceRecorder } from "@/components/consultation/voice-recorder";
 
 type Props = { patientId: string; patientName: string };
 
 export function ConsultationForm({ patientId, patientName }: Props) {
+  const router = useRouter();
   const [content, setContent] = useState("");
   const [message, setMessage] = useState<string | null>(null);
   const editorRef = useRef<RichTextEditorHandle>(null);
+  const formRef = useRef<HTMLFormElement>(null);
   const [ok, setOk] = useState(false);
   const [pending, startTransition] = useTransition();
   const [selectedProducts, setSelectedProducts] = useState<string[]>([]);
@@ -40,6 +42,7 @@ export function ConsultationForm({ patientId, patientName }: Props) {
 
   return (
     <form
+      ref={formRef}
       className="flex flex-col gap-6"
       action={(fd) => {
         setMessage(null);
@@ -71,13 +74,27 @@ export function ConsultationForm({ patientId, patientName }: Props) {
               setMessage(res.message);
               return;
             }
-          } catch (err) {
-            if (isRedirectError(err)) {
-              setContent("");
-              setSelectedProducts([]);
-              return;
-            }
-            throw err;
+            // 성공 — 명시적 피드백 + 폼 초기화 + 타임라인 갱신
+            setOk(true);
+            setMessage(
+              res.mode === "send"
+                ? "저장 후 환자에게 전송했어요 ✓"
+                : res.mode === "draft"
+                  ? "임시 저장했어요 ✓"
+                  : "상담을 저장했어요 ✓",
+            );
+            setContent("");
+            setSelectedProducts([]);
+            editorRef.current?.clear();
+            formRef.current?.reset();
+            router.refresh();
+            window.setTimeout(() => {
+              setMessage(null);
+              setOk(false);
+            }, 4000);
+          } catch {
+            setOk(false);
+            setMessage("저장에 실패했어요. 잠시 후 다시 시도해 주세요.");
           }
         });
       }}

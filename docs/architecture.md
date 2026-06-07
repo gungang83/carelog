@@ -238,6 +238,7 @@ ConsultationForm (Client)
     → getMyInstitutionId() → institution_id 포함 INSERT
     → content(HTML), image_urls([] — 이미지는 HTML에 포함), prescriptions, station_name 저장
     → revalidatePath('/patients/[id]')
+    → 성공 시 { ok, mode } 반환 (redirect 안 함) → 폼이 토스트 표시 + clear + router.refresh()
 ```
 
 **이미지 저장 방식 변경 이력**

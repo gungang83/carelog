@@ -135,6 +135,7 @@ const BTN_ACTIVE =
 // ── Component ─────────────────────────────────────────────────
 export type RichTextEditorHandle = {
   insertText: (text: string) => void;
+  clear: () => void;
 };
 
 type Props = {
@@ -162,6 +163,9 @@ function RichTextEditor({ value, onChange, placeholder }, ref) {
         .map((line) => `<p>${line}</p>`)
         .join("");
       editorRef.current.chain().focus().insertContent(html).run();
+    },
+    clear() {
+      editorRef.current?.commands.clearContent();
     },
   }));
 
