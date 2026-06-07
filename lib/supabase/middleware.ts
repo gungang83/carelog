@@ -38,6 +38,7 @@ export async function updateSession(request: NextRequest) {
     pathname.startsWith("/invite") ||
     pathname.startsWith("/auth/callback") ||
     pathname.startsWith("/api/auth/sso") || // EO SSO 브릿지 — 자체 토큰 검증
+    pathname.startsWith("/present/") || // 체어 모니터 환자 안내 화면 — 로그인 불요(표시 전용)
     pathname.startsWith("/p/") ||
     pathname.startsWith("/portal/"); // 환자 포털 전체 — 각 페이지가 자체 세션 검증
 
