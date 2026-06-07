@@ -78,6 +78,7 @@
 |---|---|
 | 미결 6문항 회신 반영 | **확정**: 클리닉·직원 마스터=EO 이관(Q1) / 환자 SSOT=Carelog(Q2) / 피드백 직원식별 O(Q4) / EO에 `sso-token`+`workspace_carelog_links` 기존재→재사용·중복금지(Q6). **방향확정·세부TBD**: 전송 관문=헤임달(카드219) 일원화·`sso-token` 재사용(Q5). **미결**: 암호화 lib/KMS·키공유(Q3) |
 | 브리지 계약 1차 초안 | EO→CL 마스터(읽기)·CL→EO 환자 이벤트(`feedback.submitted`/`consent.updated`/`engagement.signal`) 공통 봉투·payload 초안. EO 소유 영역·헤임달 인증은 TBD 표기 |
+| Living Consult 온보딩 기획 (카드229·달리) | `docs/living-consult-onboarding.md` — 진료 중 진입 부담↓: ①환자 설명화면+빠른녹음 버튼 ②의료진 멘트. **다온 결정**: 모니터=2기기+Realtime 읽기전용 `/present/[chairId]`, 동의='녹음·기록 동의'를 진료시점 캡처(개인정보 동의와 분리·거절도 기록), 기기=2기기 기본+1기기 폴백. 카피/멘트는 달리 브리프 확정안으로 대체 예정 |
 
 > ⚠️ **세션 환경 한계**: 이 세션은 `carelog` 단독 클론(`../eo`·`../iris` 미존재) + GitHub MCP 범위 `gungang83/carelog` 한정. 카드26 지시1(EO 암호화·RRN 처리 이식)·지시2(EO 기존 피드백 기획 대조)는 **EO 소스 접근 확보 후** 수행 — 추측 산출물 배제.
 >
