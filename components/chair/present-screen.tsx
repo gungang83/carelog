@@ -59,9 +59,8 @@ export default function PresentScreen({ chairId }: { chairId: string }) {
         {phase === "idle" && (
           <Card>
             <Brand chair={chair} doctor={doctor} staff={staff} />
-            <h1 className="mt-8 text-center text-3xl font-bold leading-snug tracking-tight text-slate-900 sm:text-[2.6rem]">
-              오늘 진료, 기록으로 남겨서
-              <br />
+            <h1 className="mt-8 text-balance text-center text-[1.7rem] font-bold leading-snug tracking-tight text-slate-900 sm:text-[2rem]">
+              오늘 진료, 기록으로 남겨서{" "}
               <span className="text-sky-600">저희가 전달해드릴게요</span>
             </h1>
             <ul className="mx-auto mt-10 max-w-sm space-y-4">
@@ -226,7 +225,7 @@ export default function PresentScreen({ chairId }: { chairId: string }) {
 
 function Card({ children }: { children: React.ReactNode }) {
   return (
-    <div className="rounded-3xl border border-slate-100 bg-white/90 p-8 shadow-xl shadow-sky-100/50 backdrop-blur sm:p-12">
+    <div className="break-keep rounded-3xl border border-slate-100 bg-white/90 p-8 shadow-xl shadow-sky-100/50 backdrop-blur sm:p-12">
       {children}
     </div>
   );
