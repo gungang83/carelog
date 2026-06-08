@@ -77,8 +77,8 @@ export function ConsultHero({ members = [] }: { members?: ClinicMemberRow[] }) {
         <span className="text-sky-600">환자에게 전달해요</span>
       </h1>
       <p className="mt-2.5 max-w-md text-[15px] leading-relaxed text-slate-500 break-keep">
-        체어를 고르면 바로 상담을 기록합니다. 녹음 내용은 AI가 정리해
-        드리고, 검토 후 환자에게 진료기록으로 보낼 수 있어요.
+        체어를 고르면 바로 상담을 기록합니다. 녹음 내용은 AI가 정리하고,
+        검토 후 보내면 환자가 직접 받아 보관해요.
       </p>
 
       {!picking ? (

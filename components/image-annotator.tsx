@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 
-type Tool = "pen" | "line" | "arrow" | "rect" | "text" | "eraser";
+type Tool = "pen" | "line" | "arrow" | "rect" | "text" | "eraser" | "pan";
 
 const COLORS = [
   { value: "#dc2626", label: "빨강" },
@@ -23,6 +23,7 @@ const TOOL_LABELS: Record<Tool, string> = {
   rect: "사각형",
   text: "텍스트",
   eraser: "지우개",
+  pan: "✋ 이동",
 };
 
 type TextDraft = {
@@ -49,10 +50,42 @@ export function ImageAnnotator({ file, onClose, onSave }: Props) {
   const [draft, setDraft] = useState<TextDraft | null>(null);
   const [canUndo, setCanUndo] = useState(false);
 
+  // 줌/팬 (CSS transform — 그리기 좌표는 getBoundingClientRect로 실시간 계산되어 그대로 유지)
+  const [zoom, setZoom] = useState(1);
+  const [pan, setPan] = useState({ x: 0, y: 0 });
+  const panning = useRef(false);
+  const panStart = useRef({ cx: 0, cy: 0, px: 0, py: 0 });
+  const pinch = useRef<{ d0: number; z0: number } | null>(null);
+
   const drawing = useRef(false);
   const startPt = useRef({ x: 0, y: 0 });
   const snap = useRef<ImageData | null>(null);
   const history = useRef<ImageData[]>([]);
+
+  const clampZoom = (z: number) => Math.min(Math.max(z, 1), 5);
+  const zoomBy = (factor: number) =>
+    setZoom((z) => {
+      const nz = clampZoom(z * factor);
+      if (nz === 1) setPan({ x: 0, y: 0 });
+      return nz;
+    });
+  const resetZoom = () => {
+    setZoom(1);
+    setPan({ x: 0, y: 0 });
+  };
+  const startPan = (cx: number, cy: number) => {
+    panning.current = true;
+    panStart.current = { cx, cy, px: pan.x, py: pan.y };
+  };
+  const movePan = (cx: number, cy: number) => {
+    if (!panning.current) return;
+    setPan({
+      x: panStart.current.px + (cx - panStart.current.cx),
+      y: panStart.current.py + (cy - panStart.current.cy),
+    });
+  };
+  const touchDist = (t: React.TouchList) =>
+    Math.hypot(t[0].clientX - t[1].clientX, t[0].clientY - t[1].clientY);
 
   // ── load image ───────────────────────────────────────────────
   useEffect(() => {
@@ -231,6 +264,22 @@ export function ImageAnnotator({ file, onClose, onSave }: Props) {
     return () => window.removeEventListener("keydown", fn);
   }, [undo]);
 
+  // 휠 줌 (passive:false 네이티브 리스너 — preventDefault 위해)
+  useEffect(() => {
+    const el = wrapRef.current;
+    if (!el) return;
+    const onWheel = (e: WheelEvent) => {
+      e.preventDefault();
+      setZoom((z) => {
+        const nz = clampZoom(z * (e.deltaY < 0 ? 1.12 : 0.89));
+        if (nz === 1) setPan({ x: 0, y: 0 });
+        return nz;
+      });
+    };
+    el.addEventListener("wheel", onWheel, { passive: false });
+    return () => el.removeEventListener("wheel", onWheel);
+  }, []);
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/80 p-4">
       <div
@@ -269,7 +318,7 @@ export function ImageAnnotator({ file, onClose, onSave }: Props) {
         {/* toolbar */}
         <div className="flex shrink-0 flex-wrap items-center gap-x-4 gap-y-2 border-b border-sky-100 bg-slate-50 px-4 py-2">
           <div className="flex flex-wrap gap-1">
-            {(["pen", "line", "arrow", "rect", "text", "eraser"] as Tool[]).map((t) => (
+            {(["pen", "line", "arrow", "rect", "text", "eraser", "pan"] as Tool[]).map((t) => (
               <button
                 key={t}
                 type="button"
@@ -319,6 +368,35 @@ export function ImageAnnotator({ file, onClose, onSave }: Props) {
               </button>
             ))}
           </div>
+
+          <span className="h-4 w-px bg-slate-200" />
+
+          {/* 줌 컨트롤 (버튼/휠/핀치, ✋이동 툴로 팬) */}
+          <div className="flex items-center gap-1">
+            <button
+              type="button"
+              onClick={() => zoomBy(0.8)}
+              aria-label="축소"
+              className="flex h-7 w-7 items-center justify-center rounded text-base font-bold text-slate-600 hover:bg-slate-100"
+            >
+              −
+            </button>
+            <button
+              type="button"
+              onClick={resetZoom}
+              className="min-w-12 rounded px-1.5 py-1 text-xs font-semibold text-slate-600 hover:bg-slate-100"
+            >
+              {Math.round(zoom * 100)}%
+            </button>
+            <button
+              type="button"
+              onClick={() => zoomBy(1.25)}
+              aria-label="확대"
+              className="flex h-7 w-7 items-center justify-center rounded text-base font-bold text-slate-600 hover:bg-slate-100"
+            >
+              ＋
+            </button>
+          </div>
         </div>
 
         {/* canvas area */}
@@ -332,22 +410,74 @@ export function ImageAnnotator({ file, onClose, onSave }: Props) {
             style={{
               maxHeight: "calc(95vh - 148px)",
               maxWidth: "100%",
-              cursor: tool === "text" ? "text" : "crosshair",
+              cursor:
+                tool === "pan"
+                  ? "grab"
+                  : tool === "text"
+                    ? "text"
+                    : "crosshair",
               touchAction: "none",
+              transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`,
             }}
-            onMouseDown={(e) => handleStart(e.clientX, e.clientY)}
-            onMouseMove={(e) => handleMove(e.clientX, e.clientY)}
-            onMouseUp={handleEnd}
-            onMouseLeave={handleEnd}
+            onMouseDown={(e) => {
+              if (tool === "pan") return startPan(e.clientX, e.clientY);
+              handleStart(e.clientX, e.clientY);
+            }}
+            onMouseMove={(e) => {
+              if (panning.current) return movePan(e.clientX, e.clientY);
+              handleMove(e.clientX, e.clientY);
+            }}
+            onMouseUp={() => {
+              if (panning.current) {
+                panning.current = false;
+                return;
+              }
+              handleEnd();
+            }}
+            onMouseLeave={() => {
+              if (panning.current) {
+                panning.current = false;
+                return;
+              }
+              handleEnd();
+            }}
             onTouchStart={(e) => {
               e.preventDefault();
+              if (e.touches.length === 2) {
+                pinch.current = { d0: touchDist(e.touches), z0: zoom };
+                return;
+              }
+              if (tool === "pan") {
+                return startPan(e.touches[0].clientX, e.touches[0].clientY);
+              }
               handleStart(e.touches[0].clientX, e.touches[0].clientY);
             }}
             onTouchMove={(e) => {
               e.preventDefault();
+              if (pinch.current && e.touches.length === 2) {
+                const nz = clampZoom(
+                  pinch.current.z0 * (touchDist(e.touches) / pinch.current.d0),
+                );
+                setZoom(nz);
+                if (nz === 1) setPan({ x: 0, y: 0 });
+                return;
+              }
+              if (panning.current) {
+                return movePan(e.touches[0].clientX, e.touches[0].clientY);
+              }
               handleMove(e.touches[0].clientX, e.touches[0].clientY);
             }}
-            onTouchEnd={handleEnd}
+            onTouchEnd={() => {
+              if (pinch.current) {
+                pinch.current = null;
+                return;
+              }
+              if (panning.current) {
+                panning.current = false;
+                return;
+              }
+              handleEnd();
+            }}
           />
 
           {draft && (

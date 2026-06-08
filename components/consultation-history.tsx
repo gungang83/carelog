@@ -12,6 +12,7 @@ import {
   unlinkChairRecord,
   relinkChairRecord,
 } from "@/app/actions/chairs";
+import { ZoomableImage } from "@/components/zoomable-image";
 import { RichTextEditor, type RichTextEditorHandle } from "@/components/rich-text-editor";
 
 export type ConsultationHistoryItem = {
@@ -510,7 +511,7 @@ export function ConsultationHistory({ consultations, patientId }: Props) {
           onClick={closeLightbox}
         >
           <div
-            className="relative max-h-[90vh] w-full max-w-4xl rounded-2xl border border-sky-100 bg-white p-3 shadow-2xl"
+            className="relative h-[85vh] max-h-[85vh] w-full max-w-4xl rounded-2xl border border-sky-100 bg-white p-3 shadow-2xl"
             onClick={(e) => e.stopPropagation()}
           >
             <button
@@ -520,8 +521,7 @@ export function ConsultationHistory({ consultations, patientId }: Props) {
             >
               닫기
             </button>
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={lightboxUrl} alt="" className="mx-auto max-h-[80vh] w-auto max-w-full rounded-xl object-contain" />
+            <ZoomableImage src={lightboxUrl} />
           </div>
         </div>
       ) : null}
