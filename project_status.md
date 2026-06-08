@@ -354,7 +354,7 @@
 | **chair_quick_record DB 마이그레이션** | 높음 | ⏳ 20260526000001_chair_quick_record.sql Supabase에 적용 필요 |
 | **activity_log_patient_sync 마이그레이션** | — | ✅ 20260601000001 적용 완료 (세션 13) — 최근 활동 환자 연결 동기화 + 기존 줄바꿈 변환 |
 | Vercel Preview 환경 VAPID 미설정 | 낮음 | dev/Preview 빌드는 코드 가드로 통과하나 Preview에서 푸시는 비활성. 필요 시 Vercel Preview 스코프에 VAPID_* 추가 |
-| **EO 연동 마이그레이션 적용** | 높음 | ⏳ `20260608000001_eo_integration.sql` Supabase 적용 필요 (clinic_members EO 컬럼 + consultation 작성자 컬럼) |
+| **EO 연동 마이그레이션 적용** | — | ✅ `20260608000001_eo_integration.sql` Supabase 적용 완료 (세션 17) — clinic_members EO 컬럼 + consultation 작성자 컬럼 |
 | **`CARELOG_GATEWAY_SECRET` 양쪽 Vercel 등록** | 높음 | ⏳ EO·Carelog 양쪽에 동일 시크릿 등록 전까지 게이트웨이 동기화는 config 사유로 조용히 스킵됨 |
 
 ---
