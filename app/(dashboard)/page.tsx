@@ -23,7 +23,7 @@ export default async function Home() {
           Carelog
         </h1>
         <p className="mt-2 max-w-xl text-slate-600">
-          환자를 검색하거나 새로 등록한 뒤, 상담 내용과 이미지를 기록합니다.
+          병원에서 나눈 진료 대화를 기록하면, 환자가 직접 받아 보관해요.
         </p>
       </header>
 
