@@ -27,6 +27,10 @@ create table if not exists public.institution_members (
   role           text not null default 'staff',
   invited_by     uuid references auth.users(id),
   joined_at      timestamptz not null default now(),
+  is_active      boolean not null default true,         -- (migration: 20260514000001_admin_panel.sql)
+  -- EO SSO 작성자 귀속 (migration: 20260608000001_eo_integration.sql)
+  eo_employee_id uuid,                                  -- SSO JWT employee_id(공용계정이면 null)
+  display_name   text,                                  -- SSO JWT name(작성자 표시명)
   unique(institution_id, user_id)
 );
 create index if not exists idx_inst_members_user on public.institution_members(user_id);
@@ -82,7 +86,10 @@ create table if not exists public.consultation (
   linked_at       timestamptz,
   linked_by       uuid references auth.users(id),
   -- 상담 참여자 스냅샷 [{id,name,role}] (migration: 20260607000001_clinic_members.sql)
-  participants    jsonb not null default '[]'::jsonb
+  participants    jsonb not null default '[]'::jsonb,
+  -- 작성자 귀속 (migration: 20260608000001_eo_integration.sql) — 상담은 Carelog 내부에만 저장
+  author_employee_id uuid,    -- 작성자 EO 직원 id(있으면)
+  author_name        text     -- 작성자 표시명(공용계정 포함)
 );
 
 create index if not exists consultation_patient_id_idx on public.consultation(patient_id);
@@ -140,10 +147,22 @@ create table if not exists public.clinic_members (
   display_order  integer not null default 0,
   is_active      boolean not null default true,
   created_at     timestamptz not null default now(),
-  unique(institution_id, name)
+  -- EO 마스터 캐시 (migration: 20260608000001_eo_integration.sql)
+  eo_employee_id uuid,                                  -- EO members[].id(upsert 키, 불변)
+  email          text,
+  eo_role        text,                                  -- clinic_admin | manager | staff
+  position       text,
+  source         text not null default 'manual' check (source in ('manual', 'eo')),
+  synced_at      timestamptz
+  -- 기존 unique(institution_id, name)는 EO 동명이인 대비 부분 unique로 완화(아래 인덱스)
 );
 
 create index if not exists idx_clinic_members_institution on public.clinic_members(institution_id);
+-- 수동 추가분만 이름 중복 방지(EO source는 eo_employee_id로 유일성 보장)
+create unique index if not exists clinic_members_manual_name_uidx
+  on public.clinic_members(institution_id, name) where source = 'manual';
+create unique index if not exists clinic_members_eo_employee_uidx
+  on public.clinic_members(institution_id, eo_employee_id) where eo_employee_id is not null;
 
 alter table public.clinic_members enable row level security;
 drop policy if exists "staff reads own institution clinic_members" on public.clinic_members;

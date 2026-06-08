@@ -2,7 +2,7 @@
 
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { createAdminSupabaseClient } from "@/lib/supabase/admin";
-import { getMyInstitutionId } from "@/lib/auth/institution";
+import { getMyInstitutionId, getMyAuthorInfo } from "@/lib/auth/institution";
 import { revalidatePath } from "next/cache";
 import { sanitizeRichHtml, ensureHtml } from "@/lib/sanitize-html";
 import type { ChairRow } from "@/lib/types/database";
@@ -65,6 +65,9 @@ export async function saveChairRecord(params: {
   // 전사 평문은 줄바꿈 보존을 위해 HTML로 정규화 후 sanitize
   const sanitized = sanitizeRichHtml(ensureHtml(params.content));
 
+  // 작성자 귀속(계약 §2.3) — 체어 즉시기록도 작성자를 남긴다.
+  const { author_employee_id, author_name } = await getMyAuthorInfo();
+
   const { data: consultation, error } = await supabase
     .from("consultation")
     .insert({
@@ -75,6 +78,8 @@ export async function saveChairRecord(params: {
       prescriptions: params.prescriptions ?? [],
       participants: params.participants ?? [],
       status: "draft",
+      author_employee_id,
+      author_name,
     })
     .select("id")
     .single();

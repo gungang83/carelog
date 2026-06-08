@@ -5,7 +5,7 @@ import {
   consultationBucket,
   consultationTable,
 } from "@/lib/supabase/config";
-import { getMyInstitutionId } from "@/lib/auth/institution";
+import { getMyInstitutionId, getMyAuthorInfo } from "@/lib/auth/institution";
 import { resolveResidentMatchHashForPatient } from "@/app/actions/patients";
 import { revalidatePath } from "next/cache";
 import { sanitizeRichHtml } from "@/lib/sanitize-html";
@@ -143,9 +143,12 @@ export async function saveConsultation(
       image_urls.push(pub.publicUrl);
     }
 
+    // 작성자 귀속(계약 §2.3) — 세션 멤버의 eo_employee_id·표시명을 기록.
+    const { author_employee_id, author_name } = await getMyAuthorInfo();
+
     const { data: inserted, error } = await supabase
       .from(consultationTable)
-      .insert({ patient_id: patientId, institution_id: institutionId, content: trimmed, image_urls, prescriptions, station_name, status })
+      .insert({ patient_id: patientId, institution_id: institutionId, content: trimmed, image_urls, prescriptions, station_name, status, author_employee_id, author_name })
       .select("id")
       .single();
 
