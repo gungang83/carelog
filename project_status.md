@@ -2,7 +2,7 @@
 
 > **제품 정체성(SSOT)**: Carelog는 **환자 전용 서비스가 아니다.** 의료기관 상담 기록(B2B) ↔ 환자 평생 보관·생애주기 건강관리(B2C)를 잇는 **연결고리**. 상세: [docs/product-vision.md](docs/product-vision.md)
 
-**최종 업데이트**: 2026-06-07 (세션 15)
+**최종 업데이트**: 2026-06-08 (세션 16)
 **현재 버전**: main 브랜치
 
 ---
@@ -54,6 +54,20 @@
 | 체어 즉시 기록 (Chair Quick Record) | ✅ 완료 | 체어 선택 → 즉시 녹음 → AI 변환 → 임시 저장 → 환자 연결 |
 | 미연결 기록 관리 (홈 인라인) | ✅ 완료 | 전체 체어 통합 조회 · 인라인 RichTextEditor 편집 · 처방 선택 · 환자 연결 |
 | 체어 기록 재연결/해제 | ✅ 완료 | 환자 상담 기록에서 다른 환자로 재연결 또는 미연결 상태로 되돌리기 |
+| 참여자(원장·직원·담당자) 선택 | ✅ 완료 | 녹음 시작 시 참여자 선택 + 마스킹, `clinic_members` 디렉터리 + `consultation.participants` 스냅샷. 마이그레이션 적용 완료 |
+| 이미지 줌/팬 | ✅ 완료 | 보기 라이트박스(`ZoomableImage`) + 주석 화면(CSS transform 줌·팬). 휠/버튼/핀치/드래그/더블클릭, 외부 라이브러리 없음 |
+
+---
+
+## 2026-06-08 세션 16 작업 내용 (완료분 배포 + EO 계약 카드226 수신)
+
+| 작업 | 결과 |
+|---|---|
+| 완료분 프로덕션 배포 | 참여자 선택 + 이미지 줌/팬(#2) + 홈 히어로 카피(#1) — `clinic_members` 마이그레이션 Supabase 적용 확인 후 `main` 머지·배포. 카드 235(EO 연동)와 분리해 완료분 우선 배포(완료분 방치 금지) |
+| EO↔Carelog 연동 계약 수신 (카드226) | 테오 작성 `specs/016-carelog-integration/contracts/eo-gateway-and-sso.md` 전문 확보(EO 레포 자산, 빌 경유 전달). **확정 사항**: ① 마스터 게이트웨이 = Carelog가 `GET /api/gateway/carelog/master`로 pull(헤더 `x-gateway-secret: CARELOG_GATEWAY_SECRET`, 5~15분 폴링) → `clinic_members` 캐시 upsert(키=`employee_id`). ② SSO = 라이브, 클레임 확장(`employee_id`·`name`·`account_type`·`eo_role`·`scope`) → 작성자 귀속 키 저장 보정. ③ 상담 = **EO API 없음**(의료데이터 게이트웨이 금지), SSO 세션 후 Carelog 내부 저장·열람, 작성자만 `employee_id`/`email` 귀속 |
+| 카드 235 착수 (다음) | ① `clinic_members` 재활용 캐시(eo_employee_id·email·eo_role 컬럼 + EO-source 동기화) ② `/api/auth/sso` 확장 클레임 수용 + `institution_members.eo_employee_id` 저장 ③ `consultation` 작성자 컬럼(author_employee_id·author_name) + 저장 시 귀속 |
+
+> 📌 사전 추측 정정(빌): 게이트웨이는 `sso-token` 재사용 ❌ → 별도 서버-서버 시크릿 `x-gateway-secret`. 상담 EO API 구현 ❌(만들면 계약 위반).
 
 ---
 
@@ -84,7 +98,7 @@
 | 제품 비전·정체성 SSOT 확정 (대표님 정의) | `docs/product-vision.md` 신규 — **환자 전용 아님**. 세 기둥: ①의료기관 상담 기록·시각화(STT/AI/상담보드→의무기록, B2B) ②연결고리(상담·사진·처방내역 환자 전달) ③환자 통합 보관·소통·생애주기 건강관리(B2C). README 첫 정의 교체 + project_status 상단 앵커 + 문서표 링크 |
 | 빠른 녹음 설명화면 **구현** (Living Consult MVP) | `app/present/[chairId]` 신규 라우트(로그인 불요) + `components/chair/present-screen.tsx`. 흐름: 설명→선택(체어·담당의사·담당자, 선택 안 해도 진행)→**"같이 이야기 나누고 있어요"**(녹음 표현 X·sky 톤)→**상담 요약 시각화**(처방/다음방문 등)→**진료기록 받아보기 유도**. 메인카피 "기록으로 남겨서 저희가 전달해드릴게요", '삭제' 표현 배제(병원 보관). 미들웨어 `/present/` 공개경로. **빌드 통과**, 5개 상태 스크린샷 확인. **프로덕션 배포 완료**(carelog-tau.vercel.app/present/A). ⏳ 실제 음성 듣기·AI 요약(006 파이프라인)·Realtime 동기화·동의 컬럼 저장은 후속 |
 | 홈 최상단 히어로 전환 (Living Consult 톤) | 기존 `QuickRecordTrigger`(빠른 기록 시작 버튼) → **`components/chair/consult-hero.tsx`**(`ConsultHero`)로 대체. 홈 최상단에 "오늘 진료, 기록으로 남겨서 환자에게 전달해요" 헤드라인 + "상담 기록 시작" CTA, 그 아래 대시보드(미연결 기록·환자검색·최근활동) 펼침. **기능 동일**(체어 칩/직접입력 → `openOverlay`). 기존 plain 헤더 제거, `quick-record-trigger.tsx` 삭제, architecture.md 갱신. **프로덕션 배포 완료** |
-| 참여자(원장·직원·담당자) 선택 — 멤버 디렉터리 | ⚠️ **DB 마이그레이션 필요(미적용)**. 녹음 시작 시 참여자 선택 + 마스킹(송정훈→송정*). 신규: `clinic_members` 테이블(체어 패턴) + `consultation.participants` jsonb 스냅샷. 액션 `clinic-members.ts`(getClinicMembers·upsertClinicMember), 설정 '멤버 관리' UI, 히어로 참여자 칩, `saveChairRecord`에 participants 저장, 오버레이 참여자 표시. 이름은 추후 EO 이관 예정. **마이그레이션 `20260607000001_clinic_members.sql` Supabase 적용 후 배포 예정**(미적용 시 getClinicMembers는 []로 graceful). 빌드 통과·프리뷰 확인 |
+| 참여자(원장·직원·담당자) 선택 — 멤버 디렉터리 | ✅ **마이그레이션 적용·배포 완료(세션 16)**. 녹음 시작 시 참여자 선택 + 마스킹(송정훈→송정*). 신규: `clinic_members` 테이블(체어 패턴) + `consultation.participants` jsonb 스냅샷. 액션 `clinic-members.ts`(getClinicMembers·upsertClinicMember), 설정 '멤버 관리' UI, 히어로 참여자 칩, `saveChairRecord`에 participants 저장, 오버레이 참여자 표시. 이름은 추후 EO 이관 예정. 마이그레이션 `20260607000001_clinic_members.sql` Supabase 적용 완료. 빌드 통과 |
 | 홈 히어로 카피 미세조정 (#1) | 서브카피 "…검토 후 보내면 **환자가 직접 받아 보관해요**"로 환자가치 강조(이전 다온 문구 반영). 88915aa(zen-cerf)는 옛 헤더 수정이라 무효·미병합 |
 | 이미지 줌/팬 (#2) | **보기 라이트박스**(`consultation-history`): 재사용 `ZoomableImage`(휠/버튼/핀치/드래그/더블클릭) 적용. **주석 화면**(`image-annotator`): CSS transform 줌(그리기 좌표 보존) + ✋이동 툴(팬) + 핀치 + 휠 + 줌버튼. 외부 라이브러리 없음. 빌드 통과·프리뷰 확인 |
 
