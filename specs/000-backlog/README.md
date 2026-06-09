@@ -11,7 +11,8 @@
 | 2026-05-30 | 시니어 개발·배포 | — | 멀티 에이전트 플레이북 템플릿 이식 + merge=ours 보호 완료. 역할 라벨(이름) 확정 시 부록 B로 CLAUDE.local.md 생성 필요. | 대기 |
 | 2026-05-31 | 다온(Carelog) | 실비(EO 기획) | 디자인·UX 공통화 제안서 전달 (`proposal-eo-design-system.md`). EO를 허브로 한 3제품 디자인 시스템 연계 제안. EO 검토·회신 대기. | 전달 완료 / 회신 대기 |
 | 2026-05-31 | 실비(EO 기획) | 다온(Carelog) | 조직 공통 `PLAYBOOK.md` 도입 지시 (EO 원본 v2026-05-31). 루트에 PLAYBOOK 생성 + CLAUDE.md 특화 정리. | ✅ 완료 — `claude/zen-cerf-hWuUw` → main/dev 반영 |
-| 2026-06-08 | 다온(Carelog) | 다온(새 세션) | **카드 235** — EO 연동 ①게이트웨이 마스터 캐시 + ②SSO 보정 + ③작성자 귀속. 계약(카드226) 전문·설계확정·구현계획 전부 `card-235-eo-gateway-sso.md`에 임베드(새 세션은 EO 레포 못 봄). 완료분 배포는 끝(`0095d87`), 235 미착수. | ⏭️ 착수 대기 — `specs/000-backlog/card-235-eo-gateway-sso.md` 읽고 §6부터 |
+| 2026-06-08 | 다온(Carelog) | 다온(새 세션) | **카드 235** — EO 연동 ①게이트웨이 마스터 캐시 + ②SSO 보정 + ③작성자 귀속. 계약(카드226) 전문·설계확정·구현계획 전부 `card-235-eo-gateway-sso.md`에 임베드(새 세션은 EO 레포 못 봄). 완료분 배포는 끝(`0095d87`), 235 미착수. | ✅ 구현 완료 — `claude/festive-planck-FCghV` (DB 적용 완료, main 배포 대기) |
+| 2026-06-08 | 다온(Carelog) | 테오(EO) | **카드 236** — 카드235 Carelog 측 구현·DB 적용 완료 → EO 측 배포 준비 4건 요청(게이트웨이 API·기관 연동·공유 시크릿 `CARELOG_GATEWAY_SECRET`·SSO 클레임 확장). `card-236-eo-gateway-deploy-request.md`. | ⏳ 전달 / 회신 대기 |
 
 ## 협업 메모
 
