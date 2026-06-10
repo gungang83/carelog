@@ -4,5 +4,11 @@
       "dev": false,
       "claude/zen-cerf-hWuUw": false
     }
-  }
+  },
+  "crons": [
+    {
+      "path": "/api/cron/sync-master",
+      "schedule": "*/10 * * * *"
+    }
+  ]
 }

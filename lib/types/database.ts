@@ -25,6 +25,9 @@ export type ConsultationRow = {
   linked_at: string | null;
   linked_by: string | null;
   participants: Participant[];
+  /** 작성자 귀속(계약 §2.3) — EO 직원 id(있으면)와 표시명. */
+  author_employee_id: string | null;
+  author_name: string | null;
 };
 
 export type ChairRow = {
@@ -40,11 +43,21 @@ export type ClinicMemberRow = {
   id: string;
   institution_id: string;
   name: string;
-  /** 예: 원장 / 직원 / 위생사 (선택) */
+  /** 예: 원장 / 직원 / 위생사 (선택). EO source는 position을 우선 노출. */
   role: string | null;
   display_order: number;
   is_active: boolean;
   created_at: string;
+  // EO 마스터 캐시 필드 (migration: 20260608000001_eo_integration.sql)
+  /** EO members[].id — upsert 키(불변). manual 행은 null. */
+  eo_employee_id: string | null;
+  email: string | null;
+  /** clinic_admin | manager | staff */
+  eo_role: string | null;
+  position: string | null;
+  /** 'manual'(수동 추가) | 'eo'(게이트웨이 동기화) */
+  source: "manual" | "eo";
+  synced_at: string | null;
 };
 
 /** 상담 기록에 저장되는 참여자 스냅샷(기록 시점 값 보존) */
@@ -87,6 +100,11 @@ export type InstitutionMemberRow = {
   invited_by: string | null;
   joined_at: string;
   is_active: boolean;
+  // EO SSO 작성자 귀속 (migration: 20260608000001_eo_integration.sql)
+  /** SSO JWT employee_id — 공용계정이면 null. */
+  eo_employee_id: string | null;
+  /** SSO JWT name — 작성자 표시명. */
+  display_name: string | null;
 };
 
 export type InstitutionInvitationRow = {

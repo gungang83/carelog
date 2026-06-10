@@ -80,6 +80,40 @@ export const getMyInstitutionId = cache(async (): Promise<string | null> => {
   }
 });
 
+/**
+ * 현재 세션 사용자의 상담 작성자 귀속 정보(계약 §2.3).
+ * institution_members의 eo_employee_id·display_name을 읽어 상담 레코드에 기록한다.
+ * display_name이 없으면(공용계정/구버전 SSO) 이메일로 폴백한다.
+ */
+export const getMyAuthorInfo = cache(async (): Promise<{
+  author_employee_id: string | null;
+  author_name: string | null;
+}> => {
+  try {
+    const institutionId = await getMyInstitutionId();
+    if (!institutionId) return { author_employee_id: null, author_name: null };
+
+    const supabase = await createServerSupabaseClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return { author_employee_id: null, author_name: null };
+
+    const { data } = await supabase
+      .from("institution_members")
+      .select("eo_employee_id, display_name")
+      .eq("user_id", user.id)
+      .eq("institution_id", institutionId)
+      .maybeSingle();
+
+    return {
+      author_employee_id: (data?.eo_employee_id as string | null) ?? null,
+      author_name:
+        (data?.display_name as string | null) ?? user.email ?? null,
+    };
+  } catch {
+    return { author_employee_id: null, author_name: null };
+  }
+});
+
 /** 현재 로그인한 사용자의 기관 정보와 역할을 반환. */
 export const getMyInstitution = cache(async (): Promise<{
   institution: InstitutionRow;
