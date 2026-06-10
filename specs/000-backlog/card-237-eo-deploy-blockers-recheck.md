@@ -19,7 +19,9 @@
 > - ✅ **★5 SSO 클레임** — `employee_id·name·eo_role·account_type` 적재 확인, `CARELOG_SSO_SECRET` 기존 동일.
 > - ⚠️ **★1 시크릿** — EO Vercel엔 3일 전 등록(비노출). **다온 측 확인 결과 Carelog는 미보유**(env·코드·커밋 전수 점검). 양측 값 매칭 불가 → **테오가 새 값 1회 재발급 → 대표 경유 전달 → 다온 등록** 경로로 합의.
 >
-> **다음 액션**: 테오 재발급 새 시크릿 값 수신 → 다온이 Carelog Vercel 등록 → EO 코드 `dev`→`main` 배포 → `GET /api/cron/sync-master`로 `0e4e85d6…` 동기화 검증.
+> **재회신 발송 (2026-06-10, 다온 → 테오)**: ★1 = Carelog 미보유 확정 통보 + 시크릿 1회 재발급 요청(테오 생성 → 대표 경유 전달 → 다온 등록). ★2 institution_id·★3·4·5 확인 회신.
+>
+> **다음 액션(대기 중)**: 테오 재발급 새 시크릿 값 수신 → 다온이 Carelog Vercel 등록 → EO 코드 `dev`→`main` 배포 → `GET /api/cron/sync-master`로 `0e4e85d6…` 동기화 검증.
 
 ---
 
