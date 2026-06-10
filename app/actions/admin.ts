@@ -160,6 +160,112 @@ export async function setStaffActive(
   return { ok: true };
 }
 
+// ── US2: 직원 역할 변경 (staff ↔ admin) ──────────────────────
+
+export async function changeStaffRole(
+  memberId: string,
+  newRole: "staff" | "admin",
+): Promise<{ ok: true } | { ok: false; message: string }> {
+  if (newRole !== "staff" && newRole !== "admin") {
+    return { ok: false, message: "지원하지 않는 역할입니다." };
+  }
+
+  const supabase = await createServerSupabaseClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { ok: false, message: "로그인이 필요합니다." };
+
+  const { data: myMember } = await supabase
+    .from("institution_members")
+    .select("institution_id, role")
+    .eq("user_id", user.id)
+    .eq("is_active", true)
+    .maybeSingle();
+
+  if (!myMember || (myMember.role !== "owner" && myMember.role !== "admin")) {
+    return { ok: false, message: "관리자 권한이 필요합니다." };
+  }
+
+  const admin = createAdminSupabaseClient();
+  const { data: target } = await admin
+    .from("institution_members")
+    .select("id, user_id, role, institution_id")
+    .eq("id", memberId)
+    .eq("institution_id", myMember.institution_id)
+    .maybeSingle();
+
+  if (!target) return { ok: false, message: "해당 직원을 찾을 수 없습니다." };
+  if (target.user_id === user.id) {
+    return { ok: false, message: "자기 자신의 역할은 변경할 수 없습니다." };
+  }
+  if (target.role === "owner") {
+    return { ok: false, message: "대표의 역할은 변경할 수 없습니다." };
+  }
+
+  const { error } = await admin
+    .from("institution_members")
+    .update({ role: newRole })
+    .eq("id", memberId);
+
+  if (error) return { ok: false, message: "역할 변경에 실패했습니다." };
+
+  revalidatePath("/settings");
+  return { ok: true };
+}
+
+// ── US2: 직원 완전 제거 (멤버십 삭제) ────────────────────────
+
+export async function removeStaff(
+  memberId: string,
+): Promise<{ ok: true } | { ok: false; message: string }> {
+  const supabase = await createServerSupabaseClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { ok: false, message: "로그인이 필요합니다." };
+
+  const { data: myMember } = await supabase
+    .from("institution_members")
+    .select("institution_id, role")
+    .eq("user_id", user.id)
+    .eq("is_active", true)
+    .maybeSingle();
+
+  if (!myMember || (myMember.role !== "owner" && myMember.role !== "admin")) {
+    return { ok: false, message: "관리자 권한이 필요합니다." };
+  }
+
+  const admin = createAdminSupabaseClient();
+  const { data: target } = await admin
+    .from("institution_members")
+    .select("id, user_id, role, institution_id")
+    .eq("id", memberId)
+    .eq("institution_id", myMember.institution_id)
+    .maybeSingle();
+
+  if (!target) return { ok: false, message: "해당 직원을 찾을 수 없습니다." };
+  if (target.user_id === user.id) {
+    return { ok: false, message: "자기 자신은 제거할 수 없습니다." };
+  }
+  if (target.role === "owner") {
+    return { ok: false, message: "기관 대표는 제거할 수 없습니다." };
+  }
+
+  // 슈퍼 어드민 계정 제거 차단
+  const { data: targetUserData } = await admin.auth.admin.getUserById(target.user_id);
+  if (isSuperAdmin(targetUserData?.user?.email)) {
+    return { ok: false, message: "최고 관리자 계정은 제거할 수 없습니다." };
+  }
+
+  // 멤버십만 삭제(접근 권한 회수). auth 계정·작성한 기록은 user_id로 보존되며, 재초대 가능.
+  const { error } = await admin
+    .from("institution_members")
+    .delete()
+    .eq("id", memberId);
+
+  if (error) return { ok: false, message: "직원 제거에 실패했습니다." };
+
+  revalidatePath("/settings");
+  return { ok: true };
+}
+
 // ── US3: 슈퍼 어드민 — 전체 기관 조회 ───────────────────────
 
 export type AdminInstitutionView = {

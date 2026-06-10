@@ -73,9 +73,12 @@
 | ③ dangling invitation 방지 | 신규 이메일 초대 메일 발송 실패 시 방금 만든 `institution_invitations` row 롤백(delete) |
 | 폼 UX | `staff-invite-form.tsx` — "직원으로 추가했습니다" vs "초대 이메일을 발송했습니다" 분기 + 즉시 추가 시 `router.refresh()`로 목록 갱신 |
 | 데이터 핫픽스 | `yemian2012@gmail.com` 예미안치과(0e4e85d6) 직원 즉시 등록(SQL). 환자 테스트로 생긴 **중복 워크스페이스 `a15efbd8`(예미안치과, owner jihun0729)** 삭제 — 빈 워크스페이스(멤버 1건)라 cascade로 정리 |
-| 빌드/린트 | `npm run build` ✅ · 변경 파일 린트 이슈 없음 |
+| ④ 워크스페이스 이름 중복 방지 | `signUp`·`setupInstitution`에 기관명 **대소문자 무시 중복 검사**(`ilike`) 추가. signUp은 auth 유저 생성 **전에** 차단해 orphan 계정 방지. `app/actions/auth.ts` |
+| ⑤ 직원 역할 변경 + 완전 제거 | `admin.ts`에 `changeStaffRole`(staff↔admin), `removeStaff`(멤버십 삭제) 액션 추가. 자기 자신·대표·슈퍼어드민 보호. `staff-list.tsx`에 역할 셀렉트 + 제거 버튼 배선(기존 활성/비활성 토글 유지) |
+| 빌드/린트 | `npm run build` ✅ · 변경 파일 린트 이슈 없음(auth.ts `_formData` 미사용 경고는 기존 건) |
 
-> 결정: "이미 계정 있는 사람 초대 = **즉시 직원 추가**"(이메일/수락 단계 없음). 다음 후보: 직원 비활성/제거 UX, 워크스페이스 이름 중복 방지.
+> 결정: "이미 계정 있는 사람 초대 = **즉시 직원 추가**"(이메일/수락 단계 없음), "워크스페이스 이름 = 전역 중복 불가".
+> 후속 강화 후보(미적용): `institutions.name`에 DB 레벨 부분 unique index(`lower(name)`)로 동시성 레이스까지 차단. EO 게이트웨이 main 배포는 빌/테오 시크릿 회신 대기 중.
 
 ---
 
