@@ -179,6 +179,17 @@ app/api/
      → admin client: institutions INSERT → institution_members INSERT (role: owner)
      → redirect('/')
 
+   ※ 온보딩 트랩 방지(/auth/callback): 멤버가 없을 때 곧장 /onboarding으로 보내지 않고,
+     대기 중(미수락·미만료) 직원 초대가 있으면 /invite/{token}(수락 동선)으로 보낸다.
+     초대받은 사람이 로그인하다 엉뚱한 새 워크스페이스를 만드는 문제를 막는다.
+
+3-1. 직원 초대 (설정 → StaffInviteForm → inviteStaff)
+   - 이미 auth 계정이 있는 이메일 → institution_members 즉시 추가(즉시 직원 등록,
+     비활성 멤버는 재활성화). inviteUserByEmail은 신규 전용이라 기존 계정엔 안 씀.
+   - 신규 이메일 → institution_invitations INSERT + inviteUserByEmail(메일, redirectTo=/invite/token).
+     메일 실패 시 방금 만든 초대 row 롤백(dangling 방지).
+   - /invite/{token} → acceptInvitation → institution_members INSERT(초대 role) → accepted_at 기록
+
 4. 세션 유지
    proxy.ts → updateSession()
      → supabase.auth.getUser() → 쿠키 갱신

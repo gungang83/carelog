@@ -45,10 +45,11 @@ export async function getMyInstitution(): Promise<
 }
 
 export async function inviteStaff(formData: FormData): Promise<
-  | { ok: true; invitation: InstitutionInvitationRow }
+  | { ok: true; mode: "added"; message: string }
+  | { ok: true; mode: "invited"; invitation: InstitutionInvitationRow }
   | { ok: false; message: string }
 > {
-  const email = String(formData.get("email") ?? "").trim();
+  const email = String(formData.get("email") ?? "").trim().toLowerCase();
   const role = String(formData.get("role") ?? "staff").trim() as
     | "staff"
     | "admin";
@@ -80,19 +81,65 @@ export async function inviteStaff(formData: FormData): Promise<
     }
 
     const institutionId = memberData.institution_id;
+    const admin = createAdminSupabaseClient();
 
-    const { data: existing } = await supabase
+    // 이미 가입된 auth 유저인지 확인 (SSO 라우트와 동일한 listUsers 패턴)
+    const {
+      data: { users },
+    } = await admin.auth.admin.listUsers({ perPage: 1000 });
+    const existingUser = users.find((u) => u.email?.toLowerCase() === email);
+
+    // ── 경로 1: 이미 계정 있는 사용자 → 즉시 직원 추가(이메일/수락 단계 없음) ──
+    // inviteUserByEmail은 신규 이메일 전용이라 기존 계정엔 실패함 → 멤버십 직접 생성.
+    if (existingUser) {
+      const { data: existingMember } = await admin
+        .from("institution_members")
+        .select("id, is_active")
+        .eq("user_id", existingUser.id)
+        .eq("institution_id", institutionId)
+        .maybeSingle();
+
+      if (existingMember) {
+        if (existingMember.is_active) {
+          return { ok: false, message: "이미 직원으로 등록된 사용자입니다." };
+        }
+        // 비활성(접근 차단) 상태면 재활성화 + 역할 갱신
+        const { error: reErr } = await admin
+          .from("institution_members")
+          .update({ is_active: true, role })
+          .eq("id", existingMember.id);
+        if (reErr) {
+          return { ok: false, message: `직원 활성화 실패: ${reErr.message}` };
+        }
+        return { ok: true, mode: "added", message: "기존 직원을 다시 활성화했습니다." };
+      }
+
+      const { error: addErr } = await admin.from("institution_members").insert({
+        institution_id: institutionId,
+        user_id: existingUser.id,
+        role,
+        invited_by: user.id,
+        is_active: true,
+      });
+      if (addErr) {
+        return { ok: false, message: `직원 추가 실패: ${addErr.message}` };
+      }
+      return { ok: true, mode: "added", message: "직원으로 추가했습니다." };
+    }
+
+    // ── 경로 2: 신규 이메일 → 초대 메일 발송(클릭 시 /invite/token 에서 수락) ──
+    const { data: existing } = await admin
       .from("institution_invitations")
-      .select("accepted_at")
+      .select("id, accepted_at")
       .eq("institution_id", institutionId)
       .eq("email", email)
+      .order("created_at", { ascending: false })
+      .limit(1)
       .maybeSingle();
 
     if (existing?.accepted_at) {
       return { ok: false, message: "이미 가입된 직원입니다." };
     }
-
-    const admin = createAdminSupabaseClient();
 
     const { data: invitation, error: invErr } = await admin
       .from("institution_invitations")
@@ -114,10 +161,16 @@ export async function inviteStaff(formData: FormData): Promise<
     });
 
     if (emailErr) {
+      // 메일 실패 시 방금 만든 초대 row 롤백(dangling invitation 방지)
+      await admin.from("institution_invitations").delete().eq("id", invitation.id);
       return { ok: false, message: `초대 이메일 발송 실패: ${emailErr.message}` };
     }
 
-    return { ok: true, invitation: invitation as InstitutionInvitationRow };
+    return {
+      ok: true,
+      mode: "invited",
+      invitation: invitation as InstitutionInvitationRow,
+    };
   } catch (e) {
     return {
       ok: false,

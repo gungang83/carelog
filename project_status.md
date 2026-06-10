@@ -2,7 +2,7 @@
 
 > **제품 정체성(SSOT)**: Carelog는 **환자 전용 서비스가 아니다.** 의료기관 상담 기록(B2B) ↔ 환자 평생 보관·생애주기 건강관리(B2C)를 잇는 **연결고리**. 상세: [docs/product-vision.md](docs/product-vision.md)
 
-**최종 업데이트**: 2026-06-08 (세션 17)
+**최종 업데이트**: 2026-06-10 (세션 18)
 **현재 버전**: main 브랜치
 
 ---
@@ -58,6 +58,24 @@
 | 이미지 줌/팬 | ✅ 완료 | 보기 라이트박스(`ZoomableImage`) + 주석 화면(CSS transform 줌·팬). 휠/버튼/핀치/드래그/더블클릭, 외부 라이브러리 없음 |
 | EO 마스터 게이트웨이 캐시 | ✅ 구현 (DB 적용·env 등록 대기) | EO 직원 마스터를 `clinic_members`에 캐시(`source='eo'`). `lib/eo/gateway.ts`+`sync-master.ts`, Vercel Cron `/api/cron/sync-master`(10분). 수동분 보호 |
 | EO SSO 작성자 귀속 | ✅ 구현 (DB 적용 대기) | `/api/auth/sso` 확장 클레임 수용 → `institution_members.eo_employee_id`·`display_name` 저장. 상담 저장 시 `author_employee_id`·`author_name` 자동 기록 |
+
+---
+
+## 2026-06-10 세션 18 작업 내용 (직원 초대 버그 수정 + 중복 워크스페이스 정리)
+
+설정 화면 직원 초대에서 "초대 이메일 발송 실패: A user with this email address has already been registered" 발생 → 원인 분석 후 수정.
+
+| 작업 | 결과 |
+|---|---|
+| 원인 | `inviteStaff`가 신규 전용 API `inviteUserByEmail`을 사용 → **이미 구글 로그인 등으로 auth 계정이 있는 이메일**엔 실패. 또한 콜백이 멤버 없으면 무조건 `/onboarding`(새 워크스페이스)로 보내 **초대받은 사람이 중복 워크스페이스를 생성**하는 트랩 존재 |
+| ① `inviteStaff` 분기 (즉시 직원 추가) | 이미 가입된 계정이면 `inviteUserByEmail` 대신 `institution_members`에 **즉시 추가**(role 반영, 비활성 멤버는 재활성화). 신규 이메일은 기존 메일 초대 유지. `app/actions/institutions.ts` |
+| ② 온보딩 트랩 보정 | `app/auth/callback/route.ts` — 멤버 없을 때 **대기 중(미수락·미만료) 초대가 있으면 `/invite/{token}`** 수락 동선으로, 없을 때만 `/onboarding` |
+| ③ dangling invitation 방지 | 신규 이메일 초대 메일 발송 실패 시 방금 만든 `institution_invitations` row 롤백(delete) |
+| 폼 UX | `staff-invite-form.tsx` — "직원으로 추가했습니다" vs "초대 이메일을 발송했습니다" 분기 + 즉시 추가 시 `router.refresh()`로 목록 갱신 |
+| 데이터 핫픽스 | `yemian2012@gmail.com` 예미안치과(0e4e85d6) 직원 즉시 등록(SQL). 환자 테스트로 생긴 **중복 워크스페이스 `a15efbd8`(예미안치과, owner jihun0729)** 삭제 — 빈 워크스페이스(멤버 1건)라 cascade로 정리 |
+| 빌드/린트 | `npm run build` ✅ · 변경 파일 린트 이슈 없음 |
+
+> 결정: "이미 계정 있는 사람 초대 = **즉시 직원 추가**"(이메일/수락 단계 없음). 다음 후보: 직원 비활성/제거 UX, 워크스페이스 이름 중복 방지.
 
 ---
 

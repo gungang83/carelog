@@ -1,9 +1,11 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { inviteStaff } from "@/app/actions/institutions";
 
 export function StaffInviteForm() {
+  const router = useRouter();
   const [status, setStatus] = useState<"idle" | "loading" | "success" | "error">("idle");
   const [message, setMessage] = useState("");
 
@@ -12,11 +14,17 @@ export function StaffInviteForm() {
     setStatus("loading");
     setMessage("");
     const formData = new FormData(e.currentTarget);
+    const form = e.currentTarget;
     const result = await inviteStaff(formData);
     if (result.ok) {
       setStatus("success");
-      setMessage("초대 이메일을 발송했습니다.");
-      (e.target as HTMLFormElement).reset();
+      // 기존 계정은 즉시 직원 추가, 신규 이메일은 초대 메일 발송
+      setMessage(
+        result.mode === "added" ? result.message : "초대 이메일을 발송했습니다.",
+      );
+      form.reset();
+      // 즉시 추가된 경우 직원 목록(서버 컴포넌트)을 갱신해 바로 노출
+      if (result.mode === "added") router.refresh();
     } else {
       setStatus("error");
       setMessage(result.message);

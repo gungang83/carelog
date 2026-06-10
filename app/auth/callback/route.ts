@@ -14,6 +14,7 @@ export async function GET(request: NextRequest) {
   const admin = createAdminSupabaseClient();
 
   let userId: string | null = null;
+  let userEmail: string | null = null;
 
   if (tokenHash && type) {
     // SSO 경로: admin generateLink hashed_token → verifyOtp (PKCE 불필요)
@@ -23,6 +24,7 @@ export async function GET(request: NextRequest) {
     });
     if (!error && data.user) {
       userId = data.user.id;
+      userEmail = data.user.email ?? null;
     } else {
       console.error("[callback] verifyOtp error:", error?.message);
     }
@@ -31,6 +33,7 @@ export async function GET(request: NextRequest) {
     const { data, error } = await supabase.auth.exchangeCodeForSession(code);
     if (!error && data.user) {
       userId = data.user.id;
+      userEmail = data.user.email ?? null;
     } else {
       console.error("[callback] exchangeCodeForSession error:", error?.message);
     }
@@ -44,6 +47,23 @@ export async function GET(request: NextRequest) {
       .maybeSingle();
 
     if (!member) {
+      // 멤버가 없을 때, 대기 중(미수락·미만료) 직원 초대가 있으면 수락 동선으로 보낸다.
+      // (없을 때만 신규 워크스페이스 생성으로 — 초대받은 사람이 엉뚱한 워크스페이스를 만드는 트랩 방지)
+      if (userEmail) {
+        const { data: pendingInvite } = await admin
+          .from("institution_invitations")
+          .select("token")
+          .ilike("email", userEmail)
+          .is("accepted_at", null)
+          .gt("expires_at", new Date().toISOString())
+          .order("created_at", { ascending: false })
+          .limit(1)
+          .maybeSingle();
+
+        if (pendingInvite?.token) {
+          return NextResponse.redirect(`${origin}/invite/${pendingInvite.token}`);
+        }
+      }
       return NextResponse.redirect(`${origin}/onboarding`);
     }
 
