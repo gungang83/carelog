@@ -22,6 +22,21 @@ export async function signUp(formData: FormData): Promise<
   }
 
   const supabase = await createServerSupabaseClient();
+  const admin = createAdminSupabaseClient();
+
+  // 같은 이름의 기관 중복 방지(대소문자 무시). auth 유저 생성 전에 막아 orphan 계정 방지.
+  const { data: dupInst } = await admin
+    .from("institutions")
+    .select("id")
+    .ilike("name", institution_name)
+    .maybeSingle();
+  if (dupInst) {
+    return {
+      ok: false,
+      message: "이미 같은 이름의 기관이 등록되어 있습니다. 다른 이름을 사용해 주세요.",
+    };
+  }
+
   const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "https://carelog-tau.vercel.app";
   const { data, error } = await supabase.auth.signUp({
     email,
@@ -37,8 +52,6 @@ export async function signUp(formData: FormData): Promise<
   }
 
   // 기관 + 멤버 생성은 admin 클라이언트로 RLS 우회 (신규 사용자는 institution_members 미보유)
-  const admin = createAdminSupabaseClient();
-
   const { data: inst, error: instErr } = await admin
     .from("institutions")
     .insert({ name: institution_name, type: "dental" })
@@ -116,6 +129,19 @@ export async function setupInstitution(formData: FormData): Promise<
     .maybeSingle();
 
   if (existing) redirect("/");
+
+  // 같은 이름의 기관 중복 방지(대소문자 무시)
+  const { data: dupInst } = await admin
+    .from("institutions")
+    .select("id")
+    .ilike("name", institution_name)
+    .maybeSingle();
+  if (dupInst) {
+    return {
+      ok: false,
+      message: "이미 같은 이름의 기관이 등록되어 있습니다. 다른 이름을 사용해 주세요.",
+    };
+  }
 
   const { data: inst, error: instErr } = await admin
     .from("institutions")

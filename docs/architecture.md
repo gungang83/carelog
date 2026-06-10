@@ -176,8 +176,9 @@ app/api/
        있으면 → / 리다이렉트
        없으면 → /onboarding 리다이렉트
    OnboardingForm → setupInstitution(institution_name)
-     → admin client: institutions INSERT → institution_members INSERT (role: owner)
-     → redirect('/')
+     → 기관명 중복 검사(ilike, 대소문자 무시) → admin client: institutions INSERT
+     → institution_members INSERT (role: owner) → redirect('/')
+     (signUp 경로도 동일하게 auth 유저 생성 전 기관명 중복 차단)
 
    ※ 온보딩 트랩 방지(/auth/callback): 멤버가 없을 때 곧장 /onboarding으로 보내지 않고,
      대기 중(미수락·미만료) 직원 초대가 있으면 /invite/{token}(수락 동선)으로 보낸다.
@@ -189,6 +190,12 @@ app/api/
    - 신규 이메일 → institution_invitations INSERT + inviteUserByEmail(메일, redirectTo=/invite/token).
      메일 실패 시 방금 만든 초대 row 롤백(dangling 방지).
    - /invite/{token} → acceptInvitation → institution_members INSERT(초대 role) → accepted_at 기록
+
+3-2. 직원 관리 (설정 → StaffList, owner/admin 전용)
+   - setStaffActive: is_active 토글(비활성 시 접근 회수, 로그인 자체는 가능)
+   - changeStaffRole: staff ↔ admin 역할 변경
+   - removeStaff: institution_members 행 삭제(기관에서 완전 제거, 재초대 가능)
+   - 공통 가드: 자기 자신·기관 대표(owner)·슈퍼어드민 계정은 변경/제거 불가, 마지막 owner 비활성 차단
 
 4. 세션 유지
    proxy.ts → updateSession()
