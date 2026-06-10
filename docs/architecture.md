@@ -106,8 +106,11 @@ lib/
 │   └── config.ts                  # 테이블명·버킷명 환경변수 매핑
 ├── sms/
 │   └── solapi.ts                  # sendSms(to, text) — Solapi SDK 래퍼
+├── eo/                            # EO↔Carelog 연동 (카드 235, HTTP 전용·강결합 금지)
+│   ├── gateway.ts                 # fetchEoMaster() — EO 마스터 게이트웨이 클라이언트(x-gateway-secret)
+│   └── sync-master.ts             # syncEoMaster() — EO 직원 마스터 → clinic_members 캐시 동기화(admin client)
 ├── auth/
-│   └── institution.ts             # getMyInstitutionId(), getMyInstitution() React.cache
+│   └── institution.ts             # getMyInstitutionId(), getMyInstitution(), getMyAuthorInfo() React.cache
 ├── types/
 │   └── database.ts                # PatientRow, ConsultationRow, PatientInvitationRow 등 타입
 ├── patient-session.ts             # getPatientSession(cookies) — OTP 세션 OR Google 세션 폴백
@@ -131,8 +134,18 @@ supabase/
 │   ├── 20260510000001_patient_portal.sql          # 환자 포털 5개 테이블
 │   ├── 20260517000001_push_subscriptions.sql      # 직원 Web Push 구독 정보
 │   ├── 20260517000002_patient_auth_links.sql      # 환자 Google OAuth 연결 + 환자 푸시 구독
-│   └── 20260526000001_chair_quick_record.sql      # chairs, chair_audit_logs 테이블 + consultation 수정
+│   ├── 20260526000001_chair_quick_record.sql      # chairs, chair_audit_logs 테이블 + consultation 수정
+│   ├── 20260607000001_clinic_members.sql          # clinic_members 디렉터리 + consultation.participants
+│   └── 20260608000001_eo_integration.sql          # EO 마스터 캐시(clinic_members) + SSO/작성자 귀속 컬럼
 └── schema.sql                     # 전체 스키마 (참조용)
+```
+
+app/api/ 라우트 핸들러:
+```
+app/api/
+├── auth/sso/route.ts              # EO SSO 진입 — JWT 검증 → 세션 생성 + eo_employee_id·display_name 저장 + EO lazy 동기화
+├── cron/sync-master/route.ts      # Vercel Cron(10분) — 전 기관 syncEoMaster 폴링(미연동 404 스킵)
+└── health/route.ts                # 헬스체크 (edge)
 ```
 
 ## 인증 흐름
@@ -165,6 +178,17 @@ supabase/
    OnboardingForm → setupInstitution(institution_name)
      → admin client: institutions INSERT → institution_members INSERT (role: owner)
      → redirect('/')
+
+   ※ 온보딩 트랩 방지(/auth/callback): 멤버가 없을 때 곧장 /onboarding으로 보내지 않고,
+     대기 중(미수락·미만료) 직원 초대가 있으면 /invite/{token}(수락 동선)으로 보낸다.
+     초대받은 사람이 로그인하다 엉뚱한 새 워크스페이스를 만드는 문제를 막는다.
+
+3-1. 직원 초대 (설정 → StaffInviteForm → inviteStaff)
+   - 이미 auth 계정이 있는 이메일 → institution_members 즉시 추가(즉시 직원 등록,
+     비활성 멤버는 재활성화). inviteUserByEmail은 신규 전용이라 기존 계정엔 안 씀.
+   - 신규 이메일 → institution_invitations INSERT + inviteUserByEmail(메일, redirectTo=/invite/token).
+     메일 실패 시 방금 만든 초대 row 롤백(dangling 방지).
+   - /invite/{token} → acceptInvitation → institution_members INSERT(초대 role) → accepted_at 기록
 
 4. 세션 유지
    proxy.ts → updateSession()
@@ -368,6 +392,43 @@ handleSave()
   → relinkChairRecord({ consultationId, newPatientId })
       → patient_id 교체, status='confirmed', linked_at/by 갱신
       → chair_audit_logs INSERT (patient_relinked, patient_id_before/after)
+```
+
+### EO ↔ Carelog 연동 (카드 235 — 계약: EO spec-016 / 카드#226)
+
+> 원칙: **EO = 직원·클리닉 마스터의 SSOT.** Carelog는 받아 캐시(읽기 사본). 강결합 금지(HTTP만).
+> **의료데이터(상담)는 게이트웨이로 절대 나가지 않는다** — 상담 EO API는 만들지 않음(계약 §4).
+
+```
+① 마스터 게이트웨이 (직원·클리닉 마스터를 EO에서 pull)
+  Vercel Cron(10분) → GET /api/cron/sync-master   (CRON_SECRET Bearer 보호)
+    → 전 기관 순회: syncEoMaster(institution_id)
+        → fetchEoMaster()  [lib/eo/gateway.ts]
+            → GET {EO_APP_URL}/api/gateway/carelog/master?institution_id=…
+              Header: x-gateway-secret: CARELOG_GATEWAY_SECRET (서버-서버)
+            → 200 정상 / 404 미연동(스킵) / 401 시크릿불일치(설정) / 500 재시도
+        → clinic_members 캐시 갱신 (admin client, RLS 우회)  [lib/eo/sync-master.ts]
+            · members[]를 eo_employee_id 키로 upsert (source='eo')
+            · 응답에 없는 EO-source 행 → is_active=false
+            · source='manual' 행은 절대 건드리지 않음 (수동 추가분 보호)
+            · active=false(퇴사)·is_draft=true(미승인) → is_active=false
+
+② SSO 보정 (EO 로그인 → Carelog 세션)
+  "케어로그 열기" → GET /api/auth/sso?token=<JWT>
+    → JWT 검증(HS256, CARELOG_SSO_SECRET) + exp(60초)
+    → 확장 클레임 수용: employee_id·name·account_type·eo_role
+    → institution_members 멤버십:
+        · 신규  → role=mapEoRole(eo_role)  (clinic_admin→admin, 그 외 staff) + eo_employee_id·display_name
+        · 기존  → role 불변, eo_employee_id·display_name만 갱신 (수동 권한 보호)
+    → EO lazy 동기화 best-effort (syncEoMaster, 로그인 흐름 비차단)
+    → magiclink token_hash → /auth/callback → Carelog 세션 확립
+
+③ 작성자 귀속 (상담은 Carelog 내부에만 저장)
+  saveConsultation / saveChairRecord
+    → getMyAuthorInfo()  [lib/auth/institution.ts]
+        → 세션 멤버의 eo_employee_id·display_name (없으면 이메일 폴백)
+    → consultation INSERT 시 author_employee_id·author_name 기록
+       (공용계정 account_type='shared'도 표시명은 남김)
 ```
 
 ---
