@@ -9,6 +9,14 @@ export const dynamic = "force-dynamic";
 const stripBom = (s: string) => (s.charCodeAt(0) === 0xfeff ? s.slice(1) : s);
 
 /**
+ * EO 미연동 플레이스홀더/시드 기관 — 폴링에서 제외.
+ * 매 주기 게이트웨이로 보내져 404를 유발(EO Vercel 로그 노이즈)하므로 건너뛴다.
+ * 빌(EO) 보고: a0000000-0000-0000-0000-… 더미는 workspace_carelog_links 미등록.
+ * 실제 EO 연동 기관은 random UUID라 이 시드 프리픽스와 충돌하지 않는다.
+ */
+const EO_POLL_EXCLUDE_PREFIXES = ["a0000000-0000-0000-0000-"];
+
+/**
  * Vercel Cron — EO 마스터 게이트웨이 폴링(권장 5~15분).
  * 모든 기관에 대해 syncEoMaster를 호출하고, EO 미연동(404)은 조용히 스킵한다.
  * CRON_SECRET이 설정되어 있으면 Authorization: Bearer <secret>로 보호한다.
@@ -46,6 +54,7 @@ export async function GET(req: NextRequest) {
 
   for (const inst of institutions ?? []) {
     const id = inst.id as string;
+    if (EO_POLL_EXCLUDE_PREFIXES.some((p) => id.startsWith(p))) continue;
     const result = await syncEoMaster(id);
     if (result.ok) {
       synced += 1;
