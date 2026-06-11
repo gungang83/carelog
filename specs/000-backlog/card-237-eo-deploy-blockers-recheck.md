@@ -22,6 +22,8 @@
 > **재회신 발송 (2026-06-10, 다온 → 테오)**: ★1 = Carelog 미보유 확정 통보 + 시크릿 1회 재발급 요청(테오 생성 → 대표 경유 전달 → 다온 등록). ★2 institution_id·★3·4·5 확인 회신.
 >
 > **다음 액션(대기 중)**: 테오 재발급 새 시크릿 값 수신 → 다온이 Carelog Vercel 등록 → EO 코드 `dev`→`main` 배포 → `GET /api/cron/sync-master`로 `0e4e85d6…` 동기화 검증.
+>
+> **배포 완료 (2026-06-10, 다온)**: 테오 새 시크릿 수신 → 대표님이 Carelog Vercel Production에 `CARELOG_GATEWAY_SECRET` 등록 완료. 다온이 work→`main`·`dev` 머지 배포(`f2e2d50`, 빌드 ✅). EO 코드(`lib/eo/*`·sync-master cron·SSO 확장) 프로덕션 반영. **라이브 검증 대기** — 프로덕션 URL 확인 후 `GET /api/cron/sync-master`로 `0e4e85d6`(예미안) `synced(+n/~n/-n)` 확인 예정.
 
 ---
 
