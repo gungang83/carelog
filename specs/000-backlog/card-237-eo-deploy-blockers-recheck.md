@@ -23,7 +23,11 @@
 >
 > **다음 액션(대기 중)**: 테오 재발급 새 시크릿 값 수신 → 다온이 Carelog Vercel 등록 → EO 코드 `dev`→`main` 배포 → `GET /api/cron/sync-master`로 `0e4e85d6…` 동기화 검증.
 >
-> **배포 완료 (2026-06-10, 다온)**: 테오 새 시크릿 수신 → 대표님이 Carelog Vercel Production에 `CARELOG_GATEWAY_SECRET` 등록 완료. 다온이 work→`main`·`dev` 머지 배포(`f2e2d50`, 빌드 ✅). EO 코드(`lib/eo/*`·sync-master cron·SSO 확장) 프로덕션 반영. **라이브 검증 대기** — 프로덕션 URL 확인 후 `GET /api/cron/sync-master`로 `0e4e85d6`(예미안) `synced(+n/~n/-n)` 확인 예정.
+> **배포 완료 (2026-06-10, 다온)**: 테오 새 시크릿 수신 → 대표님이 Carelog Vercel Production에 `CARELOG_GATEWAY_SECRET` 등록. 다온이 work→`main`·`dev` 머지 배포(`f2e2d50`, 빌드 ✅). EO 코드(`lib/eo/*`·sync-master cron·SSO 확장) 프로덕션 반영.
+>
+> **🐛 배포 중 fix**: `updateSession` 공개경로에 `/api/cron/`이 빠져 Vercel Cron이 `/login`으로 307 리다이렉트 → 동기화 불가. `lib/supabase/middleware.ts`에 `/api/cron/` 추가 후 재배포(`ce8b107`). 세션17 작성분 미배포라 미발견 케이스.
+>
+> **✅ 라이브 검증 완료 (2026-06-10)**: `GET https://carelog-tau.vercel.app/api/cron/sync-master` → `{ok:true, synced:1, skipped:1}`, `0e4e85d6`(예미안) `synced(+0/~30/-0)` = EO 직원 30명 캐시. `error:config` 없음(시크릿 정상). **EO↔Carelog 마스터 게이트웨이 + SSO 라이브.** 남은 수동확인: SSO 로그인→상담 저장 작성자 귀속.
 
 ---
 

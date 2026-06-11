@@ -2,7 +2,7 @@
 
 > **제품 정체성(SSOT)**: Carelog는 **환자 전용 서비스가 아니다.** 의료기관 상담 기록(B2B) ↔ 환자 평생 보관·생애주기 건강관리(B2C)를 잇는 **연결고리**. 상세: [docs/product-vision.md](docs/product-vision.md)
 
-**최종 업데이트**: 2026-06-10 (세션 18)
+**최종 업데이트**: 2026-06-10 (세션 19 — EO 연동 라이브)
 **현재 버전**: main 브랜치
 
 ---
@@ -56,8 +56,25 @@
 | 체어 기록 재연결/해제 | ✅ 완료 | 환자 상담 기록에서 다른 환자로 재연결 또는 미연결 상태로 되돌리기 |
 | 참여자(원장·직원·담당자) 선택 | ✅ 완료 | 녹음 시작 시 참여자 선택 + 마스킹, `clinic_members` 디렉터리 + `consultation.participants` 스냅샷. 마이그레이션 적용 완료 |
 | 이미지 줌/팬 | ✅ 완료 | 보기 라이트박스(`ZoomableImage`) + 주석 화면(CSS transform 줌·팬). 휠/버튼/핀치/드래그/더블클릭, 외부 라이브러리 없음 |
-| EO 마스터 게이트웨이 캐시 | ✅ 구현 (DB 적용·env 등록 대기) | EO 직원 마스터를 `clinic_members`에 캐시(`source='eo'`). `lib/eo/gateway.ts`+`sync-master.ts`, Vercel Cron `/api/cron/sync-master`(10분). 수동분 보호 |
-| EO SSO 작성자 귀속 | ✅ 구현 (DB 적용 대기) | `/api/auth/sso` 확장 클레임 수용 → `institution_members.eo_employee_id`·`display_name` 저장. 상담 저장 시 `author_employee_id`·`author_name` 자동 기록 |
+| EO 마스터 게이트웨이 캐시 | ✅ **라이브** (2026-06-10) | EO 직원 마스터를 `clinic_members`에 캐시(`source='eo'`). `lib/eo/gateway.ts`+`sync-master.ts`, Vercel Cron `/api/cron/sync-master`(10분). 수동분 보호. 예미안(0e4e85d6) 직원 30명 동기화 확인 |
+| EO SSO 작성자 귀속 | ✅ **라이브** (2026-06-10) | `/api/auth/sso` 확장 클레임 수용 → `institution_members.eo_employee_id`·`display_name` 저장. 상담 저장 시 `author_employee_id`·`author_name` 자동 기록 |
+
+---
+
+## 2026-06-10 세션 19 작업 내용 (EO 연동 프로덕션 라이브)
+
+카드 235·237 마무리. 테오(EO) 측 게이트웨이 API·기관 연동·SSO 클레임 준비 완료 회신 → 시크릿 재발급 수신 → Carelog 배포·검증.
+
+| 작업 | 결과 |
+|---|---|
+| 시크릿 등록 | 테오 새 `CARELOG_GATEWAY_SECRET` 재발급 → 대표님이 Carelog Vercel Production 등록 |
+| EO 코드 배포 | work→`main`·`dev` 머지 배포. `lib/eo/*`·sync-master cron·SSO 확장 프로덕션 반영 |
+| **cron 미들웨어 버그 fix** | `updateSession` 공개경로에 `/api/cron/` 누락 → Vercel Cron이 `/login`으로 307 리다이렉트되어 동기화 불가. `lib/supabase/middleware.ts`에 `/api/cron/` 추가(라우트 자체 `CRON_SECRET` 검증). 세션17 작성분이 미배포라 안 잡혔던 케이스 |
+| 라이브 검증 | `GET /api/cron/sync-master` → `{ok:true, synced:1, skipped:1}`, 예미안(0e4e85d6) `synced(+0/~30/-0)` = EO 직원 30명 캐시. `error:config` 없음(시크릿 정상) |
+| 연동 institution_id | `0e4e85d6-d839-48ef-a1fb-1915521b9395` (예미안치과의원, EO member_count 30) |
+| 남은 확인(수동) | SSO 로그인 → 상담 저장 → `author_employee_id`·`author_name` 채워짐 최종 확인(EO "케어로그 열기" 경유) |
+
+> 결정: EO는 import 없이 HTTP 게이트웨이/SSO로만 연동(헤임달 §3·§4). 상담 EO API 미구현(의료데이터 격리). 다음: SSO 작성자 귀속 실사용 확인 후 카드 237 종료.
 
 ---
 
