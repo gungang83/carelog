@@ -28,6 +28,8 @@
 > **🐛 배포 중 fix**: `updateSession` 공개경로에 `/api/cron/`이 빠져 Vercel Cron이 `/login`으로 307 리다이렉트 → 동기화 불가. `lib/supabase/middleware.ts`에 `/api/cron/` 추가 후 재배포(`ce8b107`). 세션17 작성분 미배포라 미발견 케이스.
 >
 > **✅ 라이브 검증 완료 (2026-06-10)**: `GET https://carelog-tau.vercel.app/api/cron/sync-master` → `{ok:true, synced:1, skipped:1}`, `0e4e85d6`(예미안) `synced(+0/~30/-0)` = EO 직원 30명 캐시. `error:config` 없음(시크릿 정상). **EO↔Carelog 마스터 게이트웨이 + SSO 라이브.** 남은 수동확인: SSO 로그인→상담 저장 작성자 귀속.
+>
+> **빌(EO) 검증완료 회신 + 정리 (2026-06-10)**: EO측 4건(게이트웨이·기관연동·시크릿·SSO 클레임) 전부 라이브 검증, EO 추가작업 0. 다온 후속 1건 처리 — 더미 시드 기관(`a0000000-…`)이 매 주기 게이트웨이 404 유발 → 폴링 제외(`sync-master` 프리픽스 스킵, `4ad0c97`). 검증: `{synced:1, skipped:0}` 노이즈 제거 확인. **카드 235·236·237 / EO 계약(카드#226) 종결(done).**
 
 ---
 
