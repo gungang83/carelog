@@ -2,6 +2,7 @@ import Link from "next/link";
 import { HamburgerDrawer } from "@/components/layout/hamburger-drawer";
 import { ProfileDropdown } from "@/components/layout/profile-dropdown";
 import { RefreshButton } from "@/components/layout/refresh-button";
+import { SoundArmButton } from "@/components/notifications/sound-arm-button";
 import type { InstitutionWithRole } from "@/lib/auth/institution";
 
 interface HeaderProps {
@@ -61,6 +62,7 @@ export function Header({
           >
             EO로 돌아가기
           </a>
+          <SoundArmButton />
           <RefreshButton />
           <ProfileDropdown
             userEmail={userEmail}
