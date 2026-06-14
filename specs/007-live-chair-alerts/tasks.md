@@ -29,7 +29,7 @@ description: "Task list — 실시간 체어 상담기록 알림"
 **⚠️ CRITICAL**: 이 단계 완료 전 어떤 유저 스토리도 시작 불가. (Realtime publication + 구독 헬퍼)
 
 - [X] T002 마이그레이션 작성 `supabase/migrations/20260614000001_realtime_chair_audit_logs.sql` — `alter publication supabase_realtime add table public.chair_audit_logs;`
-- [ ] T003 마이그레이션 Supabase 적용 + 대시보드 Database→Replication에서 `chair_audit_logs` realtime 포함 확인(배포 작업)
+- [X] T003 마이그레이션 Supabase 적용 + 대시보드 Database→Replication에서 `chair_audit_logs` realtime 포함 확인(배포 작업)
 - [X] T004 [P] 구독 헬퍼 신규 `lib/realtime/institution-events.ts` — `ChairAuditEvent` 타입(contracts §1) + `subscribeChairEvents({ institutionId, onEvent })`: 브라우저 클라이언트로 채널 `institution:{id}:chair-events` 생성, `postgres_changes` INSERT / `table:'chair_audit_logs'` / `filter:'institution_id=eq.{id}'` 구독, 구독 해제 함수 반환
 - [X] T005 [P] 스키마 문서 동기화 `supabase/schema.sql` + `docs/database.md` — `chair_audit_logs`의 realtime publication 포함 반영(헌법 VI)
 
