@@ -109,18 +109,32 @@ function OverlayContent() {
 
   const handleStopRecording = () => {
     if (!openChairId) return;
+    const secs = elapsed; // 상태 전환 전에 녹음 길이 포착
     const blob = stopRecording(openChairId);
-    if (!blob) return;
+    const sizeKB = blob ? Math.round((blob.size / 1024) * 10) / 10 : 0;
+    // 진단 로그(연결 가능한 환경에서 확인용)
+    console.log("[chair] 녹음 중지", { secs, bytes: blob?.size ?? 0 });
+
+    // 빈/극소 녹음 = iOS 화면잠금·백그라운드로 MediaRecorder가 정지된 전형적 케이스.
+    // 전사·저장으로 넘어가면 어차피 실패하므로 여기서 명확히 잡아 안내한다(원인 가시화).
+    if (!blob || blob.size < 1024) {
+      resetChair(openChairId);
+      setMicError(
+        `녹음이 비어 있어요 (녹음 ${secs}초 · ${sizeKB}KB). 화면이 잠기거나 다른 앱으로 전환되면 녹음이 끊깁니다. 화면을 켠 채로 다시 녹음해 주세요.`,
+      );
+      return;
+    }
 
     startTransition(async () => {
       const formData = new FormData();
       formData.append("audio", blob, "recording.webm");
       const result = await transcribeChairAudio(formData);
+      console.log("[chair] 전사 결과", result.ok ? "ok" : result.message);
       if (result.ok) {
         setTranscriptionResult(openChairId, result.summary);
         setEditText(result.summary);
       } else {
-        setMicError(result.message);
+        setMicError(`전사 실패 (녹음 ${secs}초 · ${sizeKB}KB): ${result.message}`);
         setTranscriptionResult(openChairId, "");
         setEditText("");
       }

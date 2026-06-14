@@ -86,7 +86,8 @@ export async function saveChairRecord(params: {
     .single();
 
   if (error || !consultation) {
-    return { ok: false, message: "기록 저장에 실패했습니다." };
+    console.error("[saveChairRecord] insert 실패:", error?.message, error?.details);
+    return { ok: false, message: `기록 저장에 실패했습니다. (${error?.message ?? "원인 미상"})` };
   }
 
   await supabase.from("chair_audit_logs").insert({
