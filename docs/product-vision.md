@@ -45,4 +45,4 @@
 - ✅ EO 통합도 이 비전 안에서: **환자 SSOT=Carelog**(기둥3), 의료기관 마스터=EO 정합(카드224).
 - ✅ "치과"는 현재 적용 도메인일 뿐, 비전은 **의료기관 일반**으로 확장 가능하게 둔다.
 
-> 관련 문서: `docs/patient-portal-vision.md`(환자 포털 아키텍처), `docs/living-consult-onboarding.md`(진료 중 온보딩), `docs/eo-carelog-integration.md`(EO 층위·SSOT 분할).
+> 관련 문서: `docs/patient-portal-vision.md`(환자 포털 아키텍처), `docs/living-consult-onboarding.md`(진료 중 온보딩), `docs/eo-carelog-integration.md`(EO 층위·SSOT 분할), `docs/consult-analytics-crm-vision.md`(성장 축: 상담 데이터→경영관리·CRM, 기둥1 심화).

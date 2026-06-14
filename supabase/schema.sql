@@ -502,3 +502,11 @@ create index if not exists idx_pps_account on public.patient_push_subscriptions(
 
 alter table public.patient_push_subscriptions enable row level security;
 -- 환자는 Server Action(admin client)을 통해서만 접근
+
+-- ───────────────────────────────────────────────────────────────────────────
+-- Realtime (spec 007 — 실시간 체어 상담기록 알림)
+-- chair_audit_logs INSERT를 Supabase Realtime으로 구독한다(진료본문 없는 감사로그).
+-- 기관 격리는 기존 RLS("staff reads own institution audit logs")가 강제.
+-- migration: 20260614000001_realtime_chair_audit_logs.sql
+-- alter publication supabase_realtime add table public.chair_audit_logs;
+-- ───────────────────────────────────────────────────────────────────────────

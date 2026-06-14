@@ -7,6 +7,7 @@ import { revalidatePath } from "next/cache";
 import { sanitizeRichHtml, ensureHtml } from "@/lib/sanitize-html";
 import type { ChairRow } from "@/lib/types/database";
 import { transcribeAndSummarize, type TranscribeResult } from "@/app/actions/transcribe";
+import { sendPushToInstitution } from "@/app/actions/push";
 
 // ─── transcribeChairAudio ─────────────────────────────────────────────────────
 // Server Action 파일 간 임포트 — client component는 이 파일만 참조
@@ -55,7 +56,7 @@ export async function saveChairRecord(params: {
   // 체어가 해당 기관 소속인지 확인
   const { data: chair } = await supabase
     .from("chairs")
-    .select("id")
+    .select("id, name")
     .eq("id", params.chairId)
     .eq("institution_id", institutionId)
     .maybeSingle();
@@ -95,6 +96,15 @@ export async function saveChairRecord(params: {
     event_type: "record_created",
     actor_user_id: user.id,
   });
+
+  // 화면 꺼짐/백그라운드 기기 대비 Web Push (spec 007 US3) — fire-and-forget(저장 결과 비차단).
+  // 환자정보·진료내용은 싣지 않는다(체어 이름 + 도착 사실만).
+  sendPushToInstitution(institutionId, {
+    title: "새 상담 기록",
+    body: `${chair.name} · 상담 기록이 올라왔습니다`,
+    url: "/",
+    kind: "chair-record",
+  }).catch(() => {});
 
   revalidatePath("/");
   return { ok: true, consultationId: consultation.id };

@@ -10,6 +10,7 @@ import { getMyInstitutions, getMyInstitutionId } from "@/lib/auth/institution";
 import { getChairs } from "@/app/actions/chairs";
 import { ChairProvider } from "@/components/chair/chair-provider";
 import { ChairOverlay } from "@/components/chair/chair-overlay";
+import { LiveAlertsProvider } from "@/components/notifications/live-alerts-provider";
 
 export default async function DashboardLayout({
   children,
@@ -61,6 +62,11 @@ export default async function DashboardLayout({
       <SessionRefresher />
       <BadgeManager />
       <ChairOverlay />
+      <LiveAlertsProvider
+        currentUserId={user.id}
+        institutionId={activeInstitutionId ?? ""}
+        chairNames={Object.fromEntries(chairs.map((c) => [c.id, c.name]))}
+      />
       <Header
         institutions={institutions}
         activeInstitutionId={activeInstitutionId ?? ""}

@@ -30,6 +30,8 @@ export type PushPayload = {
   body: string;
   url: string;
   icon?: string;
+  /** 알림 종류(선택). 예: "chair-record" — sw.js가 포커스 시 OS 알림 생략(FR-010). */
+  kind?: string;
 };
 
 export async function subscribePush(
@@ -102,6 +104,7 @@ export async function sendPushToInstitution(
     body: payload.body,
     url: payload.url,
     icon: payload.icon ?? "/icons/icon-192.png",
+    kind: payload.kind,
   });
 
   const staleEndpoints: string[] = [];
