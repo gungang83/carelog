@@ -83,24 +83,38 @@ self.addEventListener("push", (event) => {
     payload = { title: "Carelog", body: event.data.text(), url: "/" };
   }
 
-  const { title = "Carelog", body = "", url = "/", icon = "/icons/icon-192.png" } = payload;
-
-  badgeCount += 1;
+  const { title = "Carelog", body = "", url = "/", icon = "/icons/icon-192.png", kind } = payload;
 
   event.waitUntil(
-    Promise.all([
-      self.registration.showNotification(title, {
-        body,
-        icon,
-        badge: "/icons/icon-192.png",
-        data: { url },
-        requireInteraction: false,
-      }),
-      // 홈 화면 아이콘 배지 업데이트
-      self.registration.setAppBadge
-        ? self.registration.setAppBadge(badgeCount).catch(() => {})
-        : Promise.resolve(),
-    ])
+    (async () => {
+      // 실시간 인앱 알림(spec 007)과 중복 방지(FR-010): 체어 기록 푸시는
+      // 이 기기에 포커스된 창이 있으면 OS 알림/배지를 생략한다(인앱 토스트가 처리).
+      if (kind === "chair-record") {
+        const wins = await self.clients.matchAll({
+          type: "window",
+          includeUncontrolled: true,
+        });
+        const focused = wins.some(
+          (c) => c.focused || c.visibilityState === "visible",
+        );
+        if (focused) return;
+      }
+
+      badgeCount += 1;
+      await Promise.all([
+        self.registration.showNotification(title, {
+          body,
+          icon,
+          badge: "/icons/icon-192.png",
+          data: { url },
+          requireInteraction: false,
+        }),
+        // 홈 화면 아이콘 배지 업데이트
+        self.registration.setAppBadge
+          ? self.registration.setAppBadge(badgeCount).catch(() => {})
+          : Promise.resolve(),
+      ]);
+    })()
   );
 });
 

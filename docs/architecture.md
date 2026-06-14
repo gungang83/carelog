@@ -455,3 +455,28 @@ handleSave()
 | MediaRecorder refs (`useRef`) | React state에 넣으면 re-render 시 recorder 중단됨; ref에 보관해야 overlay 닫기/열기에도 녹음 유지 |
 | `maxDuration = 120` in layout.tsx | `"use server"` 파일에서 async 함수 아닌 export 불가 — Route Segment Config는 page/layout 파일에만 허용 |
 | `chair_audit_logs` INSERT-only RLS | UPDATE/DELETE 정책 없음 → DB 레벨에서 레코드 불변성 강제 |
+
+## 실시간 알림 (spec 007 — 실시간 체어 상담기록 알림)
+
+체어에서 상담 기록이 올라오면(`saveChairRecord` → `consultation` insert + `chair_audit_logs` insert) 같은 기관의 열린 모든 직원 화면에 실시간 토스트·소리·목록갱신, 화면 꺼진 기기엔 Web Push.
+
+```
+saveChairRecord (Server Action)
+  → consultation INSERT (patient_id null, chair_id, status draft)
+  → chair_audit_logs INSERT (event_type 'record_created', actor_user_id)
+  → sendPushToInstitution(...)            # US3, fire-and-forget
+        │ Supabase Realtime(postgres_changes, RLS+filter: institution_id)
+        ▼
+열린 직원 화면: LiveAlertsProvider
+  → actor === me ? 목록 refresh만(에코 방지) : 디바운스 → 토스트 + (armed면)효과음 + router.refresh()
+화면 꺼짐/백그라운드 → OS Web Push (sw.js notificationclick → url)
+```
+
+신규/관련 파일:
+- `lib/realtime/institution-events.ts` — `subscribeChairEvents()`(chair_audit_logs INSERT 구독, 기관 필터). 향후 이벤트 타입 확장 지점.
+- `components/notifications/live-alerts-provider.tsx` — 구독→토스트/소리/refresh, 에코·디바운스·재연결 재동기화. `app/(dashboard)/layout.tsx`에 마운트.
+- `components/notifications/alert-toast.tsx` — 토스트 UI(체어명+도착, 진료내용 미표시).
+- `components/notifications/alert-sound.ts` + `sound-arm-button.tsx` — 1회 활성화(자동재생 잠금 해제)·on/off, `public/sounds/alert.wav`.
+- `app/actions/chairs.ts` `saveChairRecord` — Web Push 발송 추가(US3).
+
+> 원칙: 실시간 구독은 **읽기 전용**(헌법 II), 쓰기는 기존 Server Action만. 전송선·토스트·푸시에 환자식별정보·진료본문 없음(헌법 I).

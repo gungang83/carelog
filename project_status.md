@@ -2,7 +2,7 @@
 
 > **제품 정체성(SSOT)**: Carelog는 **환자 전용 서비스가 아니다.** 의료기관 상담 기록(B2B) ↔ 환자 평생 보관·생애주기 건강관리(B2C)를 잇는 **연결고리**. 상세: [docs/product-vision.md](docs/product-vision.md)
 
-**최종 업데이트**: 2026-06-10 (세션 19 — EO 연동 라이브)
+**최종 업데이트**: 2026-06-14 (세션 21 — 실시간 체어 알림 구현)
 **현재 버전**: main 브랜치
 
 ---
@@ -58,6 +58,38 @@
 | 이미지 줌/팬 | ✅ 완료 | 보기 라이트박스(`ZoomableImage`) + 주석 화면(CSS transform 줌·팬). 휠/버튼/핀치/드래그/더블클릭, 외부 라이브러리 없음 |
 | EO 마스터 게이트웨이 캐시 | ✅ **라이브** (2026-06-10) | EO 직원 마스터를 `clinic_members`에 캐시(`source='eo'`). `lib/eo/gateway.ts`+`sync-master.ts`, Vercel Cron `/api/cron/sync-master`(10분). 수동분 보호. 예미안(0e4e85d6) 직원 30명 동기화 확인 |
 | EO SSO 작성자 귀속 | ✅ **라이브** (2026-06-10) | `/api/auth/sso` 확장 클레임 수용 → `institution_members.eo_employee_id`·`display_name` 저장. 상담 저장 시 `author_employee_id`·`author_name` 자동 기록 |
+
+---
+
+## 2026-06-14 세션 21 (구현) — 실시간 체어 상담기록 알림 (spec 007)
+
+spec-kit 전 과정(specify→plan→tasks→implement)으로 spec 007 구현. 예미안처럼 체어마다 PWA 띄워둔 환경에서 한 체어 기록이 올라오면 전 화면 실시간 인지.
+
+| 작업 | 결과 |
+|---|---|
+| US1 실시간 토스트+목록갱신 | `lib/realtime/institution-events.ts`(chair_audit_logs INSERT 구독) + `components/notifications/live-alerts-provider.tsx`(에코방지·디바운스·재연결 refresh) + `alert-toast.tsx`, 대시보드 레이아웃 마운트 |
+| US2 소리 | `alert-sound.ts`+`sound-arm-button.tsx`(1회 활성화·on/off, localStorage) + 헤더 배치, `public/sounds/alert.wav`(딩동) |
+| US3 Web Push | `saveChairRecord`에 `sendPushToInstitution` fire-and-forget 추가(체어명·도착사실만) |
+| 설계 핵심 | 진료본문 든 `consultation` 아닌 **`chair_audit_logs`(PII 0) 구독** → 전송선 환자정보 없음(헌법 I), `actor_user_id`로 에코방지. 목록은 `router.refresh()` 서버 재조회(헌법 II) |
+| DB | 마이그레이션 `20260614000001_realtime_chair_audit_logs.sql`(chair_audit_logs를 supabase_realtime publication에 추가, 멱등). schema.sql·database.md 동기화 |
+| 빌드 | `npm run build` ✅ |
+| ⏳ 남은 수동작업 | **(1) 마이그레이션 Supabase 적용**(다온/대표 — 대시보드 Replication 확인) **(2) 실기기 검증**(두 화면 토스트/소리/푸시, quickstart.md) |
+
+> 기기 확정: PC·안드로이드 태블릿·안드로이드 폰(보조), iOS 범위 밖 → 푸시·소리 제약 없음. 향후 알림·소통 기능(직원 호출·환자 도착 등)은 이 파이프라인 확장.
+
+---
+
+## 2026-06-13 세션 20 (기획) — 성장 축: 상담 데이터 → 경영관리·CRM
+
+대표님 발의. 방향 캡처(스펙 아님). Carelog를 병원 상담 플랫폼으로 키우며 상담 데이터(상담 성공률 등)를 구조화 축적 → 경영관리·CRM 원천으로 잇는 사다리.
+
+| 산출물 | 내용 |
+|---|---|
+| `docs/consult-analytics-crm-vision.md` | 신규 방향 문서 — 발전 사다리(기록→데이터·지표→경영관리·CRM), 수집 후보 필드, 지표 예시, EO 경계, 첫 걸음 |
+| `roadmap.md` | 채움 — 지금(EO 안정화)/다음(상담 결과·유형+성공률 1단계)/나중(경영 대시보드·CRM·EO 피드·도메인 확장) |
+| `docs/product-vision.md` | 관련 문서 목록에 성장 축 포인터 추가(기둥1 심화로 연결, SSOT 본문 불변) |
+
+> 다음 액션: 우선순위 합의 후 1단계 `specs/007-consult-outcomes`(가칭) — `consultation` 결과/유형/전환/금액 필드 + 성공률 집계로 spec-kit 시작.
 
 ---
 
