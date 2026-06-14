@@ -6,7 +6,7 @@
 <!-- SPECKIT START -->
 For additional context about technologies to be used, project structure,
 shell commands, and other important information, read the current plan at:
-specs/006-chair-quick-record/plan.md
+specs/007-live-chair-alerts/plan.md
 <!-- SPECKIT END -->
 
 ## 문서 관리 원칙
