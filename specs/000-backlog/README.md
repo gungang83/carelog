@@ -14,6 +14,7 @@
 | 2026-06-08 | 다온(Carelog) | 다온(새 세션) | **카드 235** — EO 연동 ①게이트웨이 마스터 캐시 + ②SSO 보정 + ③작성자 귀속. 계약(카드226) 전문·설계확정·구현계획 전부 `card-235-eo-gateway-sso.md`에 임베드(새 세션은 EO 레포 못 봄). 완료분 배포는 끝(`0095d87`), 235 미착수. | ✅ 구현 완료 — `claude/festive-planck-FCghV` (DB 적용 완료, main 배포 대기) |
 | 2026-06-08 | 다온(Carelog) | 테오(EO) | **카드 236** — 카드235 Carelog 측 구현·DB 적용 완료 → EO 측 배포 준비 4건 요청(게이트웨이 API·기관 연동·공유 시크릿 `CARELOG_GATEWAY_SECRET`·SSO 클레임 확장). `card-236-eo-gateway-deploy-request.md`. | 🔁 카드 237로 대체(상위호환) |
 | 2026-06-10 | 다온(Carelog) | 테오(EO) | **카드 237** — 카드236 회신 대기 중 Carelog 코드 재분석본. 블로커를 코드 타입과 1:1로 재확정: **★시크릿 값 `CARELOG_GATEWAY_SECRET` + ★연동 CL `institution_id`** 단 2건이 실질 블로커, 나머지(게이트웨이 호스트·응답 스키마·SSO 클레임)는 확인용. `card-237-eo-deploy-blockers-recheck.md`. | ✅ **DONE (2026-06-10)** — EO 연동 라이브 + 빌(EO) 검증완료 회신. 시크릿·배포·cron fix·더미 404 노이즈 제거(`4ad0c97`) 완료. sync-master `{synced:1, skipped:0}`. 카드 226/235/236/237 종결. (잔여 수동확인: SSO 작성자 귀속 실사용) |
+| 2026-06-14 | 다온(현 세션) | 다온(새 세션) | **카드 238** — 세션 인계. EO연동+실시간 체어 알림(spec 007) 라이브. **열린 일 = 체어 녹음 iOS 유실/미저장 원인 확정**(진단 계측 배포 `c81a4ef`, 대표님 실기기 화면문구 N초·KB 회신 대기). 구동방식·해석표·다음 액션·브랜치 상태 전부 `card-238-session-handoff-chair-recording.md`. | 🟡 인계 — 새 세션 착수 대기 |
 
 ## 협업 메모
 
