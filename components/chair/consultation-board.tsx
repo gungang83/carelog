@@ -39,7 +39,6 @@ function BoardContent() {
     openChairId,
     closeOverlay,
     getChairStatus,
-    getTranscribedText,
     startRecording,
     stopRecording,
     setTranscriptionResult,
@@ -65,7 +64,6 @@ function BoardContent() {
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const status = getChairStatus(DRAFT_CHAIR_KEY);
-  const transcribedText = getTranscribedText(DRAFT_CHAIR_KEY);
 
   // 마운트 시 기본값: '나' 참여자, 마지막 체어, 최근 참여자 로드
   useEffect(() => {
@@ -80,15 +78,6 @@ function BoardContent() {
     const last = lastId ? chairs.find((c) => c.id === lastId) : undefined;
     setSelectedChair(last ? { id: last.id, name: last.name } : null);
   }
-
-  // 전사 결과가 도착하면 본문에 합친다
-  useEffect(() => {
-    if (transcribedText && !editText) {
-      setEditText(transcribedText);
-      editorRef.current?.clear();
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [transcribedText]);
 
   // 녹음 타이머
   useEffect(() => {
@@ -134,8 +123,10 @@ function BoardContent() {
       formData.append("audio", blob, "recording.webm");
       const result = await transcribeChairAudio(formData);
       if (result.ok) {
+        // 상태를 has_records로 전환(녹음바 processing 해제) + 본문 에디터에 전사 삽입.
+        // RichTextEditor는 value 변경을 자동 반영하지 않으므로 insertText로 넣는다(onChange가 editText 갱신).
         setTranscriptionResult(DRAFT_CHAIR_KEY, result.summary);
-        setEditText((prev) => (prev ? `${prev}\n${result.summary}` : result.summary));
+        editorRef.current?.insertText(result.summary);
       } else {
         setMicError(`전사 실패 (녹음 ${secs}초 · ${sizeKB}KB): ${result.message}`);
         setTranscriptionResult(DRAFT_CHAIR_KEY, "");
