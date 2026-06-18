@@ -2,7 +2,7 @@
 
 > **제품 정체성(SSOT)**: Carelog는 **환자 전용 서비스가 아니다.** 의료기관 상담 기록(B2B) ↔ 환자 평생 보관·생애주기 건강관리(B2C)를 잇는 **연결고리**. 상세: [docs/product-vision.md](docs/product-vision.md)
 
-**최종 업데이트**: 2026-06-14 (세션 21 — 실시간 체어 알림 구현)
+**최종 업데이트**: 2026-06-18 (세션 22 — 원탭 녹음 UX)
 **현재 버전**: main 브랜치
 
 ---
@@ -52,12 +52,29 @@
 | 환자 푸시 알림 | ✅ 완료 | patient_push_subscriptions + sendPushToPatient, 상담 저장 시 fire-and-forget |
 | 환자 계정 연결 오류 안내 | ✅ 완료 | /portal/link-account — OTP 없이 Google 로그인 시도 시 안내 |
 | 체어 즉시 기록 (Chair Quick Record) | ✅ 완료 | 체어 선택 → 즉시 녹음 → AI 변환 → 임시 저장 → 환자 연결 |
+| 원탭 녹음 (One-tap Record) | ✅ 완료 | 마지막 체어를 기기별 기억(localStorage) → 홈 히어로 `{체어명} 바로 녹음` 1탭으로 오버레이+녹음 즉시 시작 |
 | 미연결 기록 관리 (홈 인라인) | ✅ 완료 | 전체 체어 통합 조회 · 인라인 RichTextEditor 편집 · 처방 선택 · 환자 연결 |
 | 체어 기록 재연결/해제 | ✅ 완료 | 환자 상담 기록에서 다른 환자로 재연결 또는 미연결 상태로 되돌리기 |
 | 참여자(원장·직원·담당자) 선택 | ✅ 완료 | 녹음 시작 시 참여자 선택 + 마스킹, `clinic_members` 디렉터리 + `consultation.participants` 스냅샷. 마이그레이션 적용 완료 |
 | 이미지 줌/팬 | ✅ 완료 | 보기 라이트박스(`ZoomableImage`) + 주석 화면(CSS transform 줌·팬). 휠/버튼/핀치/드래그/더블클릭, 외부 라이브러리 없음 |
 | EO 마스터 게이트웨이 캐시 | ✅ **라이브** (2026-06-10) | EO 직원 마스터를 `clinic_members`에 캐시(`source='eo'`). `lib/eo/gateway.ts`+`sync-master.ts`, Vercel Cron `/api/cron/sync-master`(10분). 수동분 보호. 예미안(0e4e85d6) 직원 30명 동기화 확인 |
 | EO SSO 작성자 귀속 | ✅ **라이브** (2026-06-10) | `/api/auth/sso` 확장 클레임 수용 → `institution_members.eo_employee_id`·`display_name` 저장. 상담 저장 시 `author_employee_id`·`author_name` 자동 기록 |
+
+---
+
+## 2026-06-18 세션 22 (구현) — 원탭 녹음 UX (spec 006 강화)
+
+체어 녹음 진입 단축. 기존 콜드 스타트는 "상담 기록 시작 → 체어 선택 → 녹음 시작" 3탭. 마지막 체어를 기억해 홈에서 1탭으로 바로 녹음 시작.
+
+| 작업 | 결과 |
+|---|---|
+| 마지막 체어 기억 | `components/chair/consult-hero.tsx` — `localStorage["carelog:lastChairId"]`에 체어 선택 시 저장(`rememberChair`). 기기별이라 각 직원 기기가 자기 체어를 기억. 삭제된 체어 id는 복원 시 무시 |
+| 원탭 녹음 버튼 | 마지막 체어가 있으면 히어로 1차 CTA를 `{체어명} 바로 녹음`으로 노출 → 같은 클릭 제스처 안에서 `openOverlay` + `startRecording` 호출(getUserMedia 사용자 제스처 보존). 보조 동선 "다른 체어로 기록"은 기존 picker로 |
+| 폴백 | localStorage 미지원/차단 또는 마지막 체어 없음 → 기존 "상담 기록 시작" 흐름 그대로. 마이크 권한 거부 시 오버레이는 idle로 열려 재시도 가능 |
+| 범위 | UI/클라이언트 한정 — DB/서버 액션/스키마 변경 없음. 기존 006 즉시기록 파이프라인 재사용 |
+| 빌드 | `npm run build` ✅ (TypeScript 통과) |
+
+> iOS "마이크 허용 1회화"는 PWA 설치 시 origin 권한이 유지되므로 별도 코드 없이 자연 충족. 체어 녹음 신뢰성(빈 녹음) 원인 확정은 대표님 요청으로 파킹(진단 계측 c81a4ef 배포 상태 유지).
 
 ---
 

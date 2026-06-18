@@ -1,10 +1,13 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import { useChairContext } from "@/components/chair/chair-provider";
 import { getOrCreateChairByName } from "@/app/actions/chairs";
 import { maskName } from "@/lib/mask-name";
 import type { ClinicMemberRow, Participant } from "@/lib/types/database";
+
+/** 마지막으로 기록한 체어를 기기별로 기억하는 localStorage 키 (원탭 녹음용). */
+const LAST_CHAIR_KEY = "carelog:lastChairId";
 
 /**
  * 홈 최상단 히어로 — 진료 기록의 진입점.
@@ -16,12 +19,44 @@ import type { ClinicMemberRow, Participant } from "@/lib/types/database";
  * 기능은 기존 QuickRecordTrigger와 동일: 체어 칩 선택 또는 직접 입력 → openOverlay.
  */
 export function ConsultHero({ members = [] }: { members?: ClinicMemberRow[] }) {
-  const { chairs, openOverlay } = useChairContext();
+  const { chairs, openOverlay, startRecording } = useChairContext();
   const [picking, setPicking] = useState(false);
   const [customName, setCustomName] = useState("");
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [error, setError] = useState("");
+  const [lastChairId, setLastChairId] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
+
+  // 마지막으로 기록한 체어 복원(기기별). 삭제된 체어면 무시한다.
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem(LAST_CHAIR_KEY);
+      if (saved && chairs.some((c) => c.id === saved)) setLastChairId(saved);
+    } catch {
+      // localStorage 미지원/차단 — 원탭 없이 기존 흐름으로 동작
+    }
+  }, [chairs]);
+
+  // 체어를 고를 때마다 "마지막 체어"로 기억(다음 방문 시 원탭 진입).
+  const rememberChair = (chairId: string) => {
+    try {
+      localStorage.setItem(LAST_CHAIR_KEY, chairId);
+    } catch {
+      // 무시
+    }
+    setLastChairId(chairId);
+  };
+
+  const lastChair = chairs.find((c) => c.id === lastChairId) ?? null;
+
+  // 원탭 녹음 — 마지막 체어 오버레이를 열고 같은 클릭 제스처로 즉시 녹음 시작.
+  // (getUserMedia는 사용자 제스처가 필요하므로 클릭 핸들러 안에서 바로 호출한다.)
+  const handleQuickRecord = () => {
+    if (!lastChair) return;
+    rememberChair(lastChair.id);
+    openOverlay(lastChair.id);
+    void startRecording(lastChair.id);
+  };
 
   const toggleMember = (id: string) => {
     setSelectedIds((prev) =>
@@ -45,6 +80,7 @@ export function ConsultHero({ members = [] }: { members?: ClinicMemberRow[] }) {
   const handlePickChair = (chairId: string) => {
     const participants = buildParticipants();
     resetPicking();
+    rememberChair(chairId);
     openOverlay(chairId, participants);
   };
 
@@ -56,6 +92,7 @@ export function ConsultHero({ members = [] }: { members?: ClinicMemberRow[] }) {
       const result = await getOrCreateChairByName(customName.trim());
       if (result.ok) {
         resetPicking();
+        rememberChair(result.chairId);
         openOverlay(result.chairId, participants);
       } else {
         setError(result.message);
@@ -82,14 +119,35 @@ export function ConsultHero({ members = [] }: { members?: ClinicMemberRow[] }) {
       </p>
 
       {!picking ? (
-        <button
-          type="button"
-          onClick={() => setPicking(true)}
-          className="mt-6 flex w-full items-center justify-center gap-2.5 rounded-2xl bg-sky-600 px-6 py-4 text-base font-semibold text-white shadow-sm shadow-sky-200 transition hover:bg-sky-700 active:scale-[0.99] sm:w-auto"
-        >
-          <MicIcon className="size-5 shrink-0" />
-          상담 기록 시작
-        </button>
+        lastChair ? (
+          // 원탭 녹음 — 마지막 체어로 바로 녹음(1탭). 다른 체어는 아래 보조 동선.
+          <div className="mt-6 flex flex-col items-start gap-3">
+            <button
+              type="button"
+              onClick={handleQuickRecord}
+              className="flex w-full items-center justify-center gap-2.5 rounded-2xl bg-sky-600 px-6 py-4 text-base font-semibold text-white shadow-sm shadow-sky-200 transition hover:bg-sky-700 active:scale-[0.99] sm:w-auto"
+            >
+              <MicIcon className="size-5 shrink-0" />
+              {lastChair.name} 바로 녹음
+            </button>
+            <button
+              type="button"
+              onClick={() => setPicking(true)}
+              className="text-sm font-medium text-sky-700 underline-offset-2 hover:underline"
+            >
+              다른 체어로 기록
+            </button>
+          </div>
+        ) : (
+          <button
+            type="button"
+            onClick={() => setPicking(true)}
+            className="mt-6 flex w-full items-center justify-center gap-2.5 rounded-2xl bg-sky-600 px-6 py-4 text-base font-semibold text-white shadow-sm shadow-sky-200 transition hover:bg-sky-700 active:scale-[0.99] sm:w-auto"
+          >
+            <MicIcon className="size-5 shrink-0" />
+            상담 기록 시작
+          </button>
+        )
       ) : (
         <div className="mt-6 rounded-2xl border border-sky-100 bg-white p-5 shadow-sm">
           <div className="mb-4 flex items-center justify-between">

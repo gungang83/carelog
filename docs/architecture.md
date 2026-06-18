@@ -344,7 +344,10 @@ app/(dashboard)/page.tsx (홈 화면)
   ├── ConsultHero (Client) — 최상단 히어로 (Living Consult 톤, 이전 QuickRecordTrigger 대체)
   │     ── "오늘 진료, 기록으로 남겨서 환자에게 전달해요" 헤드라인 + "상담 기록 시작" CTA
   │     ── 클릭 → 체어 목록 칩 표시 (등록된 chairs 또는 직접 입력)
-  │     ── 체어 선택 → openOverlay(chairId)  (기능은 기존과 동일)
+  │     ── 체어 선택 → rememberChair(chairId) [localStorage] → openOverlay(chairId)
+  │     ── 원탭 녹음: 마지막 체어(localStorage["carelog:lastChairId"]) 있으면
+  │          1차 CTA가 "{체어명} 바로 녹음" → 같은 클릭 제스처로 openOverlay + startRecording
+  │          (getUserMedia 사용자 제스처 보존). 보조 동선 "다른 체어로 기록" = 기존 picker
   │
   └── UnlinkedRecordsSection (Client)
         ── getAllUnlinkedRecords() → 모든 체어의 미연결 기록 통합 목록
