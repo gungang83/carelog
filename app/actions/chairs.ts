@@ -5,7 +5,7 @@ import { createAdminSupabaseClient } from "@/lib/supabase/admin";
 import { getMyInstitutionId, getMyAuthorInfo } from "@/lib/auth/institution";
 import { revalidatePath } from "next/cache";
 import { sanitizeRichHtml, ensureHtml } from "@/lib/sanitize-html";
-import type { ChairRow } from "@/lib/types/database";
+import type { ChairRow, Participant } from "@/lib/types/database";
 import { transcribeAndSummarize, type TranscribeResult } from "@/app/actions/transcribe";
 import { sendPushToInstitution } from "@/app/actions/push";
 
@@ -31,6 +31,41 @@ export async function getChairs(): Promise<ChairRow[]> {
     .order("display_order", { ascending: true });
 
   return (data ?? []) as ChairRow[];
+}
+
+// ─── getRecentParticipants ────────────────────────────────────────────────────
+/**
+ * 최근 상담 기록의 참여자에서 distinct(name) 후보를 최근 등장순으로 반환.
+ * 참여자 피커 "최근 함께한 사람" 노출용. 읽기 전용·비차단(실패 시 빈 배열).
+ */
+export async function getRecentParticipants(limit = 8): Promise<Participant[]> {
+  try {
+    const supabase = await createServerSupabaseClient();
+    const institutionId = await getMyInstitutionId();
+    if (!institutionId) return [];
+
+    const { data } = await supabase
+      .from("consultation")
+      .select("participants, created_at")
+      .eq("institution_id", institutionId)
+      .not("participants", "is", null)
+      .order("created_at", { ascending: false })
+      .limit(50);
+
+    const seen = new Set<string>();
+    const recent: Participant[] = [];
+    for (const row of (data ?? []) as { participants: Participant[] | null }[]) {
+      for (const p of row.participants ?? []) {
+        if (!p?.name || seen.has(p.name)) continue;
+        seen.add(p.name);
+        recent.push({ id: p.id, name: p.name, role: p.role ?? null });
+        if (recent.length >= limit) return recent;
+      }
+    }
+    return recent;
+  } catch {
+    return [];
+  }
 }
 
 // ─── saveChairRecord ──────────────────────────────────────────────────────────

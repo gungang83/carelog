@@ -6,11 +6,14 @@ import { Header } from "@/components/layout/header";
 import { Footer } from "@/components/footer";
 import { SessionRefresher } from "@/components/layout/session-refresher";
 import { BadgeManager } from "@/components/layout/badge-manager";
-import { getMyInstitutions, getMyInstitutionId } from "@/lib/auth/institution";
+import { getMyInstitutions, getMyInstitutionId, getMyAuthorInfo } from "@/lib/auth/institution";
 import { getChairs } from "@/app/actions/chairs";
+import { getClinicMembers } from "@/app/actions/clinic-members";
 import { ChairProvider } from "@/components/chair/chair-provider";
 import { ChairOverlay } from "@/components/chair/chair-overlay";
+import { ConsultationBoard } from "@/components/chair/consultation-board";
 import { LiveAlertsProvider } from "@/components/notifications/live-alerts-provider";
+import type { Participant } from "@/lib/types/database";
 
 export default async function DashboardLayout({
   children,
@@ -26,16 +29,22 @@ export default async function DashboardLayout({
     redirect("/login");
   }
 
-  const [institutions, activeInstitutionId, chairs] = await Promise.all([
+  const [institutions, activeInstitutionId, chairs, members, authorInfo] = await Promise.all([
     getMyInstitutions(),
     getMyInstitutionId(),
     getChairs(),
+    getClinicMembers(),
+    getMyAuthorInfo(),
   ]);
 
   const userEmail = user.email ?? "";
   const userMeta = user.user_metadata as Record<string, string> | undefined;
   const userName: string | undefined = userMeta?.full_name ?? userMeta?.name;
   const userAvatarUrl: string | undefined = userMeta?.avatar_url;
+
+  // 상담보드 참여자 '나' 기본 포함 대상(작성자 표시명 우선)
+  const meName = authorInfo.author_name ?? userName ?? userEmail;
+  const me: Participant | null = meName ? { id: user.id, name: meName, role: null } : null;
 
   if (institutions.length > 0 && !institutions.some((i) => i.is_active)) {
     return (
@@ -58,10 +67,11 @@ export default async function DashboardLayout({
   }
 
   return (
-    <ChairProvider initialChairs={chairs}>
+    <ChairProvider initialChairs={chairs} members={members} me={me}>
       <SessionRefresher />
       <BadgeManager />
       <ChairOverlay />
+      <ConsultationBoard />
       <LiveAlertsProvider
         currentUserId={user.id}
         institutionId={activeInstitutionId ?? ""}

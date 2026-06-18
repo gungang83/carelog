@@ -339,15 +339,14 @@ ConsultationForm (Client)
 ```
 ChairProvider (Context + useReducer, MediaRecorder refs in useRef)
   ── 대시보드 layout 전체 래핑 → 페이지 이동에도 상태 유지
+  ── props: initialChairs · members(clinic_members) · me(작성자 표시명, 참여자 '나')
+  ── DRAFT_CHAIR_KEY="__draft__": 체어 없이 녹음하는 record-first 예약 세션 키
+       (chairs.find(id===KEY) 미스 → per-chair 오버레이는 무반응, 상담보드만 이 키로 열림)
 
 app/(dashboard)/page.tsx (홈 화면)
-  ├── ConsultHero (Client) — 최상단 히어로 (Living Consult 톤, 이전 QuickRecordTrigger 대체)
-  │     ── "오늘 진료, 기록으로 남겨서 환자에게 전달해요" 헤드라인 + "상담 기록 시작" CTA
-  │     ── 클릭 → 체어 목록 칩 표시 (등록된 chairs 또는 직접 입력)
-  │     ── 체어 선택 → rememberChair(chairId) [localStorage] → openOverlay(chairId)
-  │     ── 원탭 녹음: 마지막 체어(localStorage["carelog:lastChairId"]) 있으면
-  │          1차 CTA가 "{체어명} 바로 녹음" → 같은 클릭 제스처로 openOverlay + startRecording
-  │          (getUserMedia 사용자 제스처 보존). 보조 동선 "다른 체어로 기록" = 기존 picker
+  ├── ConsultHero (Client) — 최상단 히어로 (record-first 진입)
+  │     ── "상담 기록 시작" CTA 클릭 → openOverlay(DRAFT) + startRecording(DRAFT)
+  │          (체어·참여자 선택 없이 즉시 녹음 — 같은 클릭 제스처로 getUserMedia)
   │
   └── UnlinkedRecordsSection (Client)
         ── getAllUnlinkedRecords() → 모든 체어의 미연결 기록 통합 목록
@@ -357,13 +356,20 @@ app/(dashboard)/page.tsx (홈 화면)
               └── linkChairRecordToPatient({ consultationId, patientId })
         ── 삭제: deleteChairRecord → 감사 로그 먼저, 이후 delete
 
-ChairOverlay (Client, createPortal → document.body)
-  ── backdrop-filter 스택 컨텍스트 탈출을 위해 portal 사용
-  ── 현재 세션 녹음/편집 전용 (과거 기록 목록 없음)
-  ── idle: 녹음 시작 버튼 (+ 마이크 실패 시 텍스트 직접 입력 폴백)
-  ── recording: 타이머 + 중지 버튼 (overlay 닫아도 백그라운드 녹음 유지)
-  ── processing: 변환 중 스피너
-  ── has_records: 텍스트 편집 + PrescriptionPicker + [임시저장] [환자연결] [버리기]
+ConsultationBoard (Client, createPortal → document.body) — record-first 통합 보드 (spec 008)
+  ── openChairId === DRAFT_CHAIR_KEY 일 때 렌더 (layout에 상시 마운트 → 작성 내용 보존 FR-016)
+  ── 상단 녹음바: idle [녹음 시작] / recording 타이머+[중지] / processing 스피너 (보드 닫아도 녹음 지속)
+  ── 본문: RichTextEditor (인라인 이미지 + ImageAnnotator 그림 주석) — 전사 결과 합류·편집
+  ── 체어: 칩 선택 + 직접 입력(getOrCreateChairByName), 마지막 체어 기본 선택(lib/chair/last-chair)
+  ── 참여자: ParticipantPicker (검색·'나' 자동·최근순·역할 후순위)
+  │     └── getRecentParticipants() — 최근 consultation.participants distinct(최근순)
+  ── 처방: PrescriptionPicker
+  ── [저장] → saveChairRecord({chairId, content, participants, prescriptions}) → draft reset + refresh
+  ── [버리기] = draft reset / 닫기 = 보존
+
+ChairOverlay (Client, createPortal → document.body) — per-chair 진입(체어 칩에서 직접)
+  ── 현재 세션 녹음/편집 전용. idle/recording/processing/has_records 4상태
+  ── recording: overlay 닫아도 백그라운드 녹음 유지. (record-first 흐름은 ConsultationBoard 사용)
 
 app/(dashboard)/patients/[patientId]/page.tsx
   └── ConsultationHistory → RelinkControls (체어 기록에만 표시)

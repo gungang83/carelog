@@ -9,10 +9,18 @@ import {
   useRef,
   type ReactNode,
 } from "react";
-import type { ChairRow, Participant } from "@/lib/types/database";
+import type { ChairRow, ClinicMemberRow, Participant } from "@/lib/types/database";
 import { getUnlinkedChairRecords } from "@/app/actions/chairs";
 
 export type ChairStatus = "idle" | "recording" | "processing" | "has_records";
+
+/**
+ * record-first 보드용 예약 세션 키.
+ * 체어를 고르기 전에 녹음을 시작할 때, 녹음 상태·MediaRecorder를 이 키로 키잉한다.
+ * 실제 체어 id가 아니므로 `chairs.find(id===KEY)`는 항상 미스 → 기존 per-chair 오버레이는
+ * 이 키에 반응하지 않고, 상담보드(ConsultationBoard)만 이 키로 열린다.
+ */
+export const DRAFT_CHAIR_KEY = "__draft__";
 
 type ChairRecordingState = {
   status: ChairStatus;
@@ -126,6 +134,10 @@ type NavigatorWithWakeLock = Navigator & {
 
 type ChairContextValue = {
   chairs: ChairRow[];
+  /** 기관 멤버 디렉터리(참여자 후보) — 보드/참여자 피커 공용 */
+  members: ClinicMemberRow[];
+  /** 로그인한 '나'(참여자 기본 포함 대상) */
+  me: Participant | null;
   openChairId: string | null;
   openOverlay: (chairId: string, participants?: Participant[]) => void;
   closeOverlay: () => void;
@@ -152,9 +164,13 @@ export function useChairContext() {
 
 export function ChairProvider({
   initialChairs,
+  members = [],
+  me = null,
   children,
 }: {
   initialChairs: ChairRow[];
+  members?: ClinicMemberRow[];
+  me?: Participant | null;
   children: ReactNode;
 }) {
   const [state, dispatch] = useReducer(reducer, {
@@ -342,6 +358,8 @@ export function ChairProvider({
 
   const value: ChairContextValue = {
     chairs: state.chairs,
+    members,
+    me,
     openChairId: state.openChairId,
     openOverlay,
     closeOverlay,

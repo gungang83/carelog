@@ -2,7 +2,7 @@
 
 > **제품 정체성(SSOT)**: Carelog는 **환자 전용 서비스가 아니다.** 의료기관 상담 기록(B2B) ↔ 환자 평생 보관·생애주기 건강관리(B2C)를 잇는 **연결고리**. 상세: [docs/product-vision.md](docs/product-vision.md)
 
-**최종 업데이트**: 2026-06-18 (세션 22 — 원탭 녹음 UX)
+**최종 업데이트**: 2026-06-18 (세션 23 — 상담보드 record-first)
 **현재 버전**: main 브랜치
 
 ---
@@ -52,13 +52,31 @@
 | 환자 푸시 알림 | ✅ 완료 | patient_push_subscriptions + sendPushToPatient, 상담 저장 시 fire-and-forget |
 | 환자 계정 연결 오류 안내 | ✅ 완료 | /portal/link-account — OTP 없이 Google 로그인 시도 시 안내 |
 | 체어 즉시 기록 (Chair Quick Record) | ✅ 완료 | 체어 선택 → 즉시 녹음 → AI 변환 → 임시 저장 → 환자 연결 |
-| 원탭 녹음 (One-tap Record) | ✅ 완료 | 마지막 체어를 기기별 기억(localStorage) → 홈 히어로 `{체어명} 바로 녹음` 1탭으로 오버레이+녹음 즉시 시작 |
+| 상담보드 (Consultation Board, record-first) | ✅ 구현(spec 008) | 홈 "상담 기록 시작" 1탭 → **체어·참여자 선택 없이 즉시 녹음** → 보드에서 본문·그림·체어·참여자·처방 병행 채움 → 저장. 참여자 검색·'나' 자동·최근·역할 후순위. 마지막 체어 기기별 기억(보드 기본 선택). DB 변경 0 |
 | 미연결 기록 관리 (홈 인라인) | ✅ 완료 | 전체 체어 통합 조회 · 인라인 RichTextEditor 편집 · 처방 선택 · 환자 연결 |
 | 체어 기록 재연결/해제 | ✅ 완료 | 환자 상담 기록에서 다른 환자로 재연결 또는 미연결 상태로 되돌리기 |
 | 참여자(원장·직원·담당자) 선택 | ✅ 완료 | 녹음 시작 시 참여자 선택 + 마스킹, `clinic_members` 디렉터리 + `consultation.participants` 스냅샷. 마이그레이션 적용 완료 |
 | 이미지 줌/팬 | ✅ 완료 | 보기 라이트박스(`ZoomableImage`) + 주석 화면(CSS transform 줌·팬). 휠/버튼/핀치/드래그/더블클릭, 외부 라이브러리 없음 |
 | EO 마스터 게이트웨이 캐시 | ✅ **라이브** (2026-06-10) | EO 직원 마스터를 `clinic_members`에 캐시(`source='eo'`). `lib/eo/gateway.ts`+`sync-master.ts`, Vercel Cron `/api/cron/sync-master`(10분). 수동분 보호. 예미안(0e4e85d6) 직원 30명 동기화 확인 |
 | EO SSO 작성자 귀속 | ✅ **라이브** (2026-06-10) | `/api/auth/sso` 확장 클레임 수용 → `institution_members.eo_employee_id`·`display_name` 저장. 상담 저장 시 `author_employee_id`·`author_name` 자동 기록 |
+
+---
+
+## 2026-06-18 세션 23 (구현) — 상담보드 record-first (spec 008)
+
+대표님 인사이트: 참여자 26명 선택이 과부하 + 급한 진료에 "선택 게이트"가 기록을 막는다 → **"선택 → 녹음"을 "녹음 → 채워넣기"로 역전**. spec-kit 전 과정(specify→plan→tasks→implement)으로 구현.
+
+| 작업 | 결과 |
+|---|---|
+| 토대 — draft 세션 | `chair-provider.tsx`에 `DRAFT_CHAIR_KEY` — 체어 없이 녹음 시작/중지(기존 키 메커니즘 재사용), members·me context 노출. 기존 per-chair 오버레이 회귀 없음 |
+| US1 record-first | `consultation-board.tsx`(신규) — 1탭 즉시 녹음 → 중지·전사 → **저장 시 체어 귀속**. `consult-hero.tsx`는 record-first 보드 진입으로 단순화(기존 picker 제거). 보드 닫아도 작성 내용·녹음 보존(FR-016) |
+| US2 참여자 부담 해소 | `participant-picker.tsx`(신규, 검색·'나' 자동·최근순·역할 후순위) + `getRecentParticipants`(신규 읽기 액션, 최근 상담 participants distinct). 26명 노이즈(대표·한량·미분류) 후순위, 검색으로 전체 도달 |
+| US3 종합 캔버스 | 보드 본문=`RichTextEditor`(인라인 이미지+그림 주석) + `PrescriptionPicker`. 녹음 도는 동안 본문·그림·처방·체어 병행(상태 분리로 녹음 끊김 0) |
+| 설계 핵심 | **DB·서버 액션 시그니처 변경 0**(MVP) — `saveChairRecord(chairId,…)` 그대로, 변경은 클라이언트 재구성 + 읽기 액션 1개. 마이그레이션 불요 |
+| 빌드 | `npm run build` ✅ (TypeScript 통과) |
+| ⏳ 남은 것 | T017 녹음 일시정지(선택, 보류) · T021 실기기 수동검증(파일럿에서 SC-007) · main 배포(다온) |
+
+> 멀티기기 세팅(예미안 파일럿 워크스트림 A)과 직결: 기기=체어 매핑 + record-first로 김도은 1년차가 "급할 때 빠짐없이 기록"하는 핵심 루프 완성.
 
 ---
 
