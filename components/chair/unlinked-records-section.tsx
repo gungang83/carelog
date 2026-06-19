@@ -1,7 +1,8 @@
 "use client";
 
-import { useRef, useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import { useChairContext } from "@/components/chair/chair-provider";
+import { CopyAllButton } from "@/components/copy-all-button";
 import {
   getAllUnlinkedRecords,
   deleteChairRecord,
@@ -23,6 +24,12 @@ export function UnlinkedRecordsSection({ initialRecords }: { initialRecords: All
   const [msg, setMsg] = useState("");
   const [isPending, startTransition] = useTransition();
   const editorRef = useRef<RichTextEditorHandle>(null);
+
+  // router.refresh()(실시간 알림·저장 후)로 서버가 새 목록을 내려주면 반영한다.
+  // 이로써 다른 기기에서 올린 기록도 이 화면의 '미연결 기록'에 자동으로 나타난다.
+  useEffect(() => {
+    setRecords(initialRecords);
+  }, [initialRecords]);
 
   const reload = async () => {
     const data = await getAllUnlinkedRecords();
@@ -194,6 +201,11 @@ export function UnlinkedRecordsSection({ initialRecords }: { initialRecords: All
                     </div>
                   ) : (
                     <div className="flex flex-wrap gap-2">
+                      <CopyAllButton
+                        html={rec.content}
+                        label="전체 복사"
+                        className="inline-flex min-h-8 items-center justify-center gap-1.5 rounded-xl bg-slate-800 px-3 text-xs font-semibold text-white transition hover:bg-slate-900"
+                      />
                       <button
                         type="button"
                         onClick={() => setLinkingId(rec.id)}

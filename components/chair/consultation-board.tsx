@@ -2,10 +2,13 @@
 
 import { useEffect, useRef, useState, useTransition } from "react";
 import { createPortal } from "react-dom";
+import { useRouter } from "next/navigation";
 import {
   useChairContext,
   DRAFT_CHAIR_KEY,
 } from "@/components/chair/chair-provider";
+import { CopyAllButton } from "@/components/copy-all-button";
+import { markLocalSave } from "@/lib/realtime/local-echo";
 import {
   transcribeChairAudio,
   saveChairRecord,
@@ -60,6 +63,7 @@ function BoardContent() {
   const [isPending, startTransition] = useTransition();
   const [isCreatingChair, startCreateChair] = useTransition();
 
+  const router = useRouter();
   const editorRef = useRef<RichTextEditorHandle | null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -187,6 +191,8 @@ function BoardContent() {
         participants,
       });
       if (result.ok) {
+        // 이 탭이 저장한 기록 → 내 토스트만 숨김(같은 계정 다른 기기는 알림 받음)
+        markLocalSave(result.consultationId);
         setLastChairId(chair.id);
         resetChair(DRAFT_CHAIR_KEY);
         setEditText("");
@@ -197,6 +203,8 @@ function BoardContent() {
         resetDefaults();
         await refreshUnlinkedCount(chair.id);
         closeOverlay();
+        // 저장한 기기의 '미연결 기록' 목록 즉시 갱신(타 기기는 realtime이 갱신)
+        router.refresh();
       } else {
         setSaveMsg(result.message);
       }
@@ -284,6 +292,13 @@ function BoardContent() {
               onChange={setEditText}
               placeholder="상담 내용을 입력하거나 녹음을 정리하세요…"
             />
+            {editText.trim() && (
+              <CopyAllButton
+                html={editText}
+                label="전체 복사 (덴트웹 붙여넣기)"
+                className="inline-flex min-h-9 w-full items-center justify-center gap-1.5 rounded-xl border border-slate-300 bg-white px-4 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+              />
+            )}
 
             {/* 체어 */}
             <div className="space-y-2">

@@ -11,6 +11,7 @@ import {
 import { PrescriptionPicker } from "@/components/chair/prescription-picker";
 import { ChairPatientSearch } from "@/components/chair/chair-patient-search";
 import { maskName } from "@/lib/mask-name";
+import { markLocalSave } from "@/lib/realtime/local-echo";
 
 export function ChairOverlay() {
   const [mounted, setMounted] = useState(false);
@@ -165,6 +166,7 @@ function OverlayContent() {
           participants,
         });
         if (result.ok) {
+          markLocalSave(result.consultationId);
           setSavedConsultationId(openChairId, result.consultationId);
           setSaveMsg("저장됨 ✓");
           await refreshUnlinkedCount(openChairId);

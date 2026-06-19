@@ -2,7 +2,7 @@
 
 > **제품 정체성(SSOT)**: Carelog는 **환자 전용 서비스가 아니다.** 의료기관 상담 기록(B2B) ↔ 환자 평생 보관·생애주기 건강관리(B2C)를 잇는 **연결고리**. 상세: [docs/product-vision.md](docs/product-vision.md)
 
-**최종 업데이트**: 2026-06-18 (세션 23 — 상담보드 record-first)
+**최종 업데이트**: 2026-06-19 (세션 24 — 다기기 알림·자동 refresh·전체 복사)
 **현재 버전**: main 브랜치
 
 ---
@@ -59,6 +59,21 @@
 | 이미지 줌/팬 | ✅ 완료 | 보기 라이트박스(`ZoomableImage`) + 주석 화면(CSS transform 줌·팬). 휠/버튼/핀치/드래그/더블클릭, 외부 라이브러리 없음 |
 | EO 마스터 게이트웨이 캐시 | ✅ **라이브** (2026-06-10) | EO 직원 마스터를 `clinic_members`에 캐시(`source='eo'`). `lib/eo/gateway.ts`+`sync-master.ts`, Vercel Cron `/api/cron/sync-master`(10분). 수동분 보호. 예미안(0e4e85d6) 직원 30명 동기화 확인 |
 | EO SSO 작성자 귀속 | ✅ **라이브** (2026-06-10) | `/api/auth/sso` 확장 클레임 수용 → `institution_members.eo_employee_id`·`display_name` 저장. 상담 저장 시 `author_employee_id`·`author_name` 자동 기록 |
+
+---
+
+## 2026-06-19 세션 24 (구현) — 다기기 알림·자동 refresh·전체 복사
+
+케어로그 치과 실사용 도입 + 예미안 파일럿(도은쌤 주1회·시간당 3만·4회) 확정. 현장 요구 3건 반영. DB 변경 0.
+
+| 작업 | 결과 |
+|---|---|
+| ① 같은 계정 다른 기기 알림 | 실시간 알림 에코 방지를 `actor_user_id` → **"이 탭이 방금 저장한 consultation_id"** 기준으로 변경(`lib/realtime/local-echo.ts`). 저장한 탭만 자기 토스트/소리 숨김 → **같은 계정으로 여러 PC 로그인 시 다른 화면은 알림 수신**. `live-alerts-provider`·`consultation-board`·`chair-overlay`에 `markLocalSave` 배선, `LiveAlertsProvider` currentUserId prop 제거 |
+| ② 미연결기록 자동 refresh(타 기기 포함) | `UnlinkedRecordsSection`이 `initialRecords` prop 변경을 state에 반영하도록 동기화 effect 추가(기존 버그: useState 1회 초기화 후 미갱신). 실시간 알림의 `router.refresh()`가 모든 기기에서 목록 갱신 + 저장 기기는 보드 저장 직후 `router.refresh()`로 즉시 반영 |
+| ③ 전체 복사 | `lib/html-to-text.ts`(HTML→평문, 줄바꿈 보존) + `components/copy-all-button.tsx`(클립보드 복사). **미연결 기록 카드·상담보드·환자 상담이력**에 "전체 복사" 버튼 → 덴트웹 등 외부 EMR에 붙여넣기 |
+| 빌드 | `npm run build` ✅ |
+
+> 멀티기기(파일럿 워크스트림 A)에서 한 사람이 여러 PC를 같은 계정으로 띄워둬도 알림·목록이 일관되게 동기화됨.
 
 ---
 

@@ -73,7 +73,6 @@ export default async function DashboardLayout({
       <ChairOverlay />
       <ConsultationBoard />
       <LiveAlertsProvider
-        currentUserId={user.id}
         institutionId={activeInstitutionId ?? ""}
         chairNames={Object.fromEntries(chairs.map((c) => [c.id, c.name]))}
       />

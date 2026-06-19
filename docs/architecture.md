@@ -477,13 +477,21 @@ saveChairRecord (Server Action)
         │ Supabase Realtime(postgres_changes, RLS+filter: institution_id)
         ▼
 열린 직원 화면: LiveAlertsProvider
-  → actor === me ? 목록 refresh만(에코 방지) : 디바운스 → 토스트 + (armed면)효과음 + router.refresh()
+  → 목록 refresh는 모든 기기(저장 기기 포함) / 토스트·소리는 "이 탭이 방금 저장"이면 생략(에코 방지)
+  → wasLocalSave(consultation_id) ? refresh만 : 디바운스 → 토스트 + (armed면)효과음 + router.refresh()
 화면 꺼짐/백그라운드 → OS Web Push (sw.js notificationclick → url)
 ```
 
+> **에코 방지 = 탭 기준(consultation_id), user_id 아님** (세션24): 저장한 탭만 자기 토스트/소리를 숨기고,
+> **같은 계정으로 다른 PC**에 로그인한 화면은 정상 알림. `lib/realtime/local-echo.ts`의 markLocalSave/wasLocalSave.
+> 저장 기기의 '미연결 기록' 목록은 보드 저장 직후 `router.refresh()`로 즉시 갱신(타 기기는 realtime이 갱신).
+> `UnlinkedRecordsSection`은 `initialRecords` prop 변경을 동기화해 router.refresh 결과를 반영.
+
 신규/관련 파일:
 - `lib/realtime/institution-events.ts` — `subscribeChairEvents()`(chair_audit_logs INSERT 구독, 기관 필터). 향후 이벤트 타입 확장 지점.
+- `lib/realtime/local-echo.ts` — 이 탭이 저장한 consultation_id 기억(탭 기준 에코 방지).
 - `components/notifications/live-alerts-provider.tsx` — 구독→토스트/소리/refresh, 에코·디바운스·재연결 재동기화. `app/(dashboard)/layout.tsx`에 마운트.
+- `lib/html-to-text.ts` + `components/copy-all-button.tsx` — 상담 내용 HTML→평문 '전체 복사'(덴트웹 등 붙여넣기). 미연결기록·상담보드·환자 상담이력에 배치.
 - `components/notifications/alert-toast.tsx` — 토스트 UI(체어명+도착, 진료내용 미표시).
 - `components/notifications/alert-sound.ts` + `sound-arm-button.tsx` — 1회 활성화(자동재생 잠금 해제)·on/off, `public/sounds/alert.wav`.
 - `app/actions/chairs.ts` `saveChairRecord` — Web Push 발송 추가(US3).

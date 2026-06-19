@@ -7,6 +7,7 @@ import {
   sendConsultationSms,
   updateDraftConsultation,
 } from "@/app/actions/consultations";
+import { CopyAllButton } from "@/components/copy-all-button";
 import {
   searchPatientsForChair,
   unlinkChairRecord,
@@ -439,6 +440,15 @@ export function ConsultationHistory({ consultations, patientId }: Props) {
                 className="rich-content mt-3 text-sm leading-6 text-slate-800"
                 dangerouslySetInnerHTML={{ __html: c.content }}
               />
+
+              {/* 전체 복사 — 덴트웹 등 외부 EMR 붙여넣기용 */}
+              <div className="mt-3">
+                <CopyAllButton
+                  html={c.content}
+                  label="전체 복사"
+                  className="inline-flex min-h-8 items-center justify-center gap-1.5 rounded-xl border border-slate-300 bg-white px-3 text-xs font-semibold text-slate-700 transition hover:bg-slate-50"
+                />
+              </div>
 
               {/* 이미지 */}
               {urls.length ? (
