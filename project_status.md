@@ -2,7 +2,7 @@
 
 > **제품 정체성(SSOT)**: Carelog는 **환자 전용 서비스가 아니다.** 의료기관 상담 기록(B2B) ↔ 환자 평생 보관·생애주기 건강관리(B2C)를 잇는 **연결고리**. 상세: [docs/product-vision.md](docs/product-vision.md)
 
-**최종 업데이트**: 2026-06-19 (세션 26 — 요금·등급 정책 + 음성 보관 방향)
+**최종 업데이트**: 2026-06-19 (세션 27 — SSO 로그인 성능 핫픽스)
 **현재 버전**: main 브랜치
 
 ---
@@ -59,6 +59,22 @@
 | 이미지 줌/팬 | ✅ 완료 | 보기 라이트박스(`ZoomableImage`) + 주석 화면(CSS transform 줌·팬). 휠/버튼/핀치/드래그/더블클릭, 외부 라이브러리 없음 |
 | EO 마스터 게이트웨이 캐시 | ✅ **라이브** (2026-06-10) | EO 직원 마스터를 `clinic_members`에 캐시(`source='eo'`). `lib/eo/gateway.ts`+`sync-master.ts`, Vercel Cron `/api/cron/sync-master`(10분). 수동분 보호. 예미안(0e4e85d6) 직원 30명 동기화 확인 |
 | EO SSO 작성자 귀속 | ✅ **라이브** (2026-06-10) | `/api/auth/sso` 확장 클레임 수용 → `institution_members.eo_employee_id`·`display_name` 저장. 상담 저장 시 `author_employee_id`·`author_name` 자동 기록 |
+
+---
+
+## 2026-06-19 세션 27 (fix) — SSO 로그인 성능 핫픽스 (카드 476)
+
+헤임달 카드 476: `app/api/auth/sso/route.ts`가 로그인마다 무거운 작업을 동기 실행 → 느림. 서범기 데모 직결.
+
+| 수정 | 내용 |
+|---|---|
+| ① 최대 병목 제거 | 기존 유저 조회를 `createUser(낙관적 실패)` + `listUsers({perPage:1000})`+JS find → **`generateLink(magiclink)` 1회**로 userId+세션토큰 동시 획득(기존 유저=대부분은 호출 1회). supabase-js 2.101엔 getUserByEmail 없어 generateLink-first 채택 |
+| ② await 제거 | `await syncEoMaster`(EO fetch+다건 upsert)를 로그인 경로에서 제거 → 폴링 cron(`/api/cron/sync-master`)에 위임 |
+| ③ 낙관적 create 제거 | generateLink-first가 곧 "존재확인 먼저", create는 신규 유저에만 |
+| ④ 콜백 홉 단축 | 보류 — 쿠키/세션 흐름 리스크로 데모 직전 미적용(①② 만으로 ★최대 병목 둘 제거) |
+| 빌드 | `npm run build` ✅ |
+
+> 검증: 프로덕션 [SSO] 로그 타임스탬프 간격(userId→generating→redirecting) 단축 확인. 실 EO SSO 클릭 1회 검증 권장. 문제 시 `git revert`로 즉시 롤백.
 
 ---
 

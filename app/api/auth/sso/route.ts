@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminSupabaseClient } from "@/lib/supabase/admin";
-import { syncEoMaster } from "@/lib/eo/sync-master";
 
 /**
  * EO eo_role → Carelog institution_members.role 매핑.
@@ -108,25 +107,38 @@ export async function GET(req: NextRequest) {
       return NextResponse.redirect(`${EO_APP_URL}?sso_error=server_config`);
     }
 
-    // 1. Supabase 사용자 조회 또는 생성
-    let userId: string;
-    const { data: createData, error: createError } =
-      await admin.auth.admin.createUser({
-        email,
-        email_confirm: true,
-      });
+    // 1. 세션 토큰 발급 + 유저 조회를 generateLink 한 번으로 처리.
+    //    기존 유저(대부분의 로그인)는 호출 1회로 userId·token을 함께 얻는다.
+    //    (이전: createUser를 낙관적으로 먼저 실패시킨 뒤 listUsers({perPage:1000})로
+    //     전 유저를 받아 JS find 하던 패턴이 로그인 최대 병목 — 제거.)
+    const redirectTo = `${req.nextUrl.origin}/`;
+    const genMagicLink = () =>
+      admin.auth.admin.generateLink({ type: "magiclink", email, options: { redirectTo } });
 
-    if (createError) {
-      console.log("[SSO] createUser error (likely already exists):", createError.message);
-      const { data: { users } } = await admin.auth.admin.listUsers({ perPage: 1000 });
-      const existing = users.find((u) => u.email === email);
-      if (!existing) {
-        console.error("[SSO] user not found after listUsers");
-        return NextResponse.redirect(`${EO_APP_URL}?sso_error=user_lookup`);
-      }
-      userId = existing.id;
+    let userId: string;
+    let hashedToken: string | undefined;
+
+    let link = await genMagicLink();
+    if (link.data?.user?.id && link.data.properties?.hashed_token) {
+      userId = link.data.user.id;
+      hashedToken = link.data.properties.hashed_token;
     } else {
+      // 유저 미존재 → 생성 후 재발급 (신규 유저만 이 경로)
+      console.log("[SSO] user not found, creating:", link.error?.message);
+      const { data: createData, error: createError } =
+        await admin.auth.admin.createUser({ email, email_confirm: true });
+      if (createError || !createData?.user) {
+        console.error("[SSO] createUser failed:", createError?.message);
+        return NextResponse.redirect(`${EO_APP_URL}?sso_error=user_create`);
+      }
       userId = createData.user.id;
+      link = await genMagicLink();
+      hashedToken = link.data?.properties?.hashed_token;
+    }
+
+    if (!hashedToken) {
+      console.error("[SSO] generateLink failed:", link.error?.message);
+      return NextResponse.redirect(`${EO_APP_URL}?sso_error=magic_link`);
     }
 
     console.log("[SSO] userId:", userId);
@@ -162,40 +174,12 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    // 2-b. EO 마스터 lazy 동기화(이 기관) — best-effort, 로그인 흐름을 막지 않음.
-    //      미연동(404)·시크릿 미설정이면 조용히 스킵된다(폴링 cron이 본 경로).
-    try {
-      const syncResult = await syncEoMaster(institution_id);
-      if (syncResult.ok) {
-        console.log(
-          "[SSO] EO master synced:",
-          `+${syncResult.inserted}/~${syncResult.updated}/-${syncResult.deactivated}`,
-        );
-      } else if (syncResult.reason !== "not_linked" && syncResult.reason !== "config") {
-        console.warn("[SSO] EO master sync skipped:", syncResult.reason);
-      }
-    } catch (e) {
-      console.warn("[SSO] EO master sync threw (non-fatal):", e);
-    }
+    // 2-b. EO 마스터 동기화는 폴링 cron(/api/cron/sync-master, 10분 주기)에 위임한다.
+    //      로그인마다 EO fetch + 다건 upsert를 동기 await 하면 로그인을 직접 막으므로 제거.
 
-    // 3. OTP 토큰 발급 → /auth/callback으로 token_hash 직접 전달 (PKCE 우회)
-    console.log("[SSO] generating link for:", email);
-
-    const { data: linkData, error: linkError } =
-      await admin.auth.admin.generateLink({
-        type: "magiclink",
-        email,
-        options: { redirectTo: `${req.nextUrl.origin}/` },
-      });
-
-    if (linkError || !linkData?.properties?.hashed_token) {
-      console.error("[SSO] generateLink error:", linkError?.message, "props:", JSON.stringify(linkData?.properties));
-      return NextResponse.redirect(`${EO_APP_URL}?sso_error=magic_link`);
-    }
-
-    // PKCE code verifier 없이 서버에서 직접 OTP 검증할 수 있게 token_hash 전달
+    // 3. /auth/callback으로 token_hash 전달 (PKCE 우회) — 토큰은 1단계에서 이미 발급됨.
     const callbackUrl = new URL(`${req.nextUrl.origin}/auth/callback`);
-    callbackUrl.searchParams.set("token_hash", linkData.properties.hashed_token);
+    callbackUrl.searchParams.set("token_hash", hashedToken);
     callbackUrl.searchParams.set("type", "magiclink");
     console.log("[SSO] redirecting to callback with token_hash");
     return NextResponse.redirect(callbackUrl.toString());
