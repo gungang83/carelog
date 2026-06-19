@@ -75,6 +75,13 @@
 | 빌드 | `npm run build` ✅ |
 
 > 검증: 프로덕션 [SSO] 로그 타임스탬프 간격(userId→generating→redirecting) 단축 확인. 실 EO SSO 클릭 1회 검증 권장. 문제 시 `git revert`로 즉시 롤백.
+>
+> **결과(대표 체감): 여전히 생각보다 빠르지 않음.** ①② 제거에도 남은 지연 후보 → ⏳재방문:
+> - ④ 보류한 콜백 홉(`/auth/callback` 1회 추가 리다이렉트+verifyOtp)
+> - `generateLink`·Supabase admin 호출 자체 지연(GoTrue 왕복) / Supabase 리전
+> - **로그인 직후 대시보드 레이아웃 5개 쿼리**(getMyInstitutions·getMyInstitutionId·getChairs·getClinicMembers·getMyAuthorInfo) — "첫 화면 느림"의 유력 원인
+> - 서버리스 콜드스타트
+> → 데모 직전 재최적화 시 ④ + 대시보드 쿼리 병렬/슬림화부터 검토.
 
 ---
 
