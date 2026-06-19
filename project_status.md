@@ -2,7 +2,7 @@
 
 > **제품 정체성(SSOT)**: Carelog는 **환자 전용 서비스가 아니다.** 의료기관 상담 기록(B2B) ↔ 환자 평생 보관·생애주기 건강관리(B2C)를 잇는 **연결고리**. 상세: [docs/product-vision.md](docs/product-vision.md)
 
-**최종 업데이트**: 2026-06-19 (세션 24 — 다기기 알림·자동 refresh·전체 복사)
+**최종 업데이트**: 2026-06-19 (세션 25 — 서범기 데모 건 기록 / 기능 우선)
 **현재 버전**: main 브랜치
 
 ---
@@ -59,6 +59,21 @@
 | 이미지 줌/팬 | ✅ 완료 | 보기 라이트박스(`ZoomableImage`) + 주석 화면(CSS transform 줌·팬). 휠/버튼/핀치/드래그/더블클릭, 외부 라이브러리 없음 |
 | EO 마스터 게이트웨이 캐시 | ✅ **라이브** (2026-06-10) | EO 직원 마스터를 `clinic_members`에 캐시(`source='eo'`). `lib/eo/gateway.ts`+`sync-master.ts`, Vercel Cron `/api/cron/sync-master`(10분). 수동분 보호. 예미안(0e4e85d6) 직원 30명 동기화 확인 |
 | EO SSO 작성자 귀속 | ✅ **라이브** (2026-06-10) | `/api/auth/sso` 확장 클레임 수용 → `institution_members.eo_employee_id`·`display_name` 저장. 상담 저장 시 `author_employee_id`·`author_name` 자동 기록 |
+
+---
+
+## 2026-06-19 세션 25 (기록) — 서범기 데모(강남 오늘의 치과) 진행중 캡처
+
+모건 핸드오프: 강남 오늘의 치과 "신환 접수~상담 flow 효율화" Carelog 데모 흐름이 살아있음(서범기=연결고리, 주인공=상담실장). **결정: 데모 전용 작업은 하지 않고 핵심 기능 완성도를 높이는 것으로 대응.** 스코프·over-promise 위험·권장 시나리오를 카드로 보존.
+
+| 항목 | 내용 |
+|---|---|
+| 기록 | `specs/000-backlog/seobeomgi-demo-scope.md` — 데모 대상·보여줄 수 있는 것·못 보여주는 것(덴트웹 자동연동 X·OCR X·상담PPT X·SMS 키 확인)·권장 시나리오 |
+| 결정 | 별도 데모 개발 없음. 상담보드·녹음·전체복사 등 제품 기능 강화 = 곧 데모 준비 |
+| 데모 임박 시(별도) | Solapi 키·데모 기기(안드/PC 크로미움) 점검 → 샘플 신환 시드 |
+| 참조 | 미팅노트 260618_서범기미팅(구글닥). testers.md·beta-champion-pipeline은 미확보(EO 자산) |
+
+> over-promise 방지: 덴트웹/OE 자동 연동은 없음(복사 1회·수동 업로드). 강조점은 "상담실장의 중복 손기입 제거".
 
 ---
 
