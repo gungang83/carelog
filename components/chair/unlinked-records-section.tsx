@@ -72,6 +72,25 @@ export function UnlinkedRecordsSection({ initialRecords }: { initialRecords: All
     });
   };
 
+  // 저장하고 바로 환자 연결 화면으로 — 편집 후 별도 클릭 없이 연결까지 한 동선.
+  const handleSaveAndLink = (rec: AllUnlinkedRecord) => {
+    setMsg("");
+    startTransition(async () => {
+      const result = await updateChairRecordContent({
+        consultationId: rec.id,
+        content: editContent,
+        prescriptions: editPrescriptions,
+      });
+      if (result.ok) {
+        await reload();
+        setEditingId(null);
+        setLinkingId(rec.id);
+      } else {
+        setMsg(result.message);
+      }
+    });
+  };
+
   const handleDelete = (id: string, chairId: string) => {
     setDeleteConfirmId(null);
     startTransition(async () => {
@@ -131,7 +150,7 @@ export function UnlinkedRecordsSection({ initialRecords }: { initialRecords: All
                     placeholder="상담 내용을 수정하세요…"
                   />
                   <PrescriptionPicker value={editPrescriptions} onChange={setEditPrescriptions} />
-                  <div className="flex gap-2">
+                  <div className="flex flex-wrap gap-2">
                     <button
                       type="button"
                       onClick={() => handleSaveEdit(rec)}
@@ -140,6 +159,19 @@ export function UnlinkedRecordsSection({ initialRecords }: { initialRecords: All
                     >
                       {isPending ? "저장 중…" : "저장"}
                     </button>
+                    <button
+                      type="button"
+                      onClick={() => handleSaveAndLink(rec)}
+                      disabled={isPending}
+                      className="inline-flex min-h-9 items-center justify-center rounded-xl border border-sky-200 bg-sky-50 px-4 text-sm font-semibold text-sky-700 hover:bg-sky-100 disabled:opacity-50"
+                    >
+                      저장 후 환자 연결
+                    </button>
+                    <CopyAllButton
+                      html={editContent}
+                      label="전체 복사"
+                      className="inline-flex min-h-9 items-center justify-center gap-1.5 rounded-xl bg-slate-800 px-4 text-sm font-semibold text-white transition hover:bg-slate-900"
+                    />
                     <button
                       type="button"
                       onClick={cancelEdit}

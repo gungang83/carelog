@@ -70,7 +70,7 @@
 |---|---|
 | ① 같은 계정 다른 기기 알림 | 실시간 알림 에코 방지를 `actor_user_id` → **"이 탭이 방금 저장한 consultation_id"** 기준으로 변경(`lib/realtime/local-echo.ts`). 저장한 탭만 자기 토스트/소리 숨김 → **같은 계정으로 여러 PC 로그인 시 다른 화면은 알림 수신**. `live-alerts-provider`·`consultation-board`·`chair-overlay`에 `markLocalSave` 배선, `LiveAlertsProvider` currentUserId prop 제거 |
 | ② 미연결기록 자동 refresh(타 기기 포함) | `UnlinkedRecordsSection`이 `initialRecords` prop 변경을 state에 반영하도록 동기화 effect 추가(기존 버그: useState 1회 초기화 후 미갱신). 실시간 알림의 `router.refresh()`가 모든 기기에서 목록 갱신 + 저장 기기는 보드 저장 직후 `router.refresh()`로 즉시 반영 |
-| ③ 전체 복사 | `lib/html-to-text.ts`(HTML→평문, 줄바꿈 보존) + `components/copy-all-button.tsx`(클립보드 복사). **미연결 기록 카드·상담보드·환자 상담이력**에 "전체 복사" 버튼 → 덴트웹 등 외부 EMR에 붙여넣기 |
+| ③ 전체 복사 | `lib/html-to-text.ts`(HTML→평문, 줄바꿈 보존) + `components/copy-all-button.tsx`(클립보드 복사). **미연결 기록 카드·편집화면·상담보드·환자 상담이력**에 "전체 복사" 버튼 → 덴트웹 등 외부 EMR에 붙여넣기. 미연결 편집화면에 **"저장 후 환자 연결"**(편집→저장→연결 한 동선) 추가 |
 | 빌드 | `npm run build` ✅ |
 
 > 멀티기기(파일럿 워크스트림 A)에서 한 사람이 여러 PC를 같은 계정으로 띄워둬도 알림·목록이 일관되게 동기화됨.
