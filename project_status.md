@@ -2,7 +2,7 @@
 
 > **제품 정체성(SSOT)**: Carelog는 **환자 전용 서비스가 아니다.** 의료기관 상담 기록(B2B) ↔ 환자 평생 보관·생애주기 건강관리(B2C)를 잇는 **연결고리**. 상세: [docs/product-vision.md](docs/product-vision.md)
 
-**최종 업데이트**: 2026-06-19 (세션 25 — 서범기 데모 건 기록 / 기능 우선)
+**최종 업데이트**: 2026-06-19 (세션 26 — 요금·등급 정책 + 음성 보관 방향)
 **현재 버전**: main 브랜치
 
 ---
@@ -59,6 +59,23 @@
 | 이미지 줌/팬 | ✅ 완료 | 보기 라이트박스(`ZoomableImage`) + 주석 화면(CSS transform 줌·팬). 휠/버튼/핀치/드래그/더블클릭, 외부 라이브러리 없음 |
 | EO 마스터 게이트웨이 캐시 | ✅ **라이브** (2026-06-10) | EO 직원 마스터를 `clinic_members`에 캐시(`source='eo'`). `lib/eo/gateway.ts`+`sync-master.ts`, Vercel Cron `/api/cron/sync-master`(10분). 수동분 보호. 예미안(0e4e85d6) 직원 30명 동기화 확인 |
 | EO SSO 작성자 귀속 | ✅ **라이브** (2026-06-10) | `/api/auth/sso` 확장 클레임 수용 → `institution_members.eo_employee_id`·`display_name` 저장. 상담 저장 시 `author_employee_id`·`author_name` 자동 기록 |
+
+---
+
+## 2026-06-19 세션 26 (기획) — 요금·등급 정책 + 음성 원본 보관 방향
+
+녹음 원본 보관 논의가 가격정책으로 확장. 결정 캡처: `docs/pricing-tiers.md`.
+
+| 결정 | 내용 |
+|---|---|
+| 과금 단위 | **병원(기관) 월정액**. 사용량(토큰) 추가과금은 이후 |
+| 등급 | Free / Pro / Clinic |
+| 음성 원본 | Free=**최근 3개만**(롤링, 텍스트는 유지) → 후킹 / Pro=90일 / Clinic=1년+·감사로그 |
+| 토큰(실비) | SMS·AI 전사 등 실비는 사용량 토큰 과금. 초기 무료 토큰 지급. 빌링은 향후 |
+| 내부/파트너 | 예미안·케어로그치과·파일럿 = Clinic 무상 |
+| 구현 연결 | `institutions.plan`(free/pro/clinic) 필드 → 게이트. 음성 보관은 `specs/009-audio-archive`(예정)가 참조 |
+
+> 음성 원본 = 중앙(Supabase Storage) 보관 방향(기기 제각각이라 로컬 불가). 용량은 보존기간·등급으로 관리. 법적 음성 보존의무는 별도 검토 미결.
 
 ---
 
