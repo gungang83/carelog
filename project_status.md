@@ -2,7 +2,7 @@
 
 > **제품 정체성(SSOT)**: Carelog는 **환자 전용 서비스가 아니다.** 의료기관 상담 기록(B2B) ↔ 환자 평생 보관·생애주기 건강관리(B2C)를 잇는 **연결고리**. 상세: [docs/product-vision.md](docs/product-vision.md)
 
-**최종 업데이트**: 2026-06-19 (세션 27 — SSO 로그인 성능 핫픽스)
+**최종 업데이트**: 2026-06-19 (세션 28 — 음성 원본 보관 구현 spec 009)
 **현재 버전**: main 브랜치
 
 ---
@@ -59,6 +59,25 @@
 | 이미지 줌/팬 | ✅ 완료 | 보기 라이트박스(`ZoomableImage`) + 주석 화면(CSS transform 줌·팬). 휠/버튼/핀치/드래그/더블클릭, 외부 라이브러리 없음 |
 | EO 마스터 게이트웨이 캐시 | ✅ **라이브** (2026-06-10) | EO 직원 마스터를 `clinic_members`에 캐시(`source='eo'`). `lib/eo/gateway.ts`+`sync-master.ts`, Vercel Cron `/api/cron/sync-master`(10분). 수동분 보호. 예미안(0e4e85d6) 직원 30명 동기화 확인 |
 | EO SSO 작성자 귀속 | ✅ **라이브** (2026-06-10) | `/api/auth/sso` 확장 클레임 수용 → `institution_members.eo_employee_id`·`display_name` 저장. 상담 저장 시 `author_employee_id`·`author_name` 자동 기록 |
+
+---
+
+## 2026-06-19 세션 28 (구현) — 음성 원본 보관 (spec 009)
+
+녹음 원본을 비공개 Storage에 등급별 보관·재청취. speckit 전 과정(specify→plan→tasks→implement).
+
+| 작업 | 결과 |
+|---|---|
+| 스키마 | `20260619000001_audio_archive.sql` — `institutions.plan`(free/standard/pro/enterprise), `consultation.audio_path`·`audio_uploaded_at`, `audio_replay_logs`(감사, RLS), 비공개 버킷 `consultation-audio`. schema.sql·database.md 동반 |
+| 정책 | `lib/plan.ts` — retentionDays(free=롤링3/std=90/pro·ent=365), auditReplay(pro+). 게이트 단일 출처 |
+| 업로드 | `app/actions/audio.ts` `uploadConsultationAudio` — 저장 후 비차단 업로드, free 롤링 정리. 보드가 blob 보존→저장 시 업로드 |
+| 재청취 | `getConsultationAudioUrl` — 기관·등급·만료 판정 → 서명URL(60초). `audio-replay-button` → `<audio>`. 미연결기록에 배치(audio 보유 시) |
+| 정리·감사 | cron `/api/cron/prune-audio`(일1회, vercel.json) 등급별 만료 삭제. pro+ 재청취 `audio_replay_logs` 1건 |
+| 헌법 | 비공개·서명URL·기관격리(I), 모든 mutation/URL=Server Action(II), 텍스트는 음성과 분리 영구(III) |
+| 빌드 | `npm run build` ✅ |
+| ⏳ 배포 전 필수 | **(1) 마이그레이션 적용 (2) 비공개 버킷 `consultation-audio` 생성(public OFF) (3) vercel cron 반영.** 미적용 상태로 코드 배포 시 `getAllUnlinkedRecords`의 audio_path select가 깨지므로 **마이그레이션 먼저 → 배포 순서 필수** |
+
+> 미결: consultation-history(환자 상담이력) 재청취 버튼 배치는 후속(현재 미연결기록만). 법적 음성보존의무·동의형식 운영확인. 토큰/빌링 별건.
 
 ---
 

@@ -497,3 +497,23 @@ saveChairRecord (Server Action)
 - `app/actions/chairs.ts` `saveChairRecord` — Web Push 발송 추가(US3).
 
 > 원칙: 실시간 구독은 **읽기 전용**(헌법 II), 쓰기는 기존 Server Action만. 전송선·토스트·푸시에 환자식별정보·진료본문 없음(헌법 I).
+
+## 음성 원본 보관 (spec 009-audio-archive)
+
+```
+상담 저장(saveChairRecord) → consultationId
+  → consultation-board가 보유한 녹음 blob을 uploadConsultationAudio(consultationId, blob)
+       (비공개 버킷 consultation-audio: {institution_id}/{id}.webm, 비차단)
+       → consultation.audio_path·audio_uploaded_at 갱신
+       → plan=free면 최근 3개 초과분 롤링 정리(파일+audio_path)
+
+재청취: AudioReplayButton → getConsultationAudioUrl(consultationId)
+  → 서버: 기관·권한·등급 만료 판정 → createSignedUrl(60초) → <audio> 재생
+  → pro 이상은 audio_replay_logs에 감사 1건
+
+정리 cron: /api/cron/prune-audio(일1회, CRON_SECRET) → 등급별 만료 음성 삭제(텍스트 보존)
+```
+
+- 등급 정책 단일 출처: `lib/plan.ts`(retentionDays·FREE_ROLLING_MAX·auditReplay), `institutions.plan`.
+- 신규 파일: `app/actions/audio.ts`, `components/chair/audio-replay-button.tsx`, `app/api/cron/prune-audio/route.ts`, `lib/plan.ts`.
+- 음성은 비공개·서명URL·기관격리(헌법 I), 모든 mutation·URL발급은 Server Action(헌법 II).

@@ -8,3 +8,7 @@ export const usersTable =
 
 export const consultationBucket =
   process.env.NEXT_PUBLIC_SUPABASE_CONSULTATION_BUCKET ?? "consultation-images";
+
+/** 음성 원본 보관용 **비공개** 버킷(서명 URL로만 접근). 이미지(public)와 분리. */
+export const audioBucket =
+  process.env.NEXT_PUBLIC_SUPABASE_AUDIO_BUCKET ?? "consultation-audio";

@@ -9,6 +9,7 @@ import {
 } from "@/components/chair/chair-provider";
 import { CopyAllButton } from "@/components/copy-all-button";
 import { markLocalSave } from "@/lib/realtime/local-echo";
+import { uploadConsultationAudio } from "@/app/actions/audio";
 import {
   transcribeChairAudio,
   saveChairRecord,
@@ -65,6 +66,8 @@ function BoardContent() {
 
   const router = useRouter();
   const editorRef = useRef<RichTextEditorHandle | null>(null);
+  // 녹음 원본 blob — 저장 후 음성 보관 업로드용(spec 009). 저장/버리기 시 해제.
+  const audioBlobRef = useRef<Blob | null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const status = getChairStatus(DRAFT_CHAIR_KEY);
@@ -122,6 +125,9 @@ function BoardContent() {
       return;
     }
 
+    // 저장 후 음성 보관(spec 009) 업로드를 위해 원본 보존.
+    audioBlobRef.current = blob;
+
     startTransition(async () => {
       const formData = new FormData();
       formData.append("audio", blob, "recording.webm");
@@ -158,6 +164,7 @@ function BoardContent() {
   };
 
   const discard = () => {
+    audioBlobRef.current = null;
     resetChair(DRAFT_CHAIR_KEY);
     setEditText("");
     editorRef.current?.clear();
@@ -193,6 +200,14 @@ function BoardContent() {
       if (result.ok) {
         // 이 탭이 저장한 기록 → 내 토스트만 숨김(같은 계정 다른 기기는 알림 받음)
         markLocalSave(result.consultationId);
+        // 음성 원본 보관(spec 009) — 비차단(저장은 이미 완료, 음성은 보조)
+        const audio = audioBlobRef.current;
+        if (audio) {
+          const fd = new FormData();
+          fd.append("audio", audio, "recording.webm");
+          void uploadConsultationAudio(result.consultationId, fd);
+        }
+        audioBlobRef.current = null;
         setLastChairId(chair.id);
         resetChair(DRAFT_CHAIR_KEY);
         setEditText("");

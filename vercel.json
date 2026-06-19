@@ -9,6 +9,10 @@
     {
       "path": "/api/cron/sync-master",
       "schedule": "*/10 * * * *"
+    },
+    {
+      "path": "/api/cron/prune-audio",
+      "schedule": "0 3 * * *"
     }
   ]
 }

@@ -10,6 +10,7 @@ import {
   type AllUnlinkedRecord,
 } from "@/app/actions/chairs";
 import { ChairPatientSearch } from "@/components/chair/chair-patient-search";
+import { AudioReplayButton } from "@/components/chair/audio-replay-button";
 import { PrescriptionPicker } from "@/components/chair/prescription-picker";
 import { RichTextEditor, type RichTextEditorHandle } from "@/components/rich-text-editor";
 
@@ -238,6 +239,7 @@ export function UnlinkedRecordsSection({ initialRecords }: { initialRecords: All
                         label="전체 복사"
                         className="inline-flex min-h-8 items-center justify-center gap-1.5 rounded-xl bg-slate-800 px-3 text-xs font-semibold text-white transition hover:bg-slate-900"
                       />
+                      {rec.has_audio && <AudioReplayButton consultationId={rec.id} />}
                       <button
                         type="button"
                         onClick={() => setLinkingId(rec.id)}

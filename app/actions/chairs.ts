@@ -203,6 +203,8 @@ export type AllUnlinkedRecord = {
   created_at: string;
   chair_id: string;
   prescriptions: string[] | null;
+  /** 음성 원본 보관 여부(spec 009) — 재청취 버튼 노출 게이트. */
+  has_audio: boolean;
 };
 
 export async function getAllUnlinkedRecords(): Promise<AllUnlinkedRecord[]> {
@@ -212,7 +214,7 @@ export async function getAllUnlinkedRecords(): Promise<AllUnlinkedRecord[]> {
 
   const { data } = await supabase
     .from("consultation")
-    .select("id, content, created_at, chair_id, prescriptions")
+    .select("id, content, created_at, chair_id, prescriptions, audio_path")
     .eq("institution_id", institutionId)
     .is("patient_id", null)
     .not("chair_id", "is", null)
@@ -224,6 +226,7 @@ export async function getAllUnlinkedRecords(): Promise<AllUnlinkedRecord[]> {
     created_at: r.created_at as string,
     chair_id: r.chair_id as string,
     prescriptions: r.prescriptions as string[] | null,
+    has_audio: !!(r.audio_path as string | null),
   }));
 }
 

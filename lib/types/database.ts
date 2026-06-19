@@ -28,6 +28,9 @@ export type ConsultationRow = {
   /** 작성자 귀속(계약 §2.3) — EO 직원 id(있으면)와 표시명. */
   author_employee_id: string | null;
   author_name: string | null;
+  /** 음성 원본 보관(spec 009) — 비공개 버킷 경로/업로드시각. 미보관·삭제 시 null. */
+  audio_path: string | null;
+  audio_uploaded_at: string | null;
 };
 
 export type ChairRow = {
@@ -90,6 +93,17 @@ export type InstitutionRow = {
   name: string;
   type: string;
   created_at: string;
+  /** 요금 등급(spec 009 / docs/pricing-tiers.md). 기능 게이트 단일 출처. */
+  plan: "free" | "standard" | "pro" | "enterprise";
+};
+
+/** 음성 재청취 감사(Pro 이상) — spec 009. */
+export type AudioReplayLogRow = {
+  id: string;
+  institution_id: string;
+  consultation_id: string;
+  user_id: string;
+  played_at: string;
 };
 
 export type InstitutionMemberRow = {

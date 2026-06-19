@@ -510,3 +510,18 @@ alter table public.patient_push_subscriptions enable row level security;
 -- migration: 20260614000001_realtime_chair_audit_logs.sql
 -- alter publication supabase_realtime add table public.chair_audit_logs;
 -- ───────────────────────────────────────────────────────────────────────────
+
+-- ───────────────────────────────────────────────────────────────────────────
+-- 음성 원본 보관 (spec 009-audio-archive) — migration: 20260619000001_audio_archive.sql
+-- institutions.plan(요금 등급, 기능 게이트 단일 출처):
+--   alter table public.institutions add column plan text not null default 'free'
+--     check (plan in ('free','standard','pro','enterprise'));
+-- consultation 음성 연결(텍스트와 분리, 음성 삭제돼도 텍스트 보존):
+--   alter table public.consultation
+--     add column audio_path text, add column audio_uploaded_at timestamptz;
+-- audio_replay_logs(Pro 이상 재청취 감사; chair_audit_logs와 분리 → realtime 오발 방지):
+--   create table public.audio_replay_logs(
+--     id uuid pk, institution_id uuid, consultation_id uuid, user_id uuid,
+--     played_at timestamptz default now()); RLS: 같은 기관 직원 select/insert.
+-- 비공개 Storage 버킷 'consultation-audio'(public=false) — 서명 URL로만 접근.
+-- ───────────────────────────────────────────────────────────────────────────
