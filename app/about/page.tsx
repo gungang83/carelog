@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { getSessionUser } from "@/lib/auth/institution";
 
 export const metadata = {
   title: "Carelog — 치과 상담 기록 플랫폼",
@@ -6,7 +7,8 @@ export const metadata = {
     "치과 상담 내역을 안전하게 기록하고 환자에게 직접 전달하는 클리닉 관리 플랫폼입니다.",
 };
 
-export default function AboutPage() {
+export default async function AboutPage() {
+  const loggedIn = !!(await getSessionUser());
   return (
     <div className="min-h-screen bg-white">
       {/* Nav */}
@@ -19,18 +21,29 @@ export default function AboutPage() {
             <span className="text-base font-semibold text-slate-900">Carelog</span>
           </div>
           <div className="flex items-center gap-3">
-            <Link
-              href="/login"
-              className="text-sm font-medium text-slate-600 hover:text-slate-900"
-            >
-              로그인
-            </Link>
-            <Link
-              href="/signup"
-              className="inline-flex h-9 items-center rounded-xl bg-sky-600 px-4 text-sm font-semibold text-white shadow-sm transition hover:bg-sky-700"
-            >
-              시작하기
-            </Link>
+            {loggedIn ? (
+              <Link
+                href="/"
+                className="inline-flex h-9 items-center rounded-xl bg-sky-600 px-4 text-sm font-semibold text-white shadow-sm transition hover:bg-sky-700"
+              >
+                대시보드로 →
+              </Link>
+            ) : (
+              <>
+                <Link
+                  href="/login"
+                  className="text-sm font-medium text-slate-600 hover:text-slate-900"
+                >
+                  로그인
+                </Link>
+                <Link
+                  href="/signup"
+                  className="inline-flex h-9 items-center rounded-xl bg-sky-600 px-4 text-sm font-semibold text-white shadow-sm transition hover:bg-sky-700"
+                >
+                  시작하기
+                </Link>
+              </>
+            )}
           </div>
         </div>
       </nav>
@@ -51,18 +64,29 @@ export default function AboutPage() {
           플랫폼입니다.
         </p>
         <div className="mt-10 flex flex-col items-center justify-center gap-4 sm:flex-row">
-          <Link
-            href="/signup"
-            className="inline-flex h-12 items-center rounded-xl bg-sky-600 px-6 text-sm font-semibold text-white shadow-sm transition hover:bg-sky-700"
-          >
-            무료로 시작하기 →
-          </Link>
-          <Link
-            href="/login"
-            className="inline-flex h-12 items-center rounded-xl border border-slate-200 bg-white px-6 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50"
-          >
-            로그인
-          </Link>
+          {loggedIn ? (
+            <Link
+              href="/"
+              className="inline-flex h-12 items-center rounded-xl bg-sky-600 px-6 text-sm font-semibold text-white shadow-sm transition hover:bg-sky-700"
+            >
+              대시보드로 가기 →
+            </Link>
+          ) : (
+            <>
+              <Link
+                href="/signup"
+                className="inline-flex h-12 items-center rounded-xl bg-sky-600 px-6 text-sm font-semibold text-white shadow-sm transition hover:bg-sky-700"
+              >
+                무료로 시작하기 →
+              </Link>
+              <Link
+                href="/login"
+                className="inline-flex h-12 items-center rounded-xl border border-slate-200 bg-white px-6 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50"
+              >
+                로그인
+              </Link>
+            </>
+          )}
         </div>
       </section>
 
@@ -263,18 +287,29 @@ export default function AboutPage() {
             디지털로 관리하세요.
           </p>
           <div className="mt-8 flex flex-col items-center justify-center gap-4 sm:flex-row">
-            <Link
-              href="/signup"
-              className="inline-flex h-12 items-center rounded-xl bg-sky-600 px-8 text-sm font-semibold text-white shadow-sm transition hover:bg-sky-700"
-            >
-              무료로 시작하기 →
-            </Link>
-            <Link
-              href="/login"
-              className="inline-flex h-12 items-center rounded-xl border border-slate-200 bg-white px-8 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50"
-            >
-              로그인
-            </Link>
+            {loggedIn ? (
+              <Link
+                href="/"
+                className="inline-flex h-12 items-center rounded-xl bg-sky-600 px-8 text-sm font-semibold text-white shadow-sm transition hover:bg-sky-700"
+              >
+                대시보드로 가기 →
+              </Link>
+            ) : (
+              <>
+                <Link
+                  href="/signup"
+                  className="inline-flex h-12 items-center rounded-xl bg-sky-600 px-8 text-sm font-semibold text-white shadow-sm transition hover:bg-sky-700"
+                >
+                  무료로 시작하기 →
+                </Link>
+                <Link
+                  href="/login"
+                  className="inline-flex h-12 items-center rounded-xl border border-slate-200 bg-white px-8 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50"
+                >
+                  로그인
+                </Link>
+              </>
+            )}
           </div>
           <p className="mt-6 text-xs text-slate-400">
             환자이신가요? 치과에서 발송한 SMS 링크를 통해 상담 기록을 확인하세요.
