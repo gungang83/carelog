@@ -2,7 +2,7 @@
 
 > **제품 정체성(SSOT)**: Carelog는 **환자 전용 서비스가 아니다.** 의료기관 상담 기록(B2B) ↔ 환자 평생 보관·생애주기 건강관리(B2C)를 잇는 **연결고리**. 상세: [docs/product-vision.md](docs/product-vision.md)
 
-**최종 업데이트**: 2026-06-20 (세션 33 — 상담보드 환자 안심 배너)
+**최종 업데이트**: 2026-06-20 (세션 34 — 연결 기록 '최신 작업 순' 정렬)
 **현재 버전**: main 브랜치
 
 ---
@@ -59,6 +59,22 @@
 | 이미지 줌/팬 | ✅ 완료 | 보기 라이트박스(`ZoomableImage`) + 주석 화면(CSS transform 줌·팬). 휠/버튼/핀치/드래그/더블클릭, 외부 라이브러리 없음 |
 | EO 마스터 게이트웨이 캐시 | ✅ **라이브** (2026-06-10) | EO 직원 마스터를 `clinic_members`에 캐시(`source='eo'`). `lib/eo/gateway.ts`+`sync-master.ts`, Vercel Cron `/api/cron/sync-master`(10분). 수동분 보호. 예미안(0e4e85d6) 직원 30명 동기화 확인 |
 | EO SSO 작성자 귀속 | ✅ **라이브** (2026-06-10) | `/api/auth/sso` 확장 클레임 수용 → `institution_members.eo_employee_id`·`display_name` 저장. 상담 저장 시 `author_employee_id`·`author_name` 자동 기록 |
+
+---
+
+## 2026-06-20 세션 34 (fix) — 연결 기록 '최신 작업 순' 정렬
+
+증상: 미연결 기록을 환자에 연결하면, 환자 상세(연결 기록)에서 그 기록이 **아래로 가라앉음**.
+원인: 정렬 기준이 `created_at`인데, 체어 기록의 `created_at`은 '체어에서 녹음한 과거 시각'.
+방금 연결(`linked_at`=지금)해도 더 최근에 만든 기록 아래로 밀림.
+
+| 항목 | 내용 |
+|---|---|
+| 수정 | `getConsultationsByPatientId`(환자 상세 = 연결 기록)를 **마지막 작업 시각 = max(created_at, linked_at) 내림차순**으로 정렬 → 방금 연결한 기록이 최상단 |
+| 방식 | DB 마이그레이션 없이 서버액션에서 JS 정렬(환자당 ≤50건이라 충분). `linked_at` select 추가 |
+| 미연결 | `getAllUnlinkedRecords`는 이미 `created_at desc`(최신 저장이 위) — 저장 시 홈 즉시 리프레시(ConsultationBoard `router.refresh()` → `initialRecords` 동기화)도 정상 확인 |
+| 한계/후속 | **콘텐츠 편집 시각은 미반영**(consultation에 `updated_at` 없음). 편집도 '작업'으로 최상단에 올리려면 `updated_at` 컬럼+트리거 추가 필요 — 별도 제안 |
+| 빌드 | `npm run build` ✅ |
 
 ---
 
