@@ -1,7 +1,7 @@
 "use server";
 
 import { createServerSupabaseClient } from "@/lib/supabase/server";
-import { getMyInstitutionId } from "@/lib/auth/institution";
+import { getMyInstitutionId, getSessionUser } from "@/lib/auth/institution";
 import { patientTable } from "@/lib/supabase/config";
 
 export type ActivityLogEntry = {
@@ -18,7 +18,9 @@ export async function getActivityLogs(limit = 50): Promise<
   { ok: true; logs: ActivityLogEntry[] } | { ok: false; message: string }
 > {
   const supabase = await createServerSupabaseClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  // 인증 게이트는 요청당 1회로 dedupe된 getSessionUser 사용(카드 479 ②).
+  // 별도 supabase.auth.getUser()는 GoTrue 왕복을 한 번 더 추가하므로 피한다.
+  const user = await getSessionUser();
   if (!user) return { ok: false, message: "로그인이 필요합니다." };
 
   const institutionId = await getMyInstitutionId();
