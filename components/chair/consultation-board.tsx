@@ -288,6 +288,33 @@ function BoardContent() {
             </button>
           </div>
 
+          {/* 환자 안심 배너 — 상담보드는 보통 환자 옆에서 작성하므로,
+              녹음의 '좋은 의도'를 환자에게 크게·항상 보이게 안내한다.
+              녹음 중에는 빨간 표시가 긴장될 수 있어 문구를 더 또렷하게 바꾼다.
+              문구는 여기서 바로 수정 가능(향후 기관별 커스터마이즈 후보). */}
+          <div
+            className={`flex items-center gap-3 border-b px-5 py-3 transition-colors ${
+              recording
+                ? "border-sky-200 bg-gradient-to-r from-sky-100 to-sky-50"
+                : "border-sky-100 bg-gradient-to-r from-sky-50 to-white"
+            }`}
+          >
+            <div className="flex size-10 shrink-0 items-center justify-center rounded-full bg-sky-100 text-sky-600">
+              <ShieldIcon className="size-6" />
+            </div>
+            <div className="min-w-0">
+              <p className="text-base font-bold text-slate-800 break-keep">
+                {recording
+                  ? "정확한 진료를 위해 상담을 기록하고 있어요"
+                  : "안심하세요 — 환자분을 위한 기록이에요"}
+              </p>
+              <p className="mt-0.5 text-sm leading-snug text-slate-500 break-keep">
+                내용을 빠짐없이 남겨 더 정확히 봐드리려는 거예요. 기록은 안전하게
+                보관되고, 환자분도 받아보실 수 있어요.
+              </p>
+            </div>
+          </div>
+
           <div className="flex-1 space-y-4 overflow-y-auto px-5 py-4">
             {micError && (
               <p className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-600">
@@ -414,6 +441,18 @@ function MicIcon({ className }: { className?: string }) {
     <svg className={className} viewBox="0 0 20 20" fill="currentColor">
       <path d="M7 4a3 3 0 0 1 6 0v6a3 3 0 0 1-6 0V4Z" />
       <path fillRule="evenodd" d="M5.5 10.5a.75.75 0 0 0-1.5 0 6 6 0 0 0 5.25 5.954V17.5h-1.5a.75.75 0 0 0 0 1.5h4.5a.75.75 0 0 0 0-1.5h-1.5v-1.046A6 6 0 0 0 15.5 10.5a.75.75 0 0 0-1.5 0 4.5 4.5 0 0 1-9 0Z" clipRule="evenodd" />
+    </svg>
+  );
+}
+
+function ShieldIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+      <path
+        fillRule="evenodd"
+        d="M9.661 2.237a.531.531 0 0 1 .678 0 11.947 11.947 0 0 0 7.078 2.749.5.5 0 0 1 .479.425c.069.52.104 1.05.104 1.59 0 5.162-3.26 9.563-7.834 11.256a.48.48 0 0 1-.332 0C5.26 16.564 2 12.163 2 7c0-.538.035-1.069.104-1.589a.5.5 0 0 1 .48-.425 11.947 11.947 0 0 0 7.077-2.749ZM13.28 8.78a.75.75 0 0 0-1.06-1.06l-2.97 2.97-1.19-1.19a.75.75 0 0 0-1.06 1.06l1.72 1.72a.75.75 0 0 0 1.06 0l3.5-3.5Z"
+        clipRule="evenodd"
+      />
     </svg>
   );
 }
