@@ -70,8 +70,9 @@ components/
 │   ├── chair-patient-search.tsx   # 환자 검색 + linkChairRecordToPatient + 인라인 신규 등록
 │   ├── chair-settings.tsx         # 설정 페이지 내 체어 관리 (admin/owner 전용)
 │   ├── quick-record-trigger.tsx   # 홈 화면 빠른 기록 시작 버튼 + 위치 선택 UI
-│   ├── unlinked-records-section.tsx # 홈 화면 미연결 기록 통합 인라인 목록 (RichTextEditor 편집)
-│   └── prescription-picker.tsx    # 컴팩트 처방 칩 선택 컴포넌트 (오버레이·미연결 섹션 공용)
+│   └── prescription-picker.tsx    # 컴팩트 처방 칩 선택 컴포넌트 (오버레이·통합 피드 공용)
+├── home/
+│   └── home-feed.tsx              # 홈 통합 피드 — 미연결 기록(액션 카드) + 최근 활동(연결 로그)을 시간순 병합, 토글로 함께/하나씩
 ├── layout/
 │   ├── header.tsx                 # 기관명 + RefreshButton + 프로필 드롭다운
 │   ├── refresh-button.tsx         # router.refresh() 클라이언트 컴포넌트
@@ -348,13 +349,14 @@ app/(dashboard)/page.tsx (홈 화면)
   │     ── "상담 기록 시작" CTA 클릭 → openOverlay(DRAFT) + startRecording(DRAFT)
   │          (체어·참여자 선택 없이 즉시 녹음 — 같은 클릭 제스처로 getUserMedia)
   │
-  └── UnlinkedRecordsSection (Client)
-        ── getAllUnlinkedRecords() → 모든 체어의 미연결 기록 통합 목록
-        ── 체어 이름 배지 + 타임스탬프 + 내용 미리보기
-        ── 인라인 편집: RichTextEditor + PrescriptionPicker
-        ── 인라인 환자 연결: ChairPatientSearch
-              └── linkChairRecordToPatient({ consultationId, patientId })
-        ── 삭제: deleteChairRecord → 감사 로그 먼저, 이후 delete
+  └── HomeFeed (Client) — 미연결 기록 + 최근 활동 통합 피드
+        ── getAllUnlinkedRecords()(미연결, 액션 카드) + getActivityLogs()(연결 완료 로그)
+           두 집합은 상호 배타(같은 상담이 미연결→연결 단계로 이동) → created_at 시간순 병합
+        ── 상단 토글 칩(미연결/활동): 둘 다(시간순) · 하나씩
+        ── 미연결 카드: 체어 배지 + 미리보기 + 인라인 편집(RichTextEditor+PrescriptionPicker)
+              + 환자 연결(ChairPatientSearch→linkChairRecordToPatient) + 삭제(deleteChairRecord)
+        ── 연결 시 reload + router.refresh로 '활동' 쪽 동기화
+        ── 활동 행: 환자명 + 미리보기, 클릭 시 /patients/[id]#consultation-[cid]
 
 ConsultationBoard (Client, createPortal → document.body) — record-first 통합 보드 (spec 008)
   ── openChairId === DRAFT_CHAIR_KEY 일 때 렌더 (layout에 상시 마운트 → 작성 내용 보존 FR-016)
@@ -485,7 +487,7 @@ saveChairRecord (Server Action)
 > **에코 방지 = 탭 기준(consultation_id), user_id 아님** (세션24): 저장한 탭만 자기 토스트/소리를 숨기고,
 > **같은 계정으로 다른 PC**에 로그인한 화면은 정상 알림. `lib/realtime/local-echo.ts`의 markLocalSave/wasLocalSave.
 > 저장 기기의 '미연결 기록' 목록은 보드 저장 직후 `router.refresh()`로 즉시 갱신(타 기기는 realtime이 갱신).
-> `UnlinkedRecordsSection`은 `initialRecords` prop 변경을 동기화해 router.refresh 결과를 반영.
+> `HomeFeed`는 `initialRecords` prop 변경을 동기화해 router.refresh 결과를 반영.
 
 신규/관련 파일:
 - `lib/realtime/institution-events.ts` — `subscribeChairEvents()`(chair_audit_logs INSERT 구독, 기관 필터). 향후 이벤트 타입 확장 지점.
