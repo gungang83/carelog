@@ -1,5 +1,6 @@
 // Carelog Service Worker — Web Push + 배지 + 캐싱 최적화
-const CACHE_NAME = "carelog-v2";
+// v3: 네비게이션(HTML) 캐싱 제거 — 인증 상태가 섞이던 버그 수정(아래 fetch 참고)
+const CACHE_NAME = "carelog-v3";
 const STATIC_CACHE = "carelog-static-v2";
 
 // 푸시 수신 후 앱 열기 전까지 누적되는 배지 카운트
@@ -43,24 +44,15 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
-  // 기타 /_next/ 경로 — 브라우저 캐시에 위임
-  if (url.pathname.startsWith("/_next/")) return;
-
-  // API / Server Action — 캐시 안 함
-  if (url.pathname.startsWith("/api/")) return;
-
-  // 네비게이션 요청 — 네트워크 우선, 실패 시 캐시 폴백
-  event.respondWith(
-    fetch(event.request)
-      .then((response) => {
-        if (response.ok && response.status === 200) {
-          const clone = response.clone();
-          caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));
-        }
-        return response;
-      })
-      .catch(() => caches.match(event.request))
-  );
+  // 그 외(HTML 네비게이션 · API · _next 데이터 등)는 SW가 가로채지 않고
+  // 항상 네트워크로 보낸다.
+  //
+  // ⚠️ 과거에는 네비게이션 응답(HTML)을 CACHE_NAME에 저장하고 네트워크 실패 시
+  //    폴백했는데, 이 HTML에는 로그인/로그아웃 상태가 그대로 박혀 있어:
+  //      - 로그인 상태인데 '서비스 소개'(/about)가 로그아웃 화면(로그인/시작하기)으로 보임
+  //      - 반대로 로그아웃 후에도 캐시된 보호 화면이 잠깐 노출
+  //    하는 문제가 있었다. 인증 상태가 담긴 HTML은 절대 SW가 캐시하면 안 되므로
+  //    네비게이션은 가로채지 않는다. 정적 자산(/_next/static/)만 위에서 캐시한다.
 });
 
 // 클라이언트 → SW 메시지 처리
