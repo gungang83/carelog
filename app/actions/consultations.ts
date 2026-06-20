@@ -363,16 +363,28 @@ export async function getConsultationsByPatientId(
     const supabase = await createServerSupabaseClient();
     const { data, error } = await supabase
       .from(consultationTable)
-      .select("id, patient_id, content, image_urls, prescriptions, station_name, status, sms_sent_at, created_at, chair_id")
+      .select("id, patient_id, content, image_urls, prescriptions, station_name, status, sms_sent_at, created_at, linked_at, chair_id")
       .eq("patient_id", patientId)
       .eq("institution_id", institutionId)
       .order("created_at", { ascending: false })
       .limit(50);
 
     if (error) return { ok: false, message: error.message };
+
+    // "최신에 작업한 순"으로 정렬: 마지막 작업 시각 = max(created_at, linked_at).
+    // 체어 기록은 created_at이 '체어에서 녹음한 과거 시각'이라, 방금 환자에 연결해도
+    // (linked_at=지금) created_at만 보면 더 최근 기록 아래로 가라앉는다. linked_at을
+    // 함께 반영해 '방금 연결한 기록'이 환자 상세 최상단에 보이게 한다.
+    const lastActivity = (r: { created_at: string; linked_at: string | null }) =>
+      Math.max(
+        new Date(r.created_at).getTime(),
+        r.linked_at ? new Date(r.linked_at).getTime() : 0,
+      );
+    const sorted = [...(data ?? [])].sort((a, b) => lastActivity(b) - lastActivity(a));
+
     return {
       ok: true,
-      consultations: (data ?? []) as Array<{
+      consultations: sorted as Array<{
         id: string;
         patient_id: string;
         content: string;
