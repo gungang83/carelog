@@ -2,6 +2,7 @@ import { cache } from "react";
 import { cookies } from "next/headers";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { createAdminSupabaseClient } from "@/lib/supabase/admin";
+import { normalizePlan, type PlanTier } from "@/lib/plan";
 import type { InstitutionRow } from "@/lib/types/database";
 
 export const ACTIVE_INSTITUTION_COOKIE = "carelog_active_institution";
@@ -90,6 +91,23 @@ export const getMyInstitutionId = cache(async (): Promise<string | null> => {
     return firstMember?.institution_id ?? null;
   } catch {
     return null;
+  }
+});
+
+/** 현재 활성 기관의 요금 등급(설정 화면 표시·기능 게이트용). 기본 free. */
+export const getMyInstitutionPlan = cache(async (): Promise<PlanTier> => {
+  try {
+    const institutionId = await getMyInstitutionId();
+    if (!institutionId) return "free";
+    const supabase = await createServerSupabaseClient();
+    const { data } = await supabase
+      .from("institutions")
+      .select("plan")
+      .eq("id", institutionId)
+      .maybeSingle();
+    return normalizePlan(data?.plan as string | null);
+  } catch {
+    return "free";
   }
 });
 

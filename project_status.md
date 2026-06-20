@@ -2,7 +2,7 @@
 
 > **제품 정체성(SSOT)**: Carelog는 **환자 전용 서비스가 아니다.** 의료기관 상담 기록(B2B) ↔ 환자 평생 보관·생애주기 건강관리(B2C)를 잇는 **연결고리**. 상세: [docs/product-vision.md](docs/product-vision.md)
 
-**최종 업데이트**: 2026-06-19 (세션 29 — SSO 성능 2차: 콜백홉 제거·getUser dedupe)
+**최종 업데이트**: 2026-06-19 (세션 30 — 요금제 표시 화면)
 **현재 버전**: main 브랜치
 
 ---
@@ -59,6 +59,20 @@
 | 이미지 줌/팬 | ✅ 완료 | 보기 라이트박스(`ZoomableImage`) + 주석 화면(CSS transform 줌·팬). 휠/버튼/핀치/드래그/더블클릭, 외부 라이브러리 없음 |
 | EO 마스터 게이트웨이 캐시 | ✅ **라이브** (2026-06-10) | EO 직원 마스터를 `clinic_members`에 캐시(`source='eo'`). `lib/eo/gateway.ts`+`sync-master.ts`, Vercel Cron `/api/cron/sync-master`(10분). 수동분 보호. 예미안(0e4e85d6) 직원 30명 동기화 확인 |
 | EO SSO 작성자 귀속 | ✅ **라이브** (2026-06-10) | `/api/auth/sso` 확장 클레임 수용 → `institution_members.eo_employee_id`·`display_name` 저장. 상담 저장 시 `author_employee_id`·`author_name` 자동 기록 |
+
+---
+
+## 2026-06-19 세션 30 (구현) — 요금제 표시 화면
+
+요금정책을 화면으로. 표시 전용(결제·플랜변경은 향후 spec 010).
+
+| 작업 | 결과 |
+|---|---|
+| 위치 | 설정(`/settings`) 상단 **"요금제" 섹션**(전 직원 노출 — 읽기 정보) |
+| 표시 | 현재 플랜 배너(라벨·가격·태그라인) + **전체 등급 비교표**(기능×free/standard/pro/enterprise, 현재 열 강조) + 기대감 카피 + "업그레이드 신청 — 곧 열려요"(준비 중) |
+| 단일 출처 | `lib/plan.ts`에 `PLAN_META`·`PLAN_FEATURES`·`PLAN_ORDER`(docs/pricing-tiers.md 미러). `getMyInstitutionPlan()`(institutions.plan) |
+| 범위 밖 | 결제·플랜 변경·토큰 충전 = 향후. 지금은 표시·비교·기대감까지 |
+| 빌드 | `npm run build` ✅ (DB 변경 없음, 표시 전용) |
 
 ---
 

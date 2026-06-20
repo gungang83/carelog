@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
-import { getMyInstitution } from "@/lib/auth/institution";
+import { getMyInstitution, getMyInstitutionPlan } from "@/lib/auth/institution";
+import { PlanSection } from "@/components/settings/plan-section";
 import { getStaffList } from "@/app/actions/admin";
 import { getMyPatientLinkStatus } from "@/app/actions/patient-portal";
 import { getChairs } from "@/app/actions/chairs";
@@ -27,12 +28,13 @@ export default async function SettingsPage() {
 
   const isOwnerOrAdmin = role === "owner" || role === "admin";
 
-  const [staffResult, patientLinkStatus, chairs, clinicMembers] =
+  const [staffResult, patientLinkStatus, chairs, clinicMembers, plan] =
     await Promise.all([
       isOwnerOrAdmin ? getStaffList() : Promise.resolve(null),
       getMyPatientLinkStatus(),
       isOwnerOrAdmin ? getChairs() : Promise.resolve([]),
       isOwnerOrAdmin ? getClinicMembers() : Promise.resolve([]),
+      getMyInstitutionPlan(),
     ]);
   const members = staffResult?.ok ? staffResult.members : [];
 
@@ -42,6 +44,11 @@ export default async function SettingsPage() {
         <h1 className="text-2xl font-bold text-slate-900">설정</h1>
         <p className="mt-1 text-sm text-slate-500">{institution.name}</p>
       </div>
+
+      <section className="space-y-4">
+        <h2 className="text-base font-semibold text-slate-800">요금제</h2>
+        <PlanSection currentPlan={plan} />
+      </section>
 
       {role === "owner" && (
         <section className="space-y-4">
