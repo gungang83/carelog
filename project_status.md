@@ -2,7 +2,7 @@
 
 > **제품 정체성(SSOT)**: Carelog는 **환자 전용 서비스가 아니다.** 의료기관 상담 기록(B2B) ↔ 환자 평생 보관·생애주기 건강관리(B2C)를 잇는 **연결고리**. 상세: [docs/product-vision.md](docs/product-vision.md)
 
-**최종 업데이트**: 2026-06-20 (세션 35 — 홈 미연결+활동 통합 피드)
+**최종 업데이트**: 2026-06-20 (세션 36 — 통합 피드 카드 디자인 통일)
 **현재 버전**: main 브랜치
 
 ---
@@ -59,6 +59,20 @@
 | 이미지 줌/팬 | ✅ 완료 | 보기 라이트박스(`ZoomableImage`) + 주석 화면(CSS transform 줌·팬). 휠/버튼/핀치/드래그/더블클릭, 외부 라이브러리 없음 |
 | EO 마스터 게이트웨이 캐시 | ✅ **라이브** (2026-06-10) | EO 직원 마스터를 `clinic_members`에 캐시(`source='eo'`). `lib/eo/gateway.ts`+`sync-master.ts`, Vercel Cron `/api/cron/sync-master`(10분). 수동분 보호. 예미안(0e4e85d6) 직원 30명 동기화 확인 |
 | EO SSO 작성자 귀속 | ✅ **라이브** (2026-06-10) | `/api/auth/sso` 확장 클레임 수용 → `institution_members.eo_employee_id`·`display_name` 저장. 상담 저장 시 `author_employee_id`·`author_name` 자동 기록 |
+
+---
+
+## 2026-06-20 세션 36 (feat) — 통합 피드 카드 디자인 통일(상태 시각화)
+
+미연결 카드와 연결 카드를 **같은 카드 언어**로 통일하되 상태는 확실히 구분.
+
+| 항목 | 내용 |
+|---|---|
+| 통일 | 둘 다 `rounded-2xl` 카드 + 좌측 4px 강조선 + 상단 상태 배지(StatusPill)로 동일 레이아웃 |
+| 미연결 | 좌측 **앰버** 강조선 + 옅은 앰버 배경(`bg-amber-50/30`) + `● 미연결` 배지 → "아직 처리 안 됨"이 확 띔 |
+| 연결 완료 | 좌측 **에메랄드** 강조선 + `✓ 연결 완료` 배지 + 사람 아이콘·환자명 강조 → "환자 확정"이 분명 |
+| 공통 헬퍼 | `StatusPill`·`CheckIcon`·`PersonIcon` 추가(home-feed 내부) |
+| 빌드 | `npm run build` ✅ |
 
 ---
 
