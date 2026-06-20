@@ -75,6 +75,7 @@
 | 점검 ④ | 레이아웃이 chairs/members/me·initialRecords를 prop으로 전달 중 → **클라이언트의 레이아웃 데이터 재호출 없음**(이미 충족). consultation-board의 `getRecentParticipants` 마운트 fetch는 별도 이력 데이터(향후 지연로드 후보) |
 | 경계 | EO↔Carelog SSO 다리(토큰)는 경량·정상(헤임달 보증). 콜드스타트(별도 워밍)는 범위 밖 |
 | 빌드 | `npm run build` ✅ |
+| 후속 | 재사용 운영 노트 `docs/ops-region-colocation.md` 작성(EO 등 Vercel+Supabase 서비스 표준 점검 항목) + **헤임달 핸드오프 카드 480**(Carelog 해결 보고 + EO 적용 점검 요청) 발급 |
 
 > 리전 변경은 **배포 후** Vercel 함수가 도쿄에서 재기동되어야 체감된다. 배포 직후 첫 호출은 콜드, 이후 웜에서 효과 확인.
 
