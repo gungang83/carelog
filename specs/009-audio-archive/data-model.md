@@ -20,7 +20,7 @@
 |---|---|---|
 | id | uuid pk default gen_random_uuid() | |
 | institution_id | uuid not null → institutions | 기관 격리 |
-| consultation_id | uuid not null → consultation | 대상 상담 |
+| consultation_id | bigint not null → consultation(id) | 대상 상담 (consultation.id는 실제 DB bigint) |
 | user_id | uuid not null | 재청취한 직원 |
 | played_at | timestamptz not null default now() | 시각 |
 

@@ -16,10 +16,11 @@ alter table public.consultation
   add column if not exists audio_uploaded_at timestamptz;
 
 -- 3) 음성 재청취 감사(Pro 이상) — chair_audit_logs와 분리(realtime publication 오발 방지)
+--    주의: consultation.id 는 실제 DB에서 bigint(identity) → FK 타입을 bigint로 맞춘다.
 create table if not exists public.audio_replay_logs (
   id uuid primary key default gen_random_uuid(),
   institution_id uuid not null references public.institutions(id) on delete cascade,
-  consultation_id uuid not null references public.consultation(id) on delete cascade,
+  consultation_id bigint not null references public.consultation(id) on delete cascade,
   user_id uuid not null,
   played_at timestamptz not null default now()
 );

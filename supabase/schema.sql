@@ -521,7 +521,8 @@ alter table public.patient_push_subscriptions enable row level security;
 --     add column audio_path text, add column audio_uploaded_at timestamptz;
 -- audio_replay_logs(Pro 이상 재청취 감사; chair_audit_logs와 분리 → realtime 오발 방지):
 --   create table public.audio_replay_logs(
---     id uuid pk, institution_id uuid, consultation_id uuid, user_id uuid,
+--     id uuid pk, institution_id uuid, consultation_id bigint(→consultation.id), user_id uuid,
 --     played_at timestamptz default now()); RLS: 같은 기관 직원 select/insert.
+--   주의: consultation.id 는 실제 DB에서 bigint → FK 타입 bigint.
 -- 비공개 Storage 버킷 'consultation-audio'(public=false) — 서명 URL로만 접근.
 -- ───────────────────────────────────────────────────────────────────────────
