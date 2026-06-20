@@ -1,12 +1,11 @@
 export const maxDuration = 120;
 
 import { redirect } from "next/navigation";
-import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { Header } from "@/components/layout/header";
 import { Footer } from "@/components/footer";
 import { SessionRefresher } from "@/components/layout/session-refresher";
 import { BadgeManager } from "@/components/layout/badge-manager";
-import { getMyInstitutions, getMyInstitutionId, getMyAuthorInfo } from "@/lib/auth/institution";
+import { getMyInstitutions, getMyInstitutionId, getMyAuthorInfo, getSessionUser } from "@/lib/auth/institution";
 import { getChairs } from "@/app/actions/chairs";
 import { getClinicMembers } from "@/app/actions/clinic-members";
 import { ChairProvider } from "@/components/chair/chair-provider";
@@ -20,11 +19,7 @@ export default async function DashboardLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const supabase = await createServerSupabaseClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
+  const user = await getSessionUser();
   if (!user) {
     redirect("/login");
   }

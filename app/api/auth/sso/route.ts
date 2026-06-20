@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminSupabaseClient } from "@/lib/supabase/admin";
+import { createServerSupabaseClient } from "@/lib/supabase/server";
 
 /**
  * EO eo_role → Carelog institution_members.role 매핑.
@@ -177,12 +178,20 @@ export async function GET(req: NextRequest) {
     // 2-b. EO 마스터 동기화는 폴링 cron(/api/cron/sync-master, 10분 주기)에 위임한다.
     //      로그인마다 EO fetch + 다건 upsert를 동기 await 하면 로그인을 직접 막으므로 제거.
 
-    // 3. /auth/callback으로 token_hash 전달 (PKCE 우회) — 토큰은 1단계에서 이미 발급됨.
-    const callbackUrl = new URL(`${req.nextUrl.origin}/auth/callback`);
-    callbackUrl.searchParams.set("token_hash", hashedToken);
-    callbackUrl.searchParams.set("type", "magiclink");
-    console.log("[SSO] redirecting to callback with token_hash");
-    return NextResponse.redirect(callbackUrl.toString());
+    // 3. 세션 쿠키를 이 자리서 직접 세팅하고 곧장 '/'로 — /auth/callback 홉 제거(카드 479A).
+    //    SSO는 위 2단계에서 멤버십을 보장하므로 callback의 멤버없음(온보딩/초대) 분기가 불필요.
+    //    → 서버리스 1홉 + 콜드 1회 + 중복 verifyOtp·멤버조회 제거. 패턴은 기존 callback과 동일.
+    const supabase = await createServerSupabaseClient();
+    const { error: otpError } = await supabase.auth.verifyOtp({
+      token_hash: hashedToken,
+      type: "magiclink",
+    });
+    if (otpError) {
+      console.error("[SSO] verifyOtp error:", otpError.message);
+      return NextResponse.redirect(`${EO_APP_URL}?sso_error=verify`);
+    }
+    console.log("[SSO] session set, redirecting to /");
+    return NextResponse.redirect(`${req.nextUrl.origin}/`);
   } catch (e) {
     console.error("[SSO] unhandled error:", e);
     return NextResponse.redirect(`${EO_APP_URL}?sso_error=unexpected`);

@@ -2,7 +2,7 @@
 
 > **제품 정체성(SSOT)**: Carelog는 **환자 전용 서비스가 아니다.** 의료기관 상담 기록(B2B) ↔ 환자 평생 보관·생애주기 건강관리(B2C)를 잇는 **연결고리**. 상세: [docs/product-vision.md](docs/product-vision.md)
 
-**최종 업데이트**: 2026-06-19 (세션 28 — 음성 원본 보관 구현 spec 009)
+**최종 업데이트**: 2026-06-19 (세션 29 — SSO 성능 2차: 콜백홉 제거·getUser dedupe)
 **현재 버전**: main 브랜치
 
 ---
@@ -59,6 +59,20 @@
 | 이미지 줌/팬 | ✅ 완료 | 보기 라이트박스(`ZoomableImage`) + 주석 화면(CSS transform 줌·팬). 휠/버튼/핀치/드래그/더블클릭, 외부 라이브러리 없음 |
 | EO 마스터 게이트웨이 캐시 | ✅ **라이브** (2026-06-10) | EO 직원 마스터를 `clinic_members`에 캐시(`source='eo'`). `lib/eo/gateway.ts`+`sync-master.ts`, Vercel Cron `/api/cron/sync-master`(10분). 수동분 보호. 예미안(0e4e85d6) 직원 30명 동기화 확인 |
 | EO SSO 작성자 귀속 | ✅ **라이브** (2026-06-10) | `/api/auth/sso` 확장 클레임 수용 → `institution_members.eo_employee_id`·`display_name` 저장. 상담 저장 시 `author_employee_id`·`author_name` 자동 기록 |
+
+---
+
+## 2026-06-19 세션 29 (fix) — SSO 성능 2차 (카드 479)
+
+웜 상태도 4~5초 → 구조적 홉·중복 제거.
+
+| 수정 | 내용 |
+|---|---|
+| (A)★ 콜백 홉 제거 | `/api/auth/sso`가 hashed_token 직후 **그 자리서 `verifyOtp`로 세션쿠키 세팅 → 곧장 '/'**. `/auth/callback` 홉 통째 제거(서버리스 1홉+콜드1회+중복 verifyOtp·멤버조회 제거). SSO는 2단계서 멤버십 보장하므로 callback 온보딩 분기 불필요. (callback 라우트는 Google OAuth용으로 유지) |
+| (B) getUser dedupe | 대시보드 진입은 이미 Promise.all(병렬)이었음 — 남은 비용은 **`auth.getUser()` 중복(레이아웃+3함수 ≈4회)**. `getSessionUser()`(React cache) 신설해 `getMyInstitutions`·`getMyInstitutionId`·`getMyAuthorInfo`·layout이 공유 → 인증 왕복 1회로 축소 |
+| 빌드 | `npm run build` ✅ |
+
+> 1차(#476) verified. 콜드(1회차)는 데모 직전 워밍으로 별도. 헤임달 연결 재검증 예정.
 
 ---
 

@@ -6,6 +6,19 @@ import type { InstitutionRow } from "@/lib/types/database";
 
 export const ACTIVE_INSTITUTION_COOKIE = "carelog_active_institution";
 
+/**
+ * 현재 세션 사용자 — 요청당 1회만 검증(React cache).
+ * getUser()는 Supabase Auth에 토큰 검증을 왕복하므로, 대시보드 진입 시 여러 함수가
+ * 각자 호출하던 중복을 dedupe해 로그인 직후 첫 화면 지연을 줄인다(카드 479B).
+ */
+export const getSessionUser = cache(async () => {
+  const supabase = await createServerSupabaseClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  return user;
+});
+
 export type InstitutionWithRole = {
   institution: InstitutionRow;
   role: "owner" | "admin" | "staff";
@@ -15,9 +28,9 @@ export type InstitutionWithRole = {
 /** 현재 로그인한 사용자의 모든 기관 목록을 반환. */
 export const getMyInstitutions = cache(async (): Promise<InstitutionWithRole[]> => {
   try {
-    const supabase = await createServerSupabaseClient();
-    const { data: { user } } = await supabase.auth.getUser();
+    const user = await getSessionUser();
     if (!user) return [];
+    const supabase = await createServerSupabaseClient();
 
     const { data, error } = await supabase
       .from("institution_members")
@@ -45,9 +58,9 @@ export const getMyInstitutions = cache(async (): Promise<InstitutionWithRole[]> 
  */
 export const getMyInstitutionId = cache(async (): Promise<string | null> => {
   try {
-    const supabase = await createServerSupabaseClient();
-    const { data: { user } } = await supabase.auth.getUser();
+    const user = await getSessionUser();
     if (!user) return null;
+    const supabase = await createServerSupabaseClient();
 
     const cookieStore = await cookies();
     const activeCookie = cookieStore.get(ACTIVE_INSTITUTION_COOKIE)?.value;
@@ -93,9 +106,9 @@ export const getMyAuthorInfo = cache(async (): Promise<{
     const institutionId = await getMyInstitutionId();
     if (!institutionId) return { author_employee_id: null, author_name: null };
 
-    const supabase = await createServerSupabaseClient();
-    const { data: { user } } = await supabase.auth.getUser();
+    const user = await getSessionUser();
     if (!user) return { author_employee_id: null, author_name: null };
+    const supabase = await createServerSupabaseClient();
 
     const { data } = await supabase
       .from("institution_members")
