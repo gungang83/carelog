@@ -2,7 +2,7 @@
 
 > **제품 정체성(SSOT)**: Carelog는 **환자 전용 서비스가 아니다.** 의료기관 상담 기록(B2B) ↔ 환자 평생 보관·생애주기 건강관리(B2C)를 잇는 **연결고리**. 상세: [docs/product-vision.md](docs/product-vision.md)
 
-**최종 업데이트**: 2026-06-20 (세션 31 — 서비스 소개 로그아웃 버그 fix)
+**최종 업데이트**: 2026-06-20 (세션 32 — 대시보드 리전 코로케이션 성능 fix)
 **현재 버전**: main 브랜치
 
 ---
@@ -59,6 +59,24 @@
 | 이미지 줌/팬 | ✅ 완료 | 보기 라이트박스(`ZoomableImage`) + 주석 화면(CSS transform 줌·팬). 휠/버튼/핀치/드래그/더블클릭, 외부 라이브러리 없음 |
 | EO 마스터 게이트웨이 캐시 | ✅ **라이브** (2026-06-10) | EO 직원 마스터를 `clinic_members`에 캐시(`source='eo'`). `lib/eo/gateway.ts`+`sync-master.ts`, Vercel Cron `/api/cron/sync-master`(10분). 수동분 보호. 예미안(0e4e85d6) 직원 30명 동기화 확인 |
 | EO SSO 작성자 귀속 | ✅ **라이브** (2026-06-10) | `/api/auth/sso` 확장 클레임 수용 → `institution_members.eo_employee_id`·`display_name` 저장. 상담 저장 시 `author_employee_id`·`author_name` 자동 기록 |
+
+---
+
+## 2026-06-20 세션 32 (fix) — SSO 로그인 후 대시보드 4~5초 (카드 479, 리전 거리)
+
+웜 상태 4~5초의 진짜 원인 = **단일 병목이 아니라 리전 거리 누적**.
+
+| 항목 | 내용 |
+|---|---|
+| ★진단 ① | Supabase DB 오리진 IPv6(`2406:da14:311::`)를 AWS ip-ranges로 역추적 → **ap-northeast-1(도쿄)** 확정. Vercel 함수는 `regions` 미지정 = 기본 **iad1(미국 워싱턴)** → DB·Auth 왕복마다 **미국↔도쿄 태평양 횡단**(왕복+TLS ~300ms) × 6~10회 ≈ 4~5초 |
+| ★수정 ① | `vercel.json`에 `"regions": ["hnd1"]`(도쿄) — 함수를 Supabase와 **같은 리전에 코로케이션**. 왕복 ~300ms→~1~5ms. **단일 최대 레버** |
+| 수정 ② | `getActivityLogs`가 캐시 우회한 `supabase.auth.getUser()`를 호출하던 것을 dedupe된 `getSessionUser()`로 교체 → 웜 대시보드 GoTrue 왕복 1회 제거 |
+| 점검 ③ | SSO `generateLink`(hashed_token) + `verifyOtp`(세션 쿠키) 2회 GoTrue 왕복 = 구조상 불가피(토큰 발급→세션 확립). 코로케이션으로 각 왕복 자체가 저렴해져 영향 소멸. 변경 없음 |
+| 점검 ④ | 레이아웃이 chairs/members/me·initialRecords를 prop으로 전달 중 → **클라이언트의 레이아웃 데이터 재호출 없음**(이미 충족). consultation-board의 `getRecentParticipants` 마운트 fetch는 별도 이력 데이터(향후 지연로드 후보) |
+| 경계 | EO↔Carelog SSO 다리(토큰)는 경량·정상(헤임달 보증). 콜드스타트(별도 워밍)는 범위 밖 |
+| 빌드 | `npm run build` ✅ |
+
+> 리전 변경은 **배포 후** Vercel 함수가 도쿄에서 재기동되어야 체감된다. 배포 직후 첫 호출은 콜드, 이후 웜에서 효과 확인.
 
 ---
 
