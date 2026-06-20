@@ -1,8 +1,7 @@
 import { PatientHome } from "@/components/patient-home";
-import { ActivityFeed } from "@/components/activity/activity-feed";
 import { PushNotificationBanner } from "@/components/push-notification-banner";
 import { ConsultHero } from "@/components/chair/consult-hero";
-import { UnlinkedRecordsSection } from "@/components/chair/unlinked-records-section";
+import { HomeFeed } from "@/components/home/home-feed";
 import { getActivityLogs } from "@/app/actions/activity";
 import { getAllUnlinkedRecords } from "@/app/actions/chairs";
 
@@ -21,16 +20,10 @@ export default async function Home() {
       {/* 아래로 펼쳐지는 대시보드 요소들 */}
       <PushNotificationBanner />
 
-      <UnlinkedRecordsSection initialRecords={initialUnlinked} />
+      {/* 미연결 기록 + 최근 활동 통합 피드 (토글로 함께/하나씩) */}
+      <HomeFeed initialRecords={initialUnlinked} logs={logs} />
 
       <PatientHome />
-
-      <section className="space-y-3">
-        <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">
-          최근 활동
-        </h2>
-        <ActivityFeed logs={logs} />
-      </section>
     </div>
   );
 }

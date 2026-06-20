@@ -2,7 +2,7 @@
 
 > **제품 정체성(SSOT)**: Carelog는 **환자 전용 서비스가 아니다.** 의료기관 상담 기록(B2B) ↔ 환자 평생 보관·생애주기 건강관리(B2C)를 잇는 **연결고리**. 상세: [docs/product-vision.md](docs/product-vision.md)
 
-**최종 업데이트**: 2026-06-20 (세션 34 — 연결 기록 '최신 작업 순' 정렬)
+**최종 업데이트**: 2026-06-20 (세션 35 — 홈 미연결+활동 통합 피드)
 **현재 버전**: main 브랜치
 
 ---
@@ -59,6 +59,21 @@
 | 이미지 줌/팬 | ✅ 완료 | 보기 라이트박스(`ZoomableImage`) + 주석 화면(CSS transform 줌·팬). 휠/버튼/핀치/드래그/더블클릭, 외부 라이브러리 없음 |
 | EO 마스터 게이트웨이 캐시 | ✅ **라이브** (2026-06-10) | EO 직원 마스터를 `clinic_members`에 캐시(`source='eo'`). `lib/eo/gateway.ts`+`sync-master.ts`, Vercel Cron `/api/cron/sync-master`(10분). 수동분 보호. 예미안(0e4e85d6) 직원 30명 동기화 확인 |
 | EO SSO 작성자 귀속 | ✅ **라이브** (2026-06-10) | `/api/auth/sso` 확장 클레임 수용 → `institution_members.eo_employee_id`·`display_name` 저장. 상담 저장 시 `author_employee_id`·`author_name` 자동 기록 |
+
+---
+
+## 2026-06-20 세션 35 (feat) — 홈 '미연결 기록 + 최근 활동' 통합 피드
+
+홈에 따로 떨어져 있던 두 영역을 하나의 시간순 피드로 합침(요청: 토글로 함께/하나씩).
+
+| 항목 | 내용 |
+|---|---|
+| 통찰 | `activity_logs` 트리거가 **연결된 상담만** 기록(미연결 draft 제외) → 미연결기록과 최근활동은 **상호 배타**. 같은 상담이 미연결→연결 단계로 이동(연결 시 트리거가 `created_at=now()`로 활동 상단 노출) |
+| 신규 | `components/home/home-feed.tsx` — 미연결(액션 카드) + 활동(연결 로그)을 `created_at` 시간순 병합. 상단 **토글 칩(미연결/활동)**: 둘 다(시간순)·하나씩. 활동은 5개 후 '전체 보기' |
+| 동작 | 연결/삭제 시 `reload()` + `router.refresh()`로 양쪽 동기화(연결되면 미연결에서 빠지고 활동에 등장). 카드 액션(편집·연결·삭제·복사·재청취·새 녹음)은 기존 그대로 |
+| 레이아웃 | 홈 순서: ConsultHero → PushBanner → **통합 피드** → 환자 검색(PatientHome) |
+| 정리 | 기존 `unlinked-records-section.tsx`·`activity/activity-feed.tsx` 제거(통합 피드로 대체). `docs/architecture.md` 현행화 |
+| 빌드 | `npm run build` ✅ |
 
 ---
 
