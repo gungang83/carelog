@@ -35,7 +35,7 @@ export function HomeFeed({
   const [records, setRecords] = useState<AllUnlinkedRecord[]>(initialRecords);
   const [showUnlinked, setShowUnlinked] = useState(true);
   const [showActivity, setShowActivity] = useState(true);
-  const [expandedActivity, setExpandedActivity] = useState(false);
+  const [expanded, setExpanded] = useState(false);
 
   // 카드 편집/연결/삭제 상태(한 번에 하나만)
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -131,8 +131,7 @@ export function HomeFeed({
     | { kind: "unlinked"; time: number; rec: AllUnlinkedRecord }
     | { kind: "activity"; time: number; log: ActivityLogEntry };
 
-  const activityVisible = expandedActivity ? logs : logs.slice(0, 5);
-  const items: FeedItem[] = [
+  const allItems: FeedItem[] = [
     ...(showUnlinked
       ? records.map((rec) => ({
           kind: "unlinked" as const,
@@ -141,13 +140,17 @@ export function HomeFeed({
         }))
       : []),
     ...(showActivity
-      ? activityVisible.map((log) => ({
+      ? logs.map((log) => ({
           kind: "activity" as const,
           time: new Date(log.created_at).getTime(),
           log,
         }))
       : []),
   ].sort((a, b) => b.time - a.time);
+
+  // 기본 10개만 노출, 나머지는 '전체 보기'로 펼침.
+  const COLLAPSED = 10;
+  const items = expanded ? allItems : allItems.slice(0, COLLAPSED);
 
   if (records.length === 0 && logs.length === 0) return null;
 
@@ -203,12 +206,12 @@ export function HomeFeed({
         </ul>
       )}
 
-      {showActivity && logs.length > 5 && (
+      {allItems.length > COLLAPSED && (
         <button
-          onClick={() => setExpandedActivity((e) => !e)}
+          onClick={() => setExpanded((e) => !e)}
           className="w-full rounded-xl border border-slate-200 bg-white py-2 text-xs font-medium text-slate-500 transition hover:bg-slate-50"
         >
-          {expandedActivity ? "활동 접기" : `활동 전체 ${logs.length}개 보기`}
+          {expanded ? "접기" : `전체 ${allItems.length}개 보기`}
         </button>
       )}
     </section>
@@ -451,6 +454,22 @@ function CheckIcon({ className }: { className?: string }) {
   );
 }
 
+// 환자 식별정보 칩 — 값이 있으면 회색, 없으면(미등록) 앰버로 경고.
+function MetaItem({ value, missing }: { value: string | null; missing: string }) {
+  if (value) {
+    return (
+      <span className="rounded-md bg-slate-100 px-1.5 py-0.5 text-[11px] text-slate-500">
+        {value}
+      </span>
+    );
+  }
+  return (
+    <span className="rounded-md bg-amber-50 px-1.5 py-0.5 text-[11px] font-medium text-amber-600">
+      {missing}
+    </span>
+  );
+}
+
 function PersonIcon({ className }: { className?: string }) {
   return (
     <svg className={className} viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
@@ -475,6 +494,14 @@ function ActivityRow({ log }: { log: ActivityLogEntry }) {
         </span>
         <span className="ml-auto text-slate-400">{formatRelative(log.created_at)}</span>
       </div>
+
+      {/* 환자 등록 확인용 식별정보(민감정보 마스킹). 미등록 항목은 앰버로 표시해 누락을 드러냄. */}
+      <div className="mb-2 flex flex-wrap items-center gap-1.5">
+        <MetaItem value={log.chart_no ? `차트 ${log.chart_no}` : null} missing="차트번호 없음" />
+        <MetaItem value={log.resident_masked} missing="주민번호 없음" />
+        <MetaItem value={log.phone_masked} missing="전화 없음" />
+      </div>
+
       <div className="flex items-center gap-2">
         <span className="rounded-full bg-slate-100 px-1.5 py-0.5 text-[10px] font-medium text-slate-500">
           {EVENT_LABEL[log.event_type] ?? log.event_type}
