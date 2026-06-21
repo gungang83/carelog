@@ -41,6 +41,7 @@ export function HomeFeed({
   const [editingId, setEditingId] = useState<string | null>(null);
   const [linkingId, setLinkingId] = useState<string | null>(null);
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
+  const [viewingId, setViewingId] = useState<string | null>(null);
   const [editContent, setEditContent] = useState("");
   const [editPrescriptions, setEditPrescriptions] = useState<string[]>([]);
   const [msg, setMsg] = useState("");
@@ -222,6 +223,7 @@ export function HomeFeed({
     const isEditing = editingId === rec.id;
     const isLinking = linkingId === rec.id;
     const isDeleteConfirm = deleteConfirmId === rec.id;
+    const isViewing = viewingId === rec.id;
     const preview = stripHtml(rec.content).slice(0, 120);
     const charCount = stripHtml(rec.content).length;
 
@@ -295,10 +297,35 @@ export function HomeFeed({
           />
         ) : (
           <>
-            <p className="mb-3 text-sm leading-relaxed text-slate-700">
-              {preview || "내용 없음"}
-              {charCount > 120 && <span className="text-slate-400">…</span>}
-            </p>
+            {/* 카드 본문 — 클릭하면 전체 내용(서식 포함) 펼침/접힘. 편집은 명시적으로 유지. */}
+            <div
+              role="button"
+              tabIndex={0}
+              aria-expanded={isViewing}
+              onClick={() => setViewingId(isViewing ? null : rec.id)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault();
+                  setViewingId(isViewing ? null : rec.id);
+                }
+              }}
+              className="mb-3 cursor-pointer rounded-xl px-2 py-1.5 -mx-2 transition hover:bg-amber-50/60"
+            >
+              {isViewing ? (
+                <div
+                  className="rich-content text-sm leading-6 text-slate-800"
+                  dangerouslySetInnerHTML={{ __html: rec.content || "<p>내용 없음</p>" }}
+                />
+              ) : (
+                <p className="text-sm leading-relaxed text-slate-700">
+                  {preview || "내용 없음"}
+                  {charCount > 120 && <span className="text-slate-400">…</span>}
+                </p>
+              )}
+              <span className="mt-1.5 inline-flex items-center gap-0.5 text-xs font-medium text-sky-600">
+                {isViewing ? "접기 ▲" : "눌러서 전체 보기 ▼"}
+              </span>
+            </div>
 
             {(rec.prescriptions ?? []).length > 0 && (
               <div className="mb-3 flex flex-wrap gap-1.5">
