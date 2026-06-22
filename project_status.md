@@ -2,7 +2,7 @@
 
 > **제품 정체성(SSOT)**: Carelog는 **환자 전용 서비스가 아니다.** 의료기관 상담 기록(B2B) ↔ 환자 평생 보관·생애주기 건강관리(B2C)를 잇는 **연결고리**. 상세: [docs/product-vision.md](docs/product-vision.md)
 
-**최종 업데이트**: 2026-06-20 (세션 38 — 미연결 카드 클릭하여 전체 보기)
+**최종 업데이트**: 2026-06-20 (세션 39 — 계정·워크스페이스 연동 규칙 문서화)
 **현재 버전**: main 브랜치
 
 ---
@@ -59,6 +59,17 @@
 | 이미지 줌/팬 | ✅ 완료 | 보기 라이트박스(`ZoomableImage`) + 주석 화면(CSS transform 줌·팬). 휠/버튼/핀치/드래그/더블클릭, 외부 라이브러리 없음 |
 | EO 마스터 게이트웨이 캐시 | ✅ **라이브** (2026-06-10) | EO 직원 마스터를 `clinic_members`에 캐시(`source='eo'`). `lib/eo/gateway.ts`+`sync-master.ts`, Vercel Cron `/api/cron/sync-master`(10분). 수동분 보호. 예미안(0e4e85d6) 직원 30명 동기화 확인 |
 | EO SSO 작성자 귀속 | ✅ **라이브** (2026-06-10) | `/api/auth/sso` 확장 클레임 수용 → `institution_members.eo_employee_id`·`display_name` 저장. 상담 저장 시 `author_employee_id`·`author_name` 자동 기록 |
+
+---
+
+## 2026-06-20 세션 39 (docs) — 계정·워크스페이스 연동 규칙
+
+| 항목 | 내용 |
+|---|---|
+| 배경 | "Carelog로 먼저 가입한 사용자가 EO와 연결될 때" 동작·수동 운영을 SSOT로 못박음(대화 휘발 방지) |
+| 신규 | `docs/account-workspace-linking.md` — 이메일=계정키, EO↔CL=기관단위 링크, 합류≠워크스페이스 이전, 수동 운영(빈 기관 정리·재링크·데이터 이관), 권장 운영(EO 직원은 SSO 진입), 엣지(Google 동일이메일 검증), 후속(공개가입 차단 등) |
+| 연결 | `docs/eo-carelog-integration.md`에 링크 추가 |
+| 알려진 한계 | 자동화 없음(현재 수동) · 공개 가입 열림 · 빈 중복 기관 정리 UI 없음 → 향후 spec 후보 |
 
 ---
 

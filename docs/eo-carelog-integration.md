@@ -2,6 +2,7 @@
 
 > 상태: **방향 합의 단계** (실비 카드224 회신 반영 · 일부 미결) · 작성: 다온(Carelog) · 갱신: 2026-06-07 세션15
 > 관련: 제안 카드 25 (EO 전달) → **회신: 실비 카드224** / EO 관문계약: 헤임달 카드219·spec-048 (Carelog 레포 미보유 → EO측 확인 필요)
+> 🔗 **계정·워크스페이스 연동 운영 규칙(이메일 키·기관단위 링크·수동 정리)**: [`docs/account-workspace-linking.md`](account-workspace-linking.md)
 
 Carelog는 EO의 광범위한 병의원 솔루션과 **환자**를 잇는 다리(bridge)다.
 두 제품은 별도 Vercel·Supabase로 **격리 운영**되므로, 상호작용은 "경계(계약)"로만
