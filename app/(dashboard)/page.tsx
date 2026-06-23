@@ -2,13 +2,16 @@ import { PatientHome } from "@/components/patient-home";
 import { PushNotificationBanner } from "@/components/push-notification-banner";
 import { ConsultHero } from "@/components/chair/consult-hero";
 import { HomeFeed } from "@/components/home/home-feed";
+import { WorkspaceHelpBanner } from "@/components/help/workspace-help-banner";
 import { getActivityLogs } from "@/app/actions/activity";
 import { getAllUnlinkedRecords } from "@/app/actions/chairs";
+import { getMyInstitutions } from "@/lib/auth/institution";
 
 export default async function Home() {
-  const [activityResult, initialUnlinked] = await Promise.all([
+  const [activityResult, initialUnlinked, institutions] = await Promise.all([
     getActivityLogs(50),
     getAllUnlinkedRecords(),
+    getMyInstitutions(),
   ]);
   const logs = activityResult.ok ? activityResult.logs : [];
 
@@ -19,6 +22,9 @@ export default async function Home() {
 
       {/* 아래로 펼쳐지는 대시보드 요소들 */}
       <PushNotificationBanner />
+
+      {/* 여러 워크스페이스 소속 시 안내(닫기 가능) */}
+      <WorkspaceHelpBanner institutionCount={institutions.length} />
 
       {/* 미연결 기록 + 최근 활동 통합 피드 (토글로 함께/하나씩) */}
       <HomeFeed initialRecords={initialUnlinked} logs={logs} />
