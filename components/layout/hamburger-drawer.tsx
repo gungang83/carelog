@@ -138,6 +138,9 @@ export function HamburgerDrawer({
           <NavItem href="/about" icon={<InfoIcon />} onClick={() => setOpen(false)}>
             서비스 소개
           </NavItem>
+          <NavItem href="/help" icon={<HelpIcon />} onClick={() => setOpen(false)}>
+            도움말
+          </NavItem>
         </nav>
 
         {/* 로그아웃 */}
@@ -252,6 +255,14 @@ function InfoIcon() {
   return (
     <svg viewBox="0 0 20 20" fill="currentColor" className="size-4">
       <path fillRule="evenodd" d="M18 10a8 8 0 1 1-16 0 8 8 0 0 1 16 0Zm-7-4a1 1 0 1 1-2 0 1 1 0 0 1 2 0ZM9 9a.75.75 0 0 0 0 1.5h.253a.25.25 0 0 1 .244.304l-.459 2.066A1.75 1.75 0 0 0 10.747 15H11a.75.75 0 0 0 0-1.5h-.253a.25.25 0 0 1-.244-.304l.459-2.066A1.75 1.75 0 0 0 9.253 9H9Z" clipRule="evenodd" />
+    </svg>
+  );
+}
+
+function HelpIcon() {
+  return (
+    <svg viewBox="0 0 20 20" fill="currentColor" className="size-4">
+      <path fillRule="evenodd" d="M18 10a8 8 0 1 1-16 0 8 8 0 0 1 16 0ZM8.94 6.94a1.5 1.5 0 0 1 2.32 1.26c0 .6-.34.92-1.02 1.39-.56.39-1.24.95-1.24 1.91v.13a.75.75 0 0 0 1.5 0v-.06c0-.27.17-.5.6-.8.68-.47 1.66-1.13 1.66-2.57a3 3 0 1 0-5.86.9.75.75 0 1 0 1.44-.42 1.5 1.5 0 0 1 .6-1.74ZM10 15a1 1 0 1 0 0-2 1 1 0 0 0 0 2Z" clipRule="evenodd" />
     </svg>
   );
 }

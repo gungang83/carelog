@@ -2,7 +2,7 @@
 
 > **제품 정체성(SSOT)**: Carelog는 **환자 전용 서비스가 아니다.** 의료기관 상담 기록(B2B) ↔ 환자 평생 보관·생애주기 건강관리(B2C)를 잇는 **연결고리**. 상세: [docs/product-vision.md](docs/product-vision.md)
 
-**최종 업데이트**: 2026-06-20 (세션 39 — 계정·워크스페이스 연동 규칙 문서화)
+**최종 업데이트**: 2026-06-20 (세션 40 — 도움말 페이지 + 워크스페이스 안내 배너)
 **현재 버전**: main 브랜치
 
 ---
@@ -59,6 +59,21 @@
 | 이미지 줌/팬 | ✅ 완료 | 보기 라이트박스(`ZoomableImage`) + 주석 화면(CSS transform 줌·팬). 휠/버튼/핀치/드래그/더블클릭, 외부 라이브러리 없음 |
 | EO 마스터 게이트웨이 캐시 | ✅ **라이브** (2026-06-10) | EO 직원 마스터를 `clinic_members`에 캐시(`source='eo'`). `lib/eo/gateway.ts`+`sync-master.ts`, Vercel Cron `/api/cron/sync-master`(10분). 수동분 보호. 예미안(0e4e85d6) 직원 30명 동기화 확인 |
 | EO SSO 작성자 귀속 | ✅ **라이브** (2026-06-10) | `/api/auth/sso` 확장 클레임 수용 → `institution_members.eo_employee_id`·`display_name` 저장. 상담 저장 시 `author_employee_id`·`author_name` 자동 기록 |
+
+---
+
+## 2026-06-20 세션 40 (feat) — 도움말 페이지 + 워크스페이스 안내 배너
+
+세션 39의 내부 규칙(SSOT)을 **사용자용 안내**로 노출(가볍게 1차).
+
+| 항목 | 내용 |
+|---|---|
+| 도움말 페이지 | `/help`(`app/(dashboard)/help/page.tsx`) — 토픽 카드: EO 진입·계정/워크스페이스 연동·중복 워크스페이스 정리. 친절한 사용자 톤(내부 SSOT는 `docs/account-workspace-linking.md`) |
+| 진입점 | 햄버거 메뉴에 "도움말"(/help) 항목 추가 |
+| 상황 배너 | `WorkspaceHelpBanner` — **워크스페이스 2곳 이상** 소속 시 홈 상단에 안내(전환 방법 + 도움말 링크). 닫으면 localStorage 기억(잔소리 방지) |
+| 비용 | 홈에서 `getMyInstitutions`(이미 layout서 호출 — cache로 추가비용 0) |
+| 범위 밖 | 헤더 '?' 상시 뱃지는 이번 제외(요청). EO 도움말 배너/뱃지 패턴 직접 참고는 EO 레포 접근 필요(미접근) |
+| 빌드 | `npm run build` ✅ |
 
 ---
 
