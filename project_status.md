@@ -70,6 +70,7 @@
 |---|---|
 | 회의 피드백 정리 | `specs/000-backlog/pilot-w0-kickoff.md` — C-01~C-11. 각 건 코드 대조(현재상태·난이도·분류) |
 | **C-03 배포** | 확정 상담 카드 **인라인 편집** 추가. STT 오인식 등 사후 정정용. status 가드 없는 `updateConsultationContent` 액션 + `ConfirmedEditControls` |
+| **C-02 배포** | **환자 대면 보호막**(`PatientShield`). 홈의 `HomeFeed`·`PatientHome` 기본 가림(흐림+접힘) → "기록 펴기"/흐린영역 클릭 시 노출, 매 진입 재가림. `ConsultHero`는 노출 유지 |
 | 코드 대조 발견 | C-04(자동알림+리프레시)는 spec007로 **이미 구현** → 검증 항목. 전체복사도 확정카드에 **이미 존재** |
 | spec 승격 후보 | C-01 녹음 유실 가드(009 연계), C-02 환자 대면 모드, C-05 실시간 협업(단계적), C-08 캡처 워크플로 |
 | 드라이브 | 회의 자료는 `Carelog_Project_공유/01_파일럿` 폴더(런시트·전사록·피드백 메모) |
