@@ -6,15 +6,16 @@ import { useState } from "react";
  * 환자 대면 보호막 (C-02 · 파일럿 W0 피드백).
  *
  * 환자가 화면을 함께 보는 홈에서 민감한 목록(미연결 상담 기록·환자 검색)을
- * 기본적으로 **가린다**. 안내 카드를 누르거나 흐린 영역을 클릭하면 펴지고,
+ * 기본적으로 **가린다**. 가린 상태에선 흐린 미리보기가 넓게 깔리고 그 위에
+ * 작은 안내 박스가 떠 있으며, 박스나 흐린 영역을 누르면 펴진다.
  * 상단 안내 바를 누르면 다시 가려진다. 보호 우선이라 펼친 상태는 기억하지 않고
  * **매 진입 시 다시 가린다**.
  *
  * ⚠️ 용어: 케어로그 산출물은 "상담 기록"이다. "진료 기록"(의무기록)으로 칭하지 않는다.
  *    의료법 리스크 회피 — 자세한 규칙은 docs/product-vision.md "용어 규칙".
  *
- * 레이아웃: overlay(absolute)를 쓰지 않고 안내/콘텐츠를 일반 흐름으로 쌓아
- *    가림↔펴기 전환 시 높이가 안내 영역 밖으로 넘쳐 겹치는 삐걱임을 없앴다.
+ * 레이아웃: 안내 박스는 흐린 영역(max-h) 안에 absolute로 가두고, 흐린 영역엔
+ *    min-h를 줘서 콘텐츠가 짧아도 박스가 밖으로 넘쳐 겹치지 않게 했다.
  *    가로 폭 흔들림은 globals.css `scrollbar-gutter: stable` 로 잡는다.
  */
 export function PatientShield({ children }: { children: React.ReactNode }) {
@@ -22,8 +23,8 @@ export function PatientShield({ children }: { children: React.ReactNode }) {
 
   return (
     <section>
-      {revealed ? (
-        /* 펴진 상태 안내 바 — 바 전체를 누르면 다시 가리기 */
+      {/* 펴진 상태 안내 바 — 바 전체를 누르면 다시 가리기 */}
+      {revealed && (
         <button
           type="button"
           onClick={() => setRevealed(false)}
@@ -38,48 +39,38 @@ export function PatientShield({ children }: { children: React.ReactNode }) {
             가리기
           </span>
         </button>
-      ) : (
-        /* 가린 상태 안내 카드 — 카드 전체를 누르면 펴기 */
-        <button
-          type="button"
-          onClick={() => setRevealed(true)}
-          className="flex w-full flex-col items-center gap-3 rounded-3xl border border-sky-100 bg-gradient-to-br from-sky-50 via-white to-white p-7 text-center transition hover:border-sky-200 hover:shadow-sm"
-        >
-          <ShieldIcon className="size-9 text-sky-500" />
-          <div>
-            <h2 className="text-lg font-bold text-slate-900">환자 대면 화면</h2>
-            <p className="mt-1 text-sm leading-relaxed text-slate-500 break-keep">
-              상담 기록은 개인정보 보호를 위해 가려져 있어요.
-              <br />
-              직원이 확인하려면 눌러서 펴주세요.
-            </p>
-          </div>
-          <span className="mt-1 inline-flex items-center gap-1.5 rounded-2xl bg-sky-600 px-5 py-2.5 text-sm font-semibold text-white shadow-sm shadow-sky-200">
-            <EyeIcon className="size-4" />
-            기록 펴기
-          </span>
-        </button>
       )}
 
-      {/* 콘텐츠 — 가린 상태엔 흐린 미리보기(클릭하면 펴기) */}
-      <div className={revealed ? "flex flex-col gap-8" : "relative mt-3"}>
+      {/* 콘텐츠 — 가린 상태엔 흐린 미리보기 위에 작은 안내 박스 */}
+      <div className={revealed ? "flex flex-col gap-8" : "relative min-h-48"}>
         <div
           className={
             revealed
               ? "flex flex-col gap-8"
-              : "flex max-h-40 select-none flex-col gap-8 overflow-hidden opacity-40 blur-[7px] pointer-events-none"
+              : "flex max-h-96 select-none flex-col gap-8 overflow-hidden opacity-40 blur-[7px] pointer-events-none"
           }
           aria-hidden={!revealed}
         >
           {children}
         </div>
+
         {!revealed && (
           <button
             type="button"
             onClick={() => setRevealed(true)}
             aria-label="가려진 상담 기록 펴기"
-            className="absolute inset-0 cursor-pointer rounded-2xl"
-          />
+            className="absolute inset-0 flex cursor-pointer items-center justify-center p-4"
+          >
+            <span className="flex flex-col items-center gap-2 rounded-2xl border border-sky-100 bg-white/90 px-6 py-4 text-center shadow-lg shadow-sky-100/50 backdrop-blur-sm transition hover:bg-white">
+              <ShieldIcon className="size-6 text-sky-500" />
+              <span className="block">
+                <span className="block text-sm font-bold text-slate-900">환자 대면 화면</span>
+                <span className="mt-0.5 block text-xs text-slate-500 break-keep">
+                  상담 기록은 가려져 있어요 · 눌러서 펴기
+                </span>
+              </span>
+            </span>
+          </button>
         )}
       </div>
     </section>
@@ -92,19 +83,6 @@ function ShieldIcon({ className }: { className?: string }) {
       <path
         fillRule="evenodd"
         d="M9.661 2.237a.531.531 0 0 1 .678 0 11.947 11.947 0 0 0 7.078 2.749.5.5 0 0 1 .479.425c.069.52.104 1.05.104 1.59 0 5.162-3.26 9.563-7.834 11.256a.48.48 0 0 1-.332 0C5.26 16.564 2 12.163 2 7c0-.538.035-1.069.104-1.589a.5.5 0 0 1 .48-.425 11.947 11.947 0 0 0 7.077-2.75Zm4.196 5.954a.75.75 0 0 0-1.214-.882l-3.236 4.53-1.696-1.696a.75.75 0 0 0-1.06 1.06l2.31 2.31a.75.75 0 0 0 1.137-.089l3.76-5.263Z"
-        clipRule="evenodd"
-      />
-    </svg>
-  );
-}
-
-function EyeIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
-      <path d="M10 12.5a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5Z" />
-      <path
-        fillRule="evenodd"
-        d="M.664 10.59a1.651 1.651 0 0 1 0-1.186A10.004 10.004 0 0 1 10 3c4.257 0 7.893 2.66 9.336 6.41.147.381.146.804 0 1.186A10.004 10.004 0 0 1 10 17c-4.257 0-7.893-2.66-9.336-6.41ZM14 10a4 4 0 1 1-8 0 4 4 0 0 1 8 0Z"
         clipRule="evenodd"
       />
     </svg>
