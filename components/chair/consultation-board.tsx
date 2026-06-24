@@ -9,6 +9,7 @@ import {
 } from "@/components/chair/chair-provider";
 import { CopyAllButton } from "@/components/copy-all-button";
 import { markLocalSave } from "@/lib/realtime/local-echo";
+import { createBoardLivePublisher } from "@/lib/realtime/board-live";
 import { uploadConsultationAudio } from "@/app/actions/audio";
 import {
   transcribeChairAudio,
@@ -35,14 +36,14 @@ import type { Participant } from "@/lib/types/database";
  * 본문·그림·체어·참여자·처방을 한 화면에서 채워 저장한다.
  * 컴포넌트는 layout에 상시 마운트되어, 보드를 닫아도 작성 중 내용이 보존된다(FR-016).
  */
-export function ConsultationBoard() {
+export function ConsultationBoard({ institutionId }: { institutionId: string }) {
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
   if (!mounted) return null;
-  return createPortal(<BoardContent />, document.body);
+  return createPortal(<BoardContent institutionId={institutionId} />, document.body);
 }
 
-function BoardContent() {
+function BoardContent({ institutionId }: { institutionId: string }) {
   const {
     chairs,
     members,
@@ -151,6 +152,68 @@ function BoardContent() {
     }, 1000);
     return () => clearTimeout(t);
   }, [status, editText, prescriptions, participants, selectedChair]);
+
+  // ── 실시간 진행 현황 broadcast (C-05 1단계) — 메타만, 본문 PII 제외 ──
+  const sessionIdRef = useRef<string>("");
+  if (!sessionIdRef.current && typeof crypto !== "undefined") {
+    sessionIdRef.current = crypto.randomUUID();
+  }
+  const startedAtRef = useRef(0);
+  const wasActiveRef = useRef(false);
+  const publisherRef = useRef<ReturnType<typeof createBoardLivePublisher> | null>(null);
+  const authorName = me?.name ?? "직원";
+
+  useEffect(() => {
+    if (!institutionId) return;
+    const pub = createBoardLivePublisher(institutionId);
+    publisherRef.current = pub;
+    return () => {
+      pub.close();
+      publisherRef.current = null;
+    };
+  }, [institutionId]);
+
+  // 작성 중이면 3초마다 진행 현황 송신, 작성이 끝나면 종료 신호 1회.
+  useEffect(() => {
+    const pub = publisherRef.current;
+    if (!pub) return;
+    const active =
+      status === "recording" ||
+      status === "processing" ||
+      editText.trim() !== "" ||
+      audioBlobRef.current !== null;
+
+    if (!active) {
+      if (wasActiveRef.current) {
+        wasActiveRef.current = false;
+        pub.publish({
+          sessionId: sessionIdRef.current,
+          author: authorName,
+          chairName: "",
+          startedAt: startedAtRef.current,
+          charCount: 0,
+          ended: true,
+        });
+      }
+      return;
+    }
+
+    if (!wasActiveRef.current) {
+      wasActiveRef.current = true;
+      startedAtRef.current = Date.now();
+    }
+    const send = () =>
+      pub.publish({
+        sessionId: sessionIdRef.current,
+        author: authorName,
+        chairName: selectedChair?.name ?? "",
+        startedAt: startedAtRef.current,
+        charCount: editText.replace(/<[^>]*>/g, "").trim().length,
+      });
+    send();
+    const t = setInterval(send, 3000);
+    return () => clearInterval(t);
+  }, [status, editText, selectedChair, authorName]);
 
   if (!isOpen) return null;
 

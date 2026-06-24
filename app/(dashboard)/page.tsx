@@ -4,15 +4,17 @@ import { ConsultHero } from "@/components/chair/consult-hero";
 import { HomeFeed } from "@/components/home/home-feed";
 import { PatientShield } from "@/components/home/patient-shield";
 import { WorkspaceHelpBanner } from "@/components/help/workspace-help-banner";
+import { LiveSessionsBanner } from "@/components/notifications/live-sessions-banner";
 import { getActivityLogs } from "@/app/actions/activity";
 import { getAllUnlinkedRecords } from "@/app/actions/chairs";
-import { getMyInstitutions } from "@/lib/auth/institution";
+import { getMyInstitutions, getMyInstitutionId } from "@/lib/auth/institution";
 
 export default async function Home() {
-  const [activityResult, initialUnlinked, institutions] = await Promise.all([
+  const [activityResult, initialUnlinked, institutions, institutionId] = await Promise.all([
     getActivityLogs(50),
     getAllUnlinkedRecords(),
     getMyInstitutions(),
+    getMyInstitutionId(),
   ]);
   const logs = activityResult.ok ? activityResult.logs : [];
 
@@ -23,6 +25,9 @@ export default async function Home() {
 
       {/* 아래로 펼쳐지는 대시보드 요소들 */}
       <PushNotificationBanner />
+
+      {/* 다른 기기에서 상담 작성 중이면 실시간 표시 (C-05 1단계, PII 없는 메타) */}
+      <LiveSessionsBanner institutionId={institutionId ?? ""} />
 
       {/* 여러 워크스페이스 소속 시 안내(닫기 가능) */}
       <WorkspaceHelpBanner institutionCount={institutions.length} />

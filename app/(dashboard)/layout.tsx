@@ -66,7 +66,7 @@ export default async function DashboardLayout({
       <SessionRefresher />
       <BadgeManager />
       <ChairOverlay />
-      <ConsultationBoard />
+      <ConsultationBoard institutionId={activeInstitutionId ?? ""} />
       <LiveAlertsProvider
         institutionId={activeInstitutionId ?? ""}
         chairNames={Object.fromEntries(chairs.map((c) => [c.id, c.name]))}
