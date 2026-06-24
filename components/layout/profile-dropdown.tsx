@@ -107,7 +107,7 @@ export function ProfileDropdown({
                 </svg>
               }
             >
-              내 진료 기록
+              내 상담 기록
             </DropdownLink>
 
             <DropdownLink

@@ -52,7 +52,7 @@ export function PatientAccountLink({ initialLinked }: Props) {
           <div>
             <p className="text-sm font-semibold text-green-800">환자 계정 연동 완료</p>
             <p className="text-xs text-green-600">
-              내 진료 기록을 환자 포털에서 확인할 수 있습니다.
+              내 상담 기록을 환자 포털에서 확인할 수 있습니다.
             </p>
           </div>
         </div>
@@ -60,7 +60,7 @@ export function PatientAccountLink({ initialLinked }: Props) {
           href="/portal/records"
           className="shrink-0 rounded-xl border border-green-200 bg-white px-3 py-1.5 text-xs font-semibold text-green-700 transition hover:bg-green-50"
         >
-          진료 기록 보기 →
+          상담 기록 보기 →
         </a>
       </div>
     );
@@ -75,7 +75,7 @@ export function PatientAccountLink({ initialLinked }: Props) {
               내 환자 계정 연동
             </p>
             <p className="mt-1 text-xs text-slate-500">
-              본인의 주민번호를 입력하면 치과에 등록된 진료 기록을 케어로그
+              본인의 주민번호를 입력하면 치과에 등록된 상담 기록을 케어로그
               환자 포털과 연동합니다. SMS 초대 없이 즉시 연동됩니다.
             </p>
           </div>

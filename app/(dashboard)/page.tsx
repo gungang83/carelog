@@ -18,7 +18,7 @@ export default async function Home() {
 
   return (
     <div className="mx-auto flex w-full max-w-3xl flex-col gap-8 px-4 py-10 sm:px-6">
-      {/* 최상단 히어로 — 진료 기록 진입점 */}
+      {/* 최상단 히어로 — 상담 기록 진입점 */}
       <ConsultHero />
 
       {/* 아래로 펼쳐지는 대시보드 요소들 */}

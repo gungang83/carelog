@@ -130,7 +130,7 @@ export default async function AboutPage() {
             환자용
           </p>
           <h2 className="mt-3 text-center text-3xl font-bold text-slate-900">
-            내 진료 기록, 언제든지 확인
+            내 상담 기록, 언제든지 확인
           </h2>
           <p className="mx-auto mt-4 max-w-lg text-center text-slate-500">
             치과에 다시 가지 않아도 스마트폰으로 상담 내역을 볼 수 있습니다.

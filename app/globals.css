@@ -16,6 +16,12 @@ body {
   font-family: var(--font-geist-sans), system-ui, sans-serif;
 }
 
+/* 세로 스크롤바 자리를 항상 확보 — 콘텐츠 높이가 변해도(가림→펴기 등)
+   스크롤바 출현/소멸로 가로 폭이 흔들리지 않도록. */
+html {
+  scrollbar-gutter: stable;
+}
+
 /* Tiptap placeholder */
 .tiptap p.is-editor-empty:first-child::before {
   content: attr(data-placeholder);

@@ -58,7 +58,7 @@ export function PatientHamburgerDrawer({ isLoggedIn }: PatientHamburgerDrawerPro
             </div>
             <div>
               <p className="text-sm font-semibold text-slate-900">Carelog</p>
-              <p className="text-[11px] text-slate-500">내 진료 기록</p>
+              <p className="text-[11px] text-slate-500">내 상담 기록</p>
             </div>
           </div>
           <button
@@ -92,7 +92,7 @@ export function PatientHamburgerDrawer({ isLoggedIn }: PatientHamburgerDrawerPro
         <nav className="flex-1 overflow-y-auto px-3 py-3">
           {isLoggedIn && (
             <NavItem href="/portal/records" icon={<RecordsIcon />} onClick={() => setOpen(false)}>
-              내 진료 기록
+              내 상담 기록
             </NavItem>
           )}
 

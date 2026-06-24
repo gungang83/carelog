@@ -21,7 +21,7 @@ type Phase = "idle" | "select" | "listening" | "summary" | "declined";
 
 const VALUE_POINTS = [
   "상담 내용을 안전하게 듣고 정리해 드려요",
-  "요약을 진료기록으로 정리해 보내드려요",
+  "요약을 상담 기록으로 정리해 보내드려요",
   "기록은 병원과 환자분만 볼 수 있어요",
 ];
 
@@ -159,7 +159,7 @@ export default function PresentScreen({ chairId }: { chairId: string }) {
           </Card>
         )}
 
-        {/* ── 요약·완료 (시각화 + 진료기록 받아보기 유도) ── */}
+        {/* ── 요약·완료 (시각화 + 상담 기록 받아보기 유도) ── */}
         {phase === "summary" && (
           <Card>
             <Brand chair={chair} doctor={doctor} staff={staff} />
@@ -179,7 +179,7 @@ export default function PresentScreen({ chairId }: { chairId: string }) {
               <p className="text-sm leading-relaxed text-sky-800">
                 담당 선생님이 한 번 더 <strong>검토·정리</strong>해서
                 <br />
-                정식 <strong>진료기록</strong>으로 보내드려요
+                정리된 <strong>상담 기록</strong>으로 보내드려요
               </p>
             </div>
 
@@ -187,7 +187,7 @@ export default function PresentScreen({ chairId }: { chairId: string }) {
               onClick={reset}
               className="mt-6 flex h-16 w-full items-center justify-center gap-2 rounded-2xl bg-sky-600 text-xl font-semibold text-white shadow-sm transition hover:bg-sky-700 active:scale-[0.99]"
             >
-              📩 내 진료기록 받아보기
+              📩 내 상담 기록 받아보기
             </button>
             <button
               onClick={reset}
