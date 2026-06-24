@@ -1,11 +1,13 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import {
   confirmConsultation,
   deleteDraftConsultation,
   sendConsultationSms,
   updateDraftConsultation,
+  updateConsultationContent,
 } from "@/app/actions/consultations";
 import { CopyAllButton } from "@/components/copy-all-button";
 import {
@@ -292,6 +294,76 @@ function RelinkControls({
   );
 }
 
+// ─── 확정 상담 인라인 편집 (사후 정정) ───────────────────────────────────────
+function ConfirmedEditControls({
+  item,
+  patientId,
+}: {
+  item: ConsultationHistoryItem;
+  patientId: string;
+}) {
+  const router = useRouter();
+  const [editing, setEditing] = useState(false);
+  const [editContent, setEditContent] = useState(item.content);
+  const [message, setMessage] = useState<string | null>(null);
+  const [pending, startTransition] = useTransition();
+  const editorRef = useRef<RichTextEditorHandle>(null);
+
+  const handleSave = () => {
+    setMessage(null);
+    startTransition(async () => {
+      const fd = new FormData();
+      fd.set("prescriptions", JSON.stringify(item.prescriptions ?? []));
+      const res = await updateConsultationContent(item.id, patientId, editContent, fd);
+      if (!res.ok) { setMessage(res.message); return; }
+      setEditing(false);
+      router.refresh();
+    });
+  };
+
+  if (editing) {
+    return (
+      <div className="flex flex-col gap-3">
+        <RichTextEditor
+          ref={editorRef}
+          value={editContent}
+          onChange={setEditContent}
+          placeholder="상담 내용을 수정하세요..."
+        />
+        <div className="flex gap-2">
+          <button
+            type="button"
+            onClick={handleSave}
+            disabled={pending}
+            className="inline-flex min-h-9 items-center justify-center rounded-lg bg-sky-600 px-4 text-sm font-semibold text-white shadow-sm hover:bg-sky-700 disabled:opacity-60"
+          >
+            {pending ? "저장 중..." : "수정 저장"}
+          </button>
+          <button
+            type="button"
+            onClick={() => { setEditing(false); setEditContent(item.content); setMessage(null); }}
+            disabled={pending}
+            className="inline-flex min-h-9 items-center justify-center rounded-lg border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-600 hover:bg-slate-50 disabled:opacity-60"
+          >
+            취소
+          </button>
+        </div>
+        {message ? <p className="text-sm text-red-600">{message}</p> : null}
+      </div>
+    );
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={() => setEditing(true)}
+      className="inline-flex min-h-8 items-center justify-center rounded-lg border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-600 hover:bg-slate-50"
+    >
+      편집
+    </button>
+  );
+}
+
 // ─── 확정된 상담 SMS 전송 버튼 ────────────────────────────────────────────────
 function SmsControls({
   item,
@@ -501,6 +573,7 @@ export function ConsultationHistory({ consultations, patientId }: Props) {
               ) : (
                 <div className="flex flex-col gap-2">
                   <SmsControls item={c} patientId={patientId} />
+                  <ConfirmedEditControls item={c} patientId={patientId} />
                   {c.chair_id && (
                     <RelinkControls item={c} patientId={patientId} />
                   )}
