@@ -20,6 +20,13 @@ import { RichTextEditor, type RichTextEditorHandle } from "@/components/rich-tex
 import { PrescriptionPicker } from "@/components/chair/prescription-picker";
 import { ParticipantPicker } from "@/components/chair/participant-picker";
 import { getLastChairId, setLastChairId } from "@/lib/chair/last-chair";
+import {
+  saveDraft,
+  loadDraft,
+  clearDraft,
+  draftHasContent,
+  type BoardDraft,
+} from "@/lib/chair/draft-store";
 import type { Participant } from "@/lib/types/database";
 
 /**
@@ -61,6 +68,7 @@ function BoardContent() {
   const [elapsed, setElapsed] = useState(0);
   const [micError, setMicError] = useState("");
   const [saveMsg, setSaveMsg] = useState("");
+  const [recoverable, setRecoverable] = useState<BoardDraft | null>(null);
   const [isPending, startTransition] = useTransition();
   const [isCreatingChair, startCreateChair] = useTransition();
 
@@ -73,9 +81,13 @@ function BoardContent() {
   const status = getChairStatus(DRAFT_CHAIR_KEY);
 
   // 마운트 시 기본값: '나' 참여자, 마지막 체어, 최근 참여자 로드
+  // + 이전 세션에서 미저장 임시본이 있으면 복구 후보로 띄운다(C-01 2차).
   useEffect(() => {
     resetDefaults();
     getRecentParticipants().then(setRecent).catch(() => {});
+    loadDraft().then((d) => {
+      if (draftHasContent(d)) setRecoverable(d);
+    });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -117,6 +129,28 @@ function BoardContent() {
     window.addEventListener("beforeunload", handler);
     return () => window.removeEventListener("beforeunload", handler);
   }, [status, editText]);
+
+  // 미저장 작업을 IndexedDB에 주기 저장 (C-01 2차 — 탭이 닫혀도 복구 가능).
+  // 디바운스(1초)로 입력 중 과도한 쓰기를 막는다. 깨끗한 상태면 저장하지 않는다.
+  useEffect(() => {
+    const hasUnsaved =
+      status === "recording" ||
+      status === "processing" ||
+      editText.trim() !== "" ||
+      audioBlobRef.current !== null;
+    if (!hasUnsaved) return;
+    const t = setTimeout(() => {
+      void saveDraft({
+        content: editText,
+        prescriptions,
+        participants,
+        selectedChair,
+        audioBlob: audioBlobRef.current,
+        savedAt: Date.now(),
+      });
+    }, 1000);
+    return () => clearTimeout(t);
+  }, [status, editText, prescriptions, participants, selectedChair]);
 
   if (!isOpen) return null;
 
@@ -197,8 +231,29 @@ function BoardContent() {
     setPrescriptions([]);
     setMicError("");
     setSaveMsg("");
+    setRecoverable(null);
+    void clearDraft();
     resetDefaults();
     closeOverlay();
+  };
+
+  // 이전 세션 임시본 복구 — 본문(HTML)·처방·참여자·체어·녹음 음성을 되살린다.
+  const applyRecover = () => {
+    if (!recoverable) return;
+    setEditText(recoverable.content);
+    editorRef.current?.setHTML(recoverable.content);
+    setPrescriptions(recoverable.prescriptions ?? []);
+    setParticipants(recoverable.participants ?? []);
+    setSelectedChair(recoverable.selectedChair ?? null);
+    audioBlobRef.current = recoverable.audioBlob ?? null;
+    // 녹음이 끝난 상태로 복구 → status를 has_records로 전환(저장 가능 상태).
+    setTranscriptionResult(DRAFT_CHAIR_KEY, "");
+    setRecoverable(null);
+  };
+
+  const dismissRecover = () => {
+    setRecoverable(null);
+    void clearDraft();
   };
 
   const handleSave = () => {
@@ -234,6 +289,7 @@ function BoardContent() {
           void uploadConsultationAudio(result.consultationId, fd);
         }
         audioBlobRef.current = null;
+        void clearDraft();
         setLastChairId(chair.id);
         resetChair(DRAFT_CHAIR_KEY);
         setEditText("");
@@ -346,6 +402,40 @@ function BoardContent() {
               <p className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-600">
                 {micError}
               </p>
+            )}
+
+            {/* 미저장 임시본 복구 제안 — 깨끗한 상태에서만(작성 중 덮어쓰기 방지) */}
+            {recoverable && status === "idle" && !editText.trim() && (
+              <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2.5">
+                <p className="text-sm font-semibold text-amber-800">
+                  이전에 작성하던 상담 기록이 있어요
+                </p>
+                <p className="mt-0.5 text-xs text-amber-700">
+                  {new Date(recoverable.savedAt).toLocaleString("ko-KR", {
+                    month: "2-digit",
+                    day: "2-digit",
+                    hour: "2-digit",
+                    minute: "2-digit",
+                  })}{" "}
+                  저장{recoverable.audioBlob ? " · 녹음 포함" : ""}
+                </p>
+                <div className="mt-2 flex gap-2">
+                  <button
+                    type="button"
+                    onClick={applyRecover}
+                    className="rounded-lg bg-amber-600 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-amber-700"
+                  >
+                    복구하기
+                  </button>
+                  <button
+                    type="button"
+                    onClick={dismissRecover}
+                    className="rounded-lg border border-amber-200 bg-white px-3 py-1.5 text-xs font-semibold text-amber-700 transition hover:bg-amber-100"
+                  >
+                    새로 시작
+                  </button>
+                </div>
+              </div>
             )}
 
             <p className="text-xs text-slate-400">
