@@ -391,13 +391,19 @@ app/(dashboard)/layout.tsx
 ```
 handleStopRecording()
   → stopRecording(chairId) → Blob (MediaRecorder chunks)
-  → transcribeChairAudio(formData) [Server Action]
-      → transcribeAndSummarize() → Whisper + GPT 요약
-  → setTranscriptionResult(chairId, summary)
+  → transcribeChairAudio(formData, engine) [Server Action]
+      → getMyInstitutionLab(): 비-lab이면 engine='basic' 강제(사고 차단)
+      → transcribeEngine(formData, mode) → runs[]
+          basic        : Whisper(ko) + Claude 요약
+          multilingual : Whisper(자동감지) + Claude 번역·요약 (원문/번역/요약). 실패 시 basic 폴백
+          comparison   : basic + multilingual 동시 → 보드에서 한쪽 선택
+  → setTranscriptionResult(chairId, run.summary) / insertText(run.insertText)
+  ※ 공유 타입·상수: lib/transcribe/engines.ts (LAB_ENGINE_OPTIONS) — "use server" 파일은
+    async 함수만 export 가능하므로 런타임 상수는 일반 모듈에 분리.
 
 handleSave()
-  → saveChairRecord({ chairId, content, prescriptions }) [Server Action]
-      → consultation INSERT (patient_id: null, status: 'draft', chair_id)
+  → saveChairRecord({ chairId, content, prescriptions, transcriptionEngine }) [Server Action]
+      → consultation INSERT (patient_id: null, status: 'draft', chair_id, transcription_engine)
       → chair_audit_logs INSERT (record_created)
       → revalidatePath('/')
 

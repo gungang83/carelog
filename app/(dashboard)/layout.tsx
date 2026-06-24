@@ -5,7 +5,7 @@ import { Header } from "@/components/layout/header";
 import { Footer } from "@/components/footer";
 import { SessionRefresher } from "@/components/layout/session-refresher";
 import { BadgeManager } from "@/components/layout/badge-manager";
-import { getMyInstitutions, getMyInstitutionId, getMyAuthorInfo, getSessionUser } from "@/lib/auth/institution";
+import { getMyInstitutions, getMyInstitutionId, getMyAuthorInfo, getMyInstitutionLab, getSessionUser } from "@/lib/auth/institution";
 import { getChairs } from "@/app/actions/chairs";
 import { getClinicMembers } from "@/app/actions/clinic-members";
 import { ChairProvider } from "@/components/chair/chair-provider";
@@ -24,12 +24,13 @@ export default async function DashboardLayout({
     redirect("/login");
   }
 
-  const [institutions, activeInstitutionId, chairs, members, authorInfo] = await Promise.all([
+  const [institutions, activeInstitutionId, chairs, members, authorInfo, labEnabled] = await Promise.all([
     getMyInstitutions(),
     getMyInstitutionId(),
     getChairs(),
     getClinicMembers(),
     getMyAuthorInfo(),
+    getMyInstitutionLab(),
   ]);
 
   const userEmail = user.email ?? "";
@@ -66,7 +67,7 @@ export default async function DashboardLayout({
       <SessionRefresher />
       <BadgeManager />
       <ChairOverlay />
-      <ConsultationBoard institutionId={activeInstitutionId ?? ""} />
+      <ConsultationBoard institutionId={activeInstitutionId ?? ""} labEnabled={labEnabled} />
       <LiveAlertsProvider
         institutionId={activeInstitutionId ?? ""}
         chairNames={Object.fromEntries(chairs.map((c) => [c.id, c.name]))}

@@ -17,6 +17,11 @@ import {
   getOrCreateChairByName,
   getRecentParticipants,
 } from "@/app/actions/chairs";
+import {
+  LAB_ENGINE_OPTIONS,
+  type EngineMode,
+  type EngineRun,
+} from "@/lib/transcribe/engines";
 import { RichTextEditor, type RichTextEditorHandle } from "@/components/rich-text-editor";
 import { PrescriptionPicker } from "@/components/chair/prescription-picker";
 import { ParticipantPicker } from "@/components/chair/participant-picker";
@@ -36,14 +41,29 @@ import type { Participant } from "@/lib/types/database";
  * 본문·그림·체어·참여자·처방을 한 화면에서 채워 저장한다.
  * 컴포넌트는 layout에 상시 마운트되어, 보드를 닫아도 작성 중 내용이 보존된다(FR-016).
  */
-export function ConsultationBoard({ institutionId }: { institutionId: string }) {
+export function ConsultationBoard({
+  institutionId,
+  labEnabled = false,
+}: {
+  institutionId: string;
+  labEnabled?: boolean;
+}) {
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
   if (!mounted) return null;
-  return createPortal(<BoardContent institutionId={institutionId} />, document.body);
+  return createPortal(
+    <BoardContent institutionId={institutionId} labEnabled={labEnabled} />,
+    document.body,
+  );
 }
 
-function BoardContent({ institutionId }: { institutionId: string }) {
+function BoardContent({
+  institutionId,
+  labEnabled,
+}: {
+  institutionId: string;
+  labEnabled: boolean;
+}) {
   const {
     chairs,
     members,
@@ -69,6 +89,12 @@ function BoardContent({ institutionId }: { institutionId: string }) {
   const [elapsed, setElapsed] = useState(0);
   const [micError, setMicError] = useState("");
   const [saveMsg, setSaveMsg] = useState("");
+  // 실험실(lab) — 상담별 엔진 선택. 비-lab은 항상 기본모델(서버에서도 강제).
+  const [engine, setEngine] = useState<EngineMode>("basic");
+  // 비교 모드 결과(basic + multilingual). 사용자가 한쪽을 골라 본문에 삽입.
+  const [comparison, setComparison] = useState<EngineRun[] | null>(null);
+  // 저장 시 기록할 사용 엔진(어떤 엔진 결과를 본문에 넣었는지).
+  const [usedEngine, setUsedEngine] = useState<string | null>(null);
   const [recoverable, setRecoverable] = useState<BoardDraft | null>(null);
   const [isPending, startTransition] = useTransition();
   const [isCreatingChair, startCreateChair] = useTransition();
@@ -246,12 +272,20 @@ function BoardContent({ institutionId }: { institutionId: string }) {
     startTransition(async () => {
       const formData = new FormData();
       formData.append("audio", blob, "recording.webm");
-      const result = await transcribeChairAudio(formData);
+      const result = await transcribeChairAudio(formData, engine);
       if (result.ok) {
-        // 상태를 has_records로 전환(녹음바 processing 해제) + 본문 에디터에 전사 삽입.
-        // RichTextEditor는 value 변경을 자동 반영하지 않으므로 insertText로 넣는다(onChange가 editText 갱신).
-        setTranscriptionResult(DRAFT_CHAIR_KEY, result.summary);
-        editorRef.current?.insertText(result.summary);
+        if (result.runs.length > 1) {
+          // 비교 모드 — 본문 삽입은 사용자가 한쪽을 고를 때까지 보류.
+          setTranscriptionResult(DRAFT_CHAIR_KEY, ""); // 녹음바 processing 해제
+          setComparison(result.runs);
+        } else {
+          // 상태를 has_records로 전환(녹음바 processing 해제) + 본문 에디터에 전사 삽입.
+          // RichTextEditor는 value 변경을 자동 반영하지 않으므로 insertText로 넣는다(onChange가 editText 갱신).
+          const run = result.runs[0];
+          setTranscriptionResult(DRAFT_CHAIR_KEY, run.summary);
+          editorRef.current?.insertText(run.insertText);
+          setUsedEngine(run.engine);
+        }
       } else {
         setMicError(`전사 실패 (녹음 ${secs}초 · ${sizeKB}KB): ${result.message}`);
         setTranscriptionResult(DRAFT_CHAIR_KEY, "");
@@ -340,6 +374,7 @@ function BoardContent({ institutionId }: { institutionId: string }) {
         content: editText,
         prescriptions,
         participants,
+        transcriptionEngine: usedEngine,
       });
       if (result.ok) {
         // 이 탭이 저장한 기록 → 내 토스트만 숨김(같은 계정 다른 기기는 알림 받음)
@@ -360,6 +395,9 @@ function BoardContent({ institutionId }: { institutionId: string }) {
         setPrescriptions([]);
         setMicError("");
         setSaveMsg("");
+        setUsedEngine(null);
+        setComparison(null);
+        setEngine("basic");
         resetDefaults();
         await refreshUnlinkedCount(chair.id);
         closeOverlay();
@@ -369,6 +407,14 @@ function BoardContent({ institutionId }: { institutionId: string }) {
         setSaveMsg(result.message);
       }
     });
+  };
+
+  // 비교 모드에서 한쪽 결과를 골라 본문에 삽입.
+  const applyComparison = (run: EngineRun) => {
+    editorRef.current?.insertText(run.insertText);
+    setTranscriptionResult(DRAFT_CHAIR_KEY, run.summary);
+    setUsedEngine(run.engine);
+    setComparison(null);
   };
 
   const recording = status === "recording";
@@ -413,6 +459,25 @@ function BoardContent({ institutionId }: { institutionId: string }) {
             ) : (
               <>
                 <span className="text-sm font-semibold text-slate-800">상담보드</span>
+                {labEnabled && (
+                  <label className="flex items-center gap-1.5">
+                    <span className="rounded bg-violet-100 px-1.5 py-0.5 text-[10px] font-bold text-violet-700">
+                      실험실
+                    </span>
+                    <select
+                      value={engine}
+                      onChange={(e) => setEngine(e.target.value as EngineMode)}
+                      className="rounded-lg border border-slate-300 bg-white px-2 py-1 text-xs font-medium text-slate-700"
+                      title="녹음 엔진 (이 상담에만 적용)"
+                    >
+                      {LAB_ENGINE_OPTIONS.map((o) => (
+                        <option key={o.value} value={o.value}>
+                          {o.label}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                )}
                 <button
                   type="button"
                   onClick={handleStart}
@@ -465,6 +530,42 @@ function BoardContent({ institutionId }: { institutionId: string }) {
               <p className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-600">
                 {micError}
               </p>
+            )}
+
+            {/* 실험실 비교 모드 — 기본 vs 다국어 결과를 나란히 보고 한쪽을 본문에 삽입 */}
+            {comparison && (
+              <div className="rounded-xl border border-violet-200 bg-violet-50 p-3">
+                <p className="text-sm font-semibold text-violet-800">
+                  엔진 비교 — 사용할 결과를 고르세요
+                </p>
+                <div className="mt-2 grid gap-2 sm:grid-cols-2">
+                  {comparison.map((run) => (
+                    <div
+                      key={run.engine}
+                      className="flex flex-col rounded-lg border border-violet-200 bg-white p-2.5"
+                    >
+                      <p className="text-xs font-bold text-violet-700">{run.label}</p>
+                      <pre className="mt-1 max-h-44 flex-1 overflow-y-auto whitespace-pre-wrap break-words text-[11px] leading-snug text-slate-600">
+                        {run.insertText}
+                      </pre>
+                      <button
+                        type="button"
+                        onClick={() => applyComparison(run)}
+                        className="mt-2 rounded-lg bg-violet-600 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-violet-700"
+                      >
+                        이 결과 사용
+                      </button>
+                    </div>
+                  ))}
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setComparison(null)}
+                  className="mt-2 text-xs font-medium text-violet-600 hover:underline"
+                >
+                  닫기 (삽입 안 함)
+                </button>
+              </div>
             )}
 
             {/* 미저장 임시본 복구 제안 — 깨끗한 상태에서만(작성 중 덮어쓰기 방지) */}

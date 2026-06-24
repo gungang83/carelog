@@ -129,11 +129,13 @@ function OverlayContent() {
     startTransition(async () => {
       const formData = new FormData();
       formData.append("audio", blob, "recording.webm");
+      // 이 경로(체어 즉시기록 오버레이)는 엔진 미선택 → 서버 기본 'basic'(runs 1개).
       const result = await transcribeChairAudio(formData);
       console.log("[chair] 전사 결과", result.ok ? "ok" : result.message);
       if (result.ok) {
-        setTranscriptionResult(openChairId, result.summary);
-        setEditText(result.summary);
+        const run = result.runs[0];
+        setTranscriptionResult(openChairId, run.summary);
+        setEditText(run.summary);
       } else {
         setMicError(`전사 실패 (녹음 ${secs}초 · ${sizeKB}KB): ${result.message}`);
         setTranscriptionResult(openChairId, "");

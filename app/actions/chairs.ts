@@ -2,19 +2,28 @@
 
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { createAdminSupabaseClient } from "@/lib/supabase/admin";
-import { getMyInstitutionId, getMyAuthorInfo } from "@/lib/auth/institution";
+import {
+  getMyInstitutionId,
+  getMyAuthorInfo,
+  getMyInstitutionLab,
+} from "@/lib/auth/institution";
 import { revalidatePath } from "next/cache";
 import { sanitizeRichHtml, ensureHtml } from "@/lib/sanitize-html";
 import type { ChairRow, Participant } from "@/lib/types/database";
-import { transcribeAndSummarize, type TranscribeResult } from "@/app/actions/transcribe";
+import { transcribeEngine } from "@/app/actions/transcribe";
+import type { EngineMode, EngineTranscribeResult } from "@/lib/transcribe/engines";
 import { sendPushToInstitution } from "@/app/actions/push";
 
 // ─── transcribeChairAudio ─────────────────────────────────────────────────────
-// Server Action 파일 간 임포트 — client component는 이 파일만 참조
+// Server Action 파일 간 임포트 — client component는 이 파일만 참조.
+// 실험실(lab_enabled) 워크스페이스만 mode 선택 가능 — 비-lab은 'basic' 강제(사고 차단).
 export async function transcribeChairAudio(
   formData: FormData,
-): Promise<TranscribeResult> {
-  return transcribeAndSummarize(formData);
+  mode: EngineMode = "basic",
+): Promise<EngineTranscribeResult> {
+  const lab = await getMyInstitutionLab();
+  const effective: EngineMode = lab ? mode : "basic";
+  return transcribeEngine(formData, effective);
 }
 
 // ─── getChairs ────────────────────────────────────────────────────────────────
@@ -78,6 +87,7 @@ export async function saveChairRecord(params: {
   content: string;
   prescriptions?: string[];
   participants?: { id: string; name: string; role: string | null }[];
+  transcriptionEngine?: string | null;
 }): Promise<SaveChairRecordResult> {
   const supabase = await createServerSupabaseClient();
   const institutionId = await getMyInstitutionId();
@@ -116,6 +126,7 @@ export async function saveChairRecord(params: {
       status: "draft",
       author_employee_id,
       author_name,
+      transcription_engine: params.transcriptionEngine ?? null,
     })
     .select("id")
     .single();

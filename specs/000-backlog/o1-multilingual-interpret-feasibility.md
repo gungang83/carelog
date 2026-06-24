@@ -97,3 +97,34 @@
 4. **대상 언어 범위**: 1차 영↔한 only vs 일·중 포함?
 
 > 권장: **Phase 1 즉시 착수**(서범기가 인정한 효용·저위험) + **Phase 2 provider PoC 병행 조사**. Level 2 전용 모델이 이미 존재하므로 "가능한가?"의 답은 **가능**. 관건은 코드스위칭·의료용어 품질(R1·R2)과 포지셔닝(보조·사람 최종검수).
+
+---
+
+## 7. 실험실(Engine Lab) 아키텍처 — 확정·구현 (세션 42)
+
+대표 결정: **기본 버전은 유지하되, 새 엔진은 '실험실'로 두고 예미안 워크스페이스에서만 상담별로 모델을 선택**해 검증 → 상품화. 다른 워크스페이스는 기존 기본 버전.
+
+### 확정 결정
+1. **칼럼 위치** — `institutions`에 직접(권장안). `lab_enabled boolean default false`.
+2. **선택 단위** — **상담마다 picker**. 기본 선택은 항상 `basic`(기본모델). 예미안만 실험 가동.
+3. **비교 모드** — 1차 포함. `basic`+`multilingual` 동시 실행 → 나란히 보고 한쪽을 본문에 삽입.
+
+### 구현 (v1, 배포)
+| 레이어 | 변경 |
+|---|---|
+| DB | `20260624000001_engine_lab.sql` — `institutions.lab_enabled`, `consultation.transcription_engine`, 예미안 lab 활성화 |
+| 엔진 레지스트리 | `app/actions/transcribe.ts` — `runBasic`/`runMultilingual`/`transcribeEngine(mode)`. 공유 타입·상수는 `lib/transcribe/engines.ts`(LAB_ENGINE_OPTIONS) |
+| 게이팅 | `chairs.transcribeChairAudio(formData, mode)` — `getMyInstitutionLab()`로 비-lab은 `basic` 강제. multilingual 실패 시 basic 자동 폴백 |
+| 플래그 전달 | `lib/auth/institution.ts:getMyInstitutionLab()` → `layout.tsx` → `ConsultationBoard labEnabled` |
+| UI | `consultation-board.tsx` — 실험실 배지+엔진 select(lab만), 비교 모드 2단 패널·"이 결과 사용", 저장 시 `transcription_engine` 기록 |
+
+**안전장치**: ① 비-lab `basic` 하드강제 ② 실험 엔진 실패→basic 폴백 ③ 엔진 선택은 상담마다 초기화(기본=basic).
+
+### 상품 분화 로드맵(대표 아이디어)
+검증된 엔진 = 상품 티어. 기본(Free) / 다국어(Pro) / 실시간 통역(Pro·Ent) / (후보)의료특화 고정밀(Ent). 엔진별 분당 토큰 단가 = 가격 차별화.
+
+### 남은 것
+- `multilingual` 실측(예미안 외국인 신환) → 정확도·체감.
+- **비교 데이터 영속화**(현재 비교는 UI 일시적, 선택 엔진만 기록) — 평가 누적 필요 시 run 로깅 테이블 후속.
+- 관리자 토글 UI(현재 lab 활성화는 마이그레이션/SQL). 워크스페이스 늘면 admin 패널에 추가.
+- Level 2 실시간(Soniox/OpenAI realtime) PoC.
