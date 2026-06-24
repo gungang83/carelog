@@ -100,6 +100,24 @@ function BoardContent() {
     };
   }, [status]);
 
+  // 미저장 작업 중 탭 닫기/새로고침 이탈 경고 (C-01 — 녹음·작성 유실 방지).
+  // 보드를 닫아도 컴포넌트는 마운트 유지(FR-016)지만, 탭 종료·새로고침은 메모리를
+  // 날린다. 녹음 중이거나 저장 전 작성물/음성이 있으면 브라우저 기본 확인창을 띄운다.
+  useEffect(() => {
+    const hasUnsaved =
+      status === "recording" ||
+      status === "processing" ||
+      editText.trim() !== "" ||
+      audioBlobRef.current !== null;
+    if (!hasUnsaved) return;
+    const handler = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = "";
+    };
+    window.addEventListener("beforeunload", handler);
+    return () => window.removeEventListener("beforeunload", handler);
+  }, [status, editText]);
+
   if (!isOpen) return null;
 
   const fmtTime = (s: number) =>
@@ -164,6 +182,14 @@ function BoardContent() {
   };
 
   const discard = () => {
+    // 녹음/작성물이 있을 때만 확인 — 실수로 '버리기'를 눌러 날리는 사고 방지.
+    const hasContent =
+      status === "recording" ||
+      editText.trim() !== "" ||
+      audioBlobRef.current !== null;
+    if (hasContent && !window.confirm("작성 중인 내용과 녹음을 버릴까요? 되돌릴 수 없어요.")) {
+      return;
+    }
     audioBlobRef.current = null;
     resetChair(DRAFT_CHAIR_KEY);
     setEditText("");
