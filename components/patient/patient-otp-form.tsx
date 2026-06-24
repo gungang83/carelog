@@ -65,7 +65,7 @@ export function PatientOtpForm({ phone, rrnHash, invitationToken }: Props) {
           <p className="text-lg font-semibold text-slate-900">인증 완료!</p>
           <p className="mt-1 text-sm text-slate-500">
             {isNewAccount
-              ? "케어로그에 가입하면 언제든 진료 기록을 확인할 수 있어요."
+              ? "케어로그에 가입하면 언제든 상담 기록을 확인할 수 있어요."
               : "상담 내역을 확인할 수 있습니다."}
           </p>
         </div>
@@ -73,7 +73,7 @@ export function PatientOtpForm({ phone, rrnHash, invitationToken }: Props) {
           onClick={handleContinue}
           className="w-full rounded-lg bg-sky-600 py-2.5 text-sm font-semibold text-white hover:bg-sky-700"
         >
-          {isNewAccount ? "가입하고 계속하기 →" : "내 진료 기록 보기 →"}
+          {isNewAccount ? "가입하고 계속하기 →" : "내 상담 기록 보기 →"}
         </button>
         {isNewAccount && (
           <button

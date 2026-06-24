@@ -181,7 +181,7 @@ export async function saveConsultation(
       ).then((r) => {
         if (r.data?.patient_account_id) {
           sendPushToPatient(r.data.patient_account_id, {
-            title: "새 진료 기록",
+            title: "새 상담 기록",
             body: `${patientName} — ${preview}`,
             url: `/portal/records`,
           }).catch(() => {});
@@ -320,7 +320,7 @@ export async function confirmConsultation(
     ).then((r) => {
       if (r.data?.patient_account_id) {
         sendPushToPatient(r.data.patient_account_id, {
-          title: "새 진료 기록",
+          title: "새 상담 기록",
           body: `${patientName} — ${preview}`,
           url: `/portal/records`,
         }).catch(() => {});

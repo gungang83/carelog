@@ -6,7 +6,7 @@ import {
 } from "@/components/chair/chair-provider";
 
 /**
- * 홈 최상단 히어로 — 진료 기록의 진입점(record-first).
+ * 홈 최상단 히어로 — 상담 기록의 진입점(record-first).
  *
  * "상담 기록 시작"을 누르면 체어·참여자 선택 없이 **즉시 녹음을 시작**하고
  * 상담보드(ConsultationBoard)를 연다. 체어·참여자·본문·그림·처방은 녹음이

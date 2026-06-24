@@ -69,8 +69,8 @@ export default async function PatientSignupCtaPage({ searchParams }: PageProps) 
         <div className="mb-6">
           <p className="mb-2 text-sm font-semibold text-slate-900">케어로그에 가입하시면</p>
           <ul className="space-y-1 text-sm text-slate-600">
-            <li>• 모든 과거 진료 기록을 언제든 확인</li>
-            <li>• 새 진료 기록 알림 수신</li>
+            <li>• 모든 과거 상담 기록을 언제든 확인</li>
+            <li>• 새 상담 기록 알림 수신</li>
             <li>• 여러 치과 기록 한 번에 관리</li>
           </ul>
         </div>

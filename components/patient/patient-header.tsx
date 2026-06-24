@@ -21,7 +21,7 @@ export function PatientHeader({ isLoggedIn }: PatientHeaderProps) {
           </div>
           <div className="min-w-0 text-left">
             <div className="truncate text-sm font-semibold text-slate-900">Carelog</div>
-            <div className="truncate text-xs text-slate-500">내 진료 기록</div>
+            <div className="truncate text-xs text-slate-500">내 상담 기록</div>
           </div>
         </Link>
 

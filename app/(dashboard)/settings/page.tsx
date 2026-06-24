@@ -90,7 +90,7 @@ export default async function SettingsPage() {
       )}
 
       <section className="space-y-4">
-        <h2 className="text-base font-semibold text-slate-800">내 진료 기록</h2>
+        <h2 className="text-base font-semibold text-slate-800">내 상담 기록</h2>
         <PatientAccountLink
           initialLinked={patientLinkStatus.ok && patientLinkStatus.linked}
         />

@@ -127,7 +127,7 @@ export function HamburgerDrawer({
             환자 목록
           </NavItem>
           <NavItem href="/portal/records" icon={<RecordsIcon />} onClick={() => setOpen(false)}>
-            내 진료 기록
+            내 상담 기록
           </NavItem>
 
           <div className="my-2 border-t border-slate-100" />

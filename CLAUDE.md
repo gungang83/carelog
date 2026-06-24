@@ -3,6 +3,15 @@
 > **조직 공통 운영 규칙은 `PLAYBOOK.md`를 먼저 읽을 것.** (커뮤니케이션·에이전트 정의·커밋 컨벤션·협업 규칙·핸드오프·배포 정책·운영 철학)
 > 이 `CLAUDE.md`는 **Carelog 특화 사항만** 다룬다.
 
+## ⚖️ 용어 규칙 — "상담 기록" (큰 규칙 · 의료법)
+
+케어로그 산출물은 **"상담 기록"(대화 기록)** 이다. **"진료 기록 / 진료기록 / 의무기록"으로 칭하지 않는다.**
+의무기록은 의료기관이 의료법에 따라 작성하는 법정 기록 — 케어로그 산출물을 그렇게 부르면 의료법 리스크.
+- ❌ 금지: "진료 기록", "내 진료 기록", "정식 진료기록" (케어로그 산출물 지칭)
+- ✅ 권장: "상담 기록", "대화 기록", "상담 내역"
+- ✅ 허용: "진료"라는 단어 자체(진료 행위·진료실 등 사실 서술)
+- UI 카피·푸시·문서 신규 작성 시 항상 적용. 상세: `docs/product-vision.md` "용어 규칙".
+
 <!-- SPECKIT START -->
 For additional context about technologies to be used, project structure,
 shell commands, and other important information, read the current plan at:

@@ -49,7 +49,7 @@ export function PatientPushBanner() {
   return (
     <div className="mb-4 flex items-center justify-between rounded-lg bg-sky-50 border border-sky-100 px-4 py-3">
       <p className="text-sm text-sky-800">
-        새 진료 기록 알림을 받으시겠어요?
+        새 상담 기록 알림을 받으시겠어요?
       </p>
       <div className="flex gap-2">
         <button
