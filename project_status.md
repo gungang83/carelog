@@ -73,6 +73,7 @@
 | **C-02 배포** | **환자 대면 보호막**(`PatientShield`). 홈의 `HomeFeed`·`PatientHome` 기본 가림(흐림+접힘) → "기록 펴기"/흐린영역 클릭 시 노출, 매 진입 재가림. `ConsultHero`는 노출 유지. 후속: overlay 제거+`scrollbar-gutter:stable`로 삐걱 해소, 안내 바 전체 클릭=가리기 |
 | **C-12 큰 규칙** | **용어 규칙: "상담 기록"이지 "진료 기록"이 아니다**(의료법). `product-vision.md`+`CLAUDE.md`에 명문화, UI "진료 기록"→"상담 기록" 22곳 치환, `present-screen` "정식 진료기록" 표현 제거 |
 | **C-01 1차+2차 배포** | 녹음 유실 가드. ①`beforeunload` 이탈 경고 + "버리기" 확인. ②**IndexedDB 임시영속화·복구**(`lib/chair/draft-store.ts`): 1초 디바운스 자동저장(본문·처방·참여자·체어·음성 blob), 재진입 시 복구 배너, `RichTextEditor.setHTML` 추가 |
+| **C-05 1단계 배포** | 실시간 진행 현황. `lib/realtime/board-live.ts` broadcast + `LiveSessionsBanner`(홈). 다른 기기 작성 중이면 "△△님이 □ 체어에서 작성 중" 실시간 표시. **PII 미포함**(메타만). 본문 공유는 2단계 |
 | 코드 대조 발견 | C-04(자동알림+리프레시)는 spec007로 **이미 구현** → 검증 항목. 전체복사도 확정카드에 **이미 존재** |
 | spec 승격 후보 | C-01 녹음 유실 가드(009 연계), C-02 환자 대면 모드, C-05 실시간 협업(단계적), C-08 캡처 워크플로 |
 | 드라이브 | 회의 자료는 `Carelog_Project_공유/01_파일럿` 폴더(런시트·전사록·피드백 메모) |
