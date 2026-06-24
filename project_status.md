@@ -2,7 +2,7 @@
 
 > **제품 정체성(SSOT)**: Carelog는 **환자 전용 서비스가 아니다.** 의료기관 상담 기록(B2B) ↔ 환자 평생 보관·생애주기 건강관리(B2C)를 잇는 **연결고리**. 상세: [docs/product-vision.md](docs/product-vision.md)
 
-**최종 업데이트**: 2026-06-20 (세션 40 — 도움말 페이지 + 워크스페이스 안내 배너)
+**최종 업데이트**: 2026-06-24 (세션 41 — 파일럿 W0 1차 회의 피드백 + 확정카드 편집)
 **현재 버전**: main 브랜치
 
 ---
@@ -59,6 +59,22 @@
 | 이미지 줌/팬 | ✅ 완료 | 보기 라이트박스(`ZoomableImage`) + 주석 화면(CSS transform 줌·팬). 휠/버튼/핀치/드래그/더블클릭, 외부 라이브러리 없음 |
 | EO 마스터 게이트웨이 캐시 | ✅ **라이브** (2026-06-10) | EO 직원 마스터를 `clinic_members`에 캐시(`source='eo'`). `lib/eo/gateway.ts`+`sync-master.ts`, Vercel Cron `/api/cron/sync-master`(10분). 수동분 보호. 예미안(0e4e85d6) 직원 30명 동기화 확인 |
 | EO SSO 작성자 귀속 | ✅ **라이브** (2026-06-10) | `/api/auth/sso` 확장 클레임 수용 → `institution_members.eo_employee_id`·`display_name` 저장. 상담 저장 시 `author_employee_id`·`author_name` 자동 기록 |
+
+---
+
+## 2026-06-24 세션 41 (feat) — 파일럿 W0 1차 회의 피드백 + 확정카드 편집
+
+예미안 파일럿 1차 회의(김도은) 전사록·피드백을 코드와 대조해 백로그로 정리, 즉시건 1개 배포.
+
+| 항목 | 내용 |
+|---|---|
+| 회의 피드백 정리 | `specs/000-backlog/pilot-w0-kickoff.md` — C-01~C-11. 각 건 코드 대조(현재상태·난이도·분류) |
+| **C-03 배포** | 확정 상담 카드 **인라인 편집** 추가. STT 오인식 등 사후 정정용. status 가드 없는 `updateConsultationContent` 액션 + `ConfirmedEditControls` |
+| **C-02 배포** | **환자 대면 보호막**(`PatientShield`). 홈의 `HomeFeed`·`PatientHome` 기본 가림(흐림+접힘) → "기록 펴기"/흐린영역 클릭 시 노출, 매 진입 재가림. `ConsultHero`는 노출 유지 |
+| 코드 대조 발견 | C-04(자동알림+리프레시)는 spec007로 **이미 구현** → 검증 항목. 전체복사도 확정카드에 **이미 존재** |
+| spec 승격 후보 | C-01 녹음 유실 가드(009 연계), C-02 환자 대면 모드, C-05 실시간 협업(단계적), C-08 캡처 워크플로 |
+| 드라이브 | 회의 자료는 `Carelog_Project_공유/01_파일럿` 폴더(런시트·전사록·피드백 메모) |
+| 빌드 | `npm run build` ✅ |
 
 ---
 

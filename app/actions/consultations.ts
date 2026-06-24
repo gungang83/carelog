@@ -237,6 +237,46 @@ export async function updateDraftConsultation(
   }
 }
 
+// ─── 확정 상담 본문 수정 (STT 오인식 등 사후 정정) ────────────────────────────
+// draft 전용인 updateDraftConsultation과 달리 status 가드가 없다.
+// 회의 피드백(W0): 연결된 확정 상담도 바로 편집해 덴트웹 등으로 옮기게.
+export async function updateConsultationContent(
+  consultationId: string,
+  patientId: string,
+  content: string,
+  formData: FormData,
+): Promise<{ ok: true } | { ok: false; message: string }> {
+  const trimmed = sanitizeRichHtml(content.trim());
+  if (!trimmed) return { ok: false, message: "상담 내용을 입력해 주세요." };
+
+  const institutionId = await getMyInstitutionId();
+  if (!institutionId) return { ok: false, message: "기관 정보를 찾을 수 없습니다." };
+
+  const prescriptionsRaw = formData.get("prescriptions");
+  let prescriptions: string[] = [];
+  if (typeof prescriptionsRaw === "string" && prescriptionsRaw.trim()) {
+    try {
+      const parsed = JSON.parse(prescriptionsRaw) as unknown;
+      if (Array.isArray(parsed)) prescriptions = parsed.filter((v) => typeof v === "string") as string[];
+    } catch { prescriptions = []; }
+  }
+
+  try {
+    const supabase = await createServerSupabaseClient();
+    const { error } = await supabase
+      .from(consultationTable)
+      .update({ content: trimmed, prescriptions })
+      .eq("id", consultationId)
+      .eq("institution_id", institutionId);
+
+    if (error) return { ok: false, message: `수정 실패: ${error.message}` };
+    revalidatePath(`/patients/${patientId}`);
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, message: e instanceof Error ? e.message : "수정에 실패했습니다." };
+  }
+}
+
 // ─── 임시저장 확정 (선택적 SMS 발송) ─────────────────────────────────────────
 export async function confirmConsultation(
   consultationId: string,
