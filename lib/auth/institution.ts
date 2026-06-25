@@ -111,6 +111,23 @@ export const getMyInstitutionPlan = cache(async (): Promise<PlanTier> => {
   }
 });
 
+/** 현재 활성 기관의 실험실(Engine Lab) 활성 여부. 기본 false(비-lab은 basic 강제). */
+export const getMyInstitutionLab = cache(async (): Promise<boolean> => {
+  try {
+    const institutionId = await getMyInstitutionId();
+    if (!institutionId) return false;
+    const supabase = await createServerSupabaseClient();
+    const { data } = await supabase
+      .from("institutions")
+      .select("lab_enabled")
+      .eq("id", institutionId)
+      .maybeSingle();
+    return data?.lab_enabled === true;
+  } catch {
+    return false;
+  }
+});
+
 /**
  * 현재 세션 사용자의 상담 작성자 귀속 정보(계약 §2.3).
  * institution_members의 eo_employee_id·display_name을 읽어 상담 레코드에 기록한다.

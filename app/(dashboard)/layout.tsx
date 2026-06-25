@@ -5,7 +5,8 @@ import { Header } from "@/components/layout/header";
 import { Footer } from "@/components/footer";
 import { SessionRefresher } from "@/components/layout/session-refresher";
 import { BadgeManager } from "@/components/layout/badge-manager";
-import { getMyInstitutions, getMyInstitutionId, getMyAuthorInfo, getSessionUser } from "@/lib/auth/institution";
+import { getMyInstitutions, getMyInstitutionId, getMyAuthorInfo, getMyInstitutionLab, getSessionUser } from "@/lib/auth/institution";
+import { isSuperAdmin } from "@/lib/admin";
 import { getChairs } from "@/app/actions/chairs";
 import { getClinicMembers } from "@/app/actions/clinic-members";
 import { ChairProvider } from "@/components/chair/chair-provider";
@@ -24,15 +25,17 @@ export default async function DashboardLayout({
     redirect("/login");
   }
 
-  const [institutions, activeInstitutionId, chairs, members, authorInfo] = await Promise.all([
+  const [institutions, activeInstitutionId, chairs, members, authorInfo, labEnabled] = await Promise.all([
     getMyInstitutions(),
     getMyInstitutionId(),
     getChairs(),
     getClinicMembers(),
     getMyAuthorInfo(),
+    getMyInstitutionLab(),
   ]);
 
   const userEmail = user.email ?? "";
+  const superAdmin = isSuperAdmin(user.email);
   const userMeta = user.user_metadata as Record<string, string> | undefined;
   const userName: string | undefined = userMeta?.full_name ?? userMeta?.name;
   const userAvatarUrl: string | undefined = userMeta?.avatar_url;
@@ -66,7 +69,7 @@ export default async function DashboardLayout({
       <SessionRefresher />
       <BadgeManager />
       <ChairOverlay />
-      <ConsultationBoard institutionId={activeInstitutionId ?? ""} />
+      <ConsultationBoard institutionId={activeInstitutionId ?? ""} labEnabled={labEnabled} />
       <LiveAlertsProvider
         institutionId={activeInstitutionId ?? ""}
         chairNames={Object.fromEntries(chairs.map((c) => [c.id, c.name]))}
@@ -77,6 +80,7 @@ export default async function DashboardLayout({
         userEmail={userEmail}
         userName={userName}
         userAvatarUrl={userAvatarUrl}
+        isSuperAdmin={superAdmin}
       />
       <main className="flex-1">{children}</main>
       <Footer />

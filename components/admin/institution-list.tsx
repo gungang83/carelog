@@ -2,7 +2,11 @@
 
 import { useState } from "react";
 import type { AdminInstitutionView, StaffMemberView } from "@/app/actions/admin";
-import { getInstitutionStaff, setStaffActiveAsAdmin } from "@/app/actions/admin";
+import {
+  getInstitutionStaff,
+  setStaffActiveAsAdmin,
+  setInstitutionLab,
+} from "@/app/actions/admin";
 
 const ROLE_LABEL: Record<string, string> = {
   owner: "대표",
@@ -20,6 +24,24 @@ export function InstitutionList({ institutions }: InstitutionListProps) {
   const [loadingInst, setLoadingInst] = useState<string | null>(null);
   const [loadingMember, setLoadingMember] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // 워크스페이스 실험실(Engine Lab) 상태 — prop 초기값에서 시작, 토글 시 낙관적 갱신
+  const [labState, setLabState] = useState<Record<string, boolean>>(() =>
+    Object.fromEntries(institutions.map((i) => [i.id, i.lab_enabled])),
+  );
+  const [loadingLab, setLoadingLab] = useState<string | null>(null);
+
+  async function handleLabToggle(institutionId: string, current: boolean) {
+    if (loadingLab) return;
+    setError(null);
+    setLoadingLab(institutionId);
+    const result = await setInstitutionLab(institutionId, !current);
+    if (result.ok) {
+      setLabState((prev) => ({ ...prev, [institutionId]: !current }));
+    } else {
+      setError(result.message);
+    }
+    setLoadingLab(null);
+  }
 
   async function handleExpand(institutionId: string) {
     if (expandedId === institutionId) {
@@ -70,9 +92,14 @@ export function InstitutionList({ institutions }: InstitutionListProps) {
             onClick={() => handleExpand(inst.id)}
             className="flex w-full items-center justify-between px-5 py-4 text-left transition hover:bg-slate-50"
           >
-            <div>
+            <div className="flex items-center gap-2">
               <span className="font-semibold text-slate-800">{inst.name}</span>
-              <span className="ml-2 text-xs text-slate-500">{inst.type}</span>
+              <span className="text-xs text-slate-500">{inst.type}</span>
+              {labState[inst.id] && (
+                <span className="rounded bg-violet-100 px-1.5 py-0.5 text-[10px] font-bold text-violet-700">
+                  실험실
+                </span>
+              )}
             </div>
             <div className="flex items-center gap-4 text-xs text-slate-500">
               <span>
@@ -95,6 +122,29 @@ export function InstitutionList({ institutions }: InstitutionListProps) {
 
           {expandedId === inst.id && (
             <div className="border-t border-slate-100">
+              {/* 워크스페이스 실험실 토글 — 녹음 엔진 picker 노출 여부 */}
+              <div className="flex items-center justify-between gap-3 border-b border-slate-100 bg-violet-50/40 px-5 py-3">
+                <div>
+                  <p className="text-sm font-semibold text-slate-800">실험실 (녹음 엔진)</p>
+                  <p className="text-xs text-slate-500">
+                    켜면 이 워크스페이스의 상담보드에 엔진 선택(기본/다국어/비교)이 노출됩니다.
+                  </p>
+                </div>
+                <button
+                  onClick={() => handleLabToggle(inst.id, labState[inst.id] ?? false)}
+                  disabled={loadingLab === inst.id}
+                  className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full transition-colors disabled:opacity-50 ${
+                    labState[inst.id] ? "bg-violet-500" : "bg-slate-300"
+                  }`}
+                  aria-label={labState[inst.id] ? "실험실 끄기" : "실험실 켜기"}
+                >
+                  <span
+                    className={`inline-block h-4 w-4 translate-y-0.5 rounded-full bg-white shadow transition-transform ${
+                      labState[inst.id] ? "translate-x-4" : "translate-x-0.5"
+                    }`}
+                  />
+                </button>
+              </div>
               {loadingInst === inst.id ? (
                 <div className="px-5 py-4 text-sm text-slate-400">불러오는 중…</div>
               ) : (
