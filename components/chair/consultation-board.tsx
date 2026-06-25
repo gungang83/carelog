@@ -19,7 +19,6 @@ import {
 } from "@/app/actions/chairs";
 import {
   LAB_ENGINE_OPTIONS,
-  type EngineMode,
   type EngineRun,
 } from "@/lib/transcribe/engines";
 import { RichTextEditor, type RichTextEditorHandle } from "@/components/rich-text-editor";
@@ -76,6 +75,8 @@ function BoardContent({
     setTranscriptionResult,
     resetChair,
     refreshUnlinkedCount,
+    engine,
+    setEngine,
   } = useChairContext();
 
   const isOpen = openChairId === DRAFT_CHAIR_KEY;
@@ -89,8 +90,7 @@ function BoardContent({
   const [elapsed, setElapsed] = useState(0);
   const [micError, setMicError] = useState("");
   const [saveMsg, setSaveMsg] = useState("");
-  // 실험실(lab) — 상담별 엔진 선택. 비-lab은 항상 기본모델(서버에서도 강제).
-  const [engine, setEngine] = useState<EngineMode>("basic");
+  // 엔진은 컨텍스트 공유(히어로에서 녹음 시작 전 선택). 비-lab은 서버에서 basic 강제.
   // 비교 모드 결과(basic + multilingual). 사용자가 한쪽을 골라 본문에 삽입.
   const [comparison, setComparison] = useState<EngineRun[] | null>(null);
   // 저장 시 기록할 사용 엔진(어떤 엔진 결과를 본문에 넣었는지).

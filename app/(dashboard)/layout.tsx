@@ -65,7 +65,7 @@ export default async function DashboardLayout({
   }
 
   return (
-    <ChairProvider initialChairs={chairs} members={members} me={me}>
+    <ChairProvider initialChairs={chairs} members={members} me={me} labEnabled={labEnabled}>
       <SessionRefresher />
       <BadgeManager />
       <ChairOverlay />
