@@ -21,9 +21,9 @@ export default async function AdminPage() {
   return (
     <div className="mx-auto max-w-4xl space-y-8 px-4 py-10 sm:px-6">
       <div>
-        <h1 className="text-2xl font-bold text-slate-900">최고 관리자 패널</h1>
+        <h1 className="text-2xl font-bold text-slate-900">슈퍼어드민</h1>
         <p className="mt-1 text-sm text-slate-500">
-          모든 기관 및 직원 권한을 통합 관리합니다.
+          모든 기관·직원·실험실을 통합 관리합니다. (최고 관리자 전용)
         </p>
       </div>
 
