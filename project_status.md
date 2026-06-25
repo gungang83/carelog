@@ -70,6 +70,7 @@
 | **오늘의 치과 2차 미팅 기획** | 서범기 전사록(`서범기_260624`) → `specs/000-backlog/pilot-ohneul-260624.md`. **O-1 다국어 실시간 통역**(대표 "방향성 결정", spec 1순위), O-2 동시편집(C-05 수요 재확인), O-3 캡처 차별점 재정의(통합 전달), O-4 습관화 전략, **O-5 공용계정 워크스페이스 동선(이번 주 액션)**, O-6 체어 하드웨어. EO 영역(업무관리·채용)은 경계 보존만 |
 | **녹음 엔진 실험실 v1** | O-1 검증 인프라 구현·배포. `institutions.lab_enabled`(예미안만 true) + `consultation.transcription_engine`. 상담별 엔진 picker(실험실 워크스페이스만): **기본모델**/**다국어**(자동감지+번역, 원문/번역/요약)/**비교**(둘 동시→한쪽 선택). 비-lab은 서버에서 `basic` 강제. multilingual 실패 시 basic 자동 폴백. 공유 상수는 `lib/transcribe/engines.ts`로 분리("use server"는 async만 export) |
 | **엔진 picker 위치 개선** | 헤더 상단바에 작게 끼어 있던 셀렉터(녹음 시작하면 사라져 "중지해야 보인다"는 체감) → 본문 **idle 전용 또렷한 블록**으로 이동. 라벨·설명·버튼형 선택, 녹음 시작 전에 노출되고 시작 시 자동 숨김(엔진 고정). 헤더엔 실험실 배지만 유지 |
+| **엔진 picker를 홈 히어로로(핵심)** | 진입점 `ConsultHero`의 "상담 기록 시작"이 **클릭 즉시 녹음 시작**(제스처 보존) → 보드 idle을 못 봐 picker 선택 불가 문제. 엔진 상태를 `ChairProvider` context로 끌어올려(`engine`/`setEngine`/`labEnabled`) 히어로·보드 공유. **히어로 시작 버튼 위**에 엔진 선택 블록 노출(실험실만). 보드 idle 블록은 폴백으로 유지(같은 context 동기화) |
 | 빌드 | C-07·실험실 TypeScript ✅ (`/admin` 프리렌더 실패는 컨테이너 env 미설정·무관) |
 | 마이그레이션 | `supabase/migrations/20260624000001_engine_lab.sql` |
 | **슈퍼어드민 진입점** | 프로필 드롭다운에 **슈퍼어드민**(최고 관리자 패널 `/admin`) 링크 추가 — `isSuperAdmin`(=SUPER_ADMIN_EMAIL) 계정만. 기존 패널이 메뉴에 없어 URL 직접입력만 되던 것 해소. layout→Header→ProfileDropdown prop |
