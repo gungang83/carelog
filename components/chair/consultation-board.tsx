@@ -460,23 +460,9 @@ function BoardContent({
               <>
                 <span className="text-sm font-semibold text-slate-800">상담보드</span>
                 {labEnabled && (
-                  <label className="flex items-center gap-1.5">
-                    <span className="rounded bg-violet-100 px-1.5 py-0.5 text-[10px] font-bold text-violet-700">
-                      실험실
-                    </span>
-                    <select
-                      value={engine}
-                      onChange={(e) => setEngine(e.target.value as EngineMode)}
-                      className="rounded-lg border border-slate-300 bg-white px-2 py-1 text-xs font-medium text-slate-700"
-                      title="녹음 엔진 (이 상담에만 적용)"
-                    >
-                      {LAB_ENGINE_OPTIONS.map((o) => (
-                        <option key={o.value} value={o.value}>
-                          {o.label}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
+                  <span className="rounded bg-violet-100 px-1.5 py-0.5 text-[10px] font-bold text-violet-700">
+                    실험실
+                  </span>
                 )}
                 <button
                   type="button"
@@ -530,6 +516,45 @@ function BoardContent({
               <p className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-600">
                 {micError}
               </p>
+            )}
+
+            {/* 실험실 — 녹음 엔진 선택. 녹음 '시작 전(idle)'에만 또렷이 노출하고,
+                녹음이 시작되면 숨겨 엔진을 고정한다(이 상담에만 적용). */}
+            {labEnabled && status === "idle" && (
+              <div className="rounded-xl border border-violet-200 bg-violet-50 px-3 py-2.5">
+                <div className="flex items-center gap-1.5">
+                  <span className="rounded bg-violet-100 px-1.5 py-0.5 text-[10px] font-bold text-violet-700">
+                    실험실
+                  </span>
+                  <p className="text-sm font-semibold text-violet-800">녹음 엔진 선택</p>
+                </div>
+                <p className="mt-0.5 text-xs text-violet-600">
+                  녹음을 시작하기 전에 고르세요. 이 상담에만 적용됩니다.
+                </p>
+                <div className="mt-2 flex flex-wrap gap-1.5">
+                  {LAB_ENGINE_OPTIONS.map((o) => {
+                    const active = engine === o.value;
+                    return (
+                      <button
+                        key={o.value}
+                        type="button"
+                        onClick={() => setEngine(o.value)}
+                        title={o.desc}
+                        className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition ${
+                          active
+                            ? "bg-violet-600 text-white shadow-sm"
+                            : "border border-violet-200 bg-white text-violet-700 hover:bg-violet-100"
+                        }`}
+                      >
+                        {o.label}
+                      </button>
+                    );
+                  })}
+                </div>
+                <p className="mt-1.5 text-xs text-violet-700">
+                  {LAB_ENGINE_OPTIONS.find((o) => o.value === engine)?.desc}
+                </p>
+              </div>
             )}
 
             {/* 실험실 비교 모드 — 기본 vs 다국어 결과를 나란히 보고 한쪽을 본문에 삽입 */}
