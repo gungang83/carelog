@@ -71,6 +71,9 @@
 | **녹음 엔진 실험실 v1** | O-1 검증 인프라 구현·배포. `institutions.lab_enabled`(예미안만 true) + `consultation.transcription_engine`. 상담별 엔진 picker(실험실 워크스페이스만): **기본모델**/**다국어**(자동감지+번역, 원문/번역/요약)/**비교**(둘 동시→한쪽 선택). 비-lab은 서버에서 `basic` 강제. multilingual 실패 시 basic 자동 폴백. 공유 상수는 `lib/transcribe/engines.ts`로 분리("use server"는 async만 export) |
 | 빌드 | C-07·실험실 TypeScript ✅ (`/admin` 프리렌더 실패는 컨테이너 env 미설정·무관) |
 | 마이그레이션 | `supabase/migrations/20260624000001_engine_lab.sql` |
+| **슈퍼어드민 진입점** | 프로필 드롭다운에 **슈퍼어드민**(최고 관리자 패널 `/admin`) 링크 추가 — `isSuperAdmin`(=SUPER_ADMIN_EMAIL) 계정만. 기존 패널이 메뉴에 없어 URL 직접입력만 되던 것 해소. layout→Header→ProfileDropdown prop |
+| **워크스페이스 실험실 토글** | 슈퍼어드민 콘솔(`/admin` InstitutionList)에 기관별 `lab_enabled` 토글 + 실험실 배지. `setInstitutionLab`(super 전용). 이제 SQL 없이 워크스페이스별 실험실 on/off |
+| 휴고 핸드오프 | 카드 481 — EO 메뉴 구성(설정·슈퍼어드민) 참고자료 요청. `specs/000-backlog/card-481-eo-menu-reference.md` |
 
 > **남은 후속(O-1)**: Level 2 실시간 통역(Soniox/OpenAI realtime PoC), 다국어 엔진 실측(예미안 외국인 신환), 화자분리·용어사전, 토큰 과금 편입. 검토: `specs/000-backlog/o1-multilingual-interpret-feasibility.md`
 
