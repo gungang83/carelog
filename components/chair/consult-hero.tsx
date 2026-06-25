@@ -35,13 +35,13 @@ export function ConsultHero() {
         <span className="text-base font-semibold text-slate-900">Carelog</span>
       </div>
 
-      <h1 className="mt-5 text-2xl font-bold leading-snug tracking-tight text-slate-900 break-keep sm:text-[1.85rem]">
-        오늘 진료, 기록으로 남겨서{" "}
-        <span className="text-sky-600">환자에게 전달해요</span>
+      <h1 className="mt-5 text-[1.7rem] font-bold leading-tight tracking-tight text-slate-900 break-keep sm:text-[2.15rem]">
+        오늘 나눈 상담, 빠짐없이 남겨{" "}
+        <span className="text-sky-600">환자분께 전해드려요</span>
       </h1>
-      <p className="mt-2.5 max-w-md text-[15px] leading-relaxed text-slate-500 break-keep">
-        버튼을 누르면 바로 녹음이 시작돼요. 체어·참여자는 녹음하면서 골라도 되고,
-        내용은 AI가 정리합니다. 검토 후 보내면 환자가 직접 받아 보관해요.
+      <p className="mt-3 max-w-md text-[15px] leading-relaxed text-slate-500 break-keep">
+        버튼을 누르면 바로 녹음이 시작돼요. 오늘 나눈 이야기를 정확히 남기고,
+        정리된 상담 기록은 환자분도 직접 받아 보관하실 수 있어요.
       </p>
 
       {/* 실험실 — 녹음 엔진 선택. 시작 버튼이 즉시 녹음을 켜므로 반드시 버튼 위(시작 전)에 둔다. */}

@@ -4,8 +4,8 @@ import { LAB_ENGINE_OPTIONS, type EngineMode } from "@/lib/transcribe/engines";
 
 /**
  * 녹음 엔진 선택 — 실험실 워크스페이스 전용. 히어로(녹음 시작 전)·보드(idle 폴백)
- * 공용. 파란 히어로/흰 보드 어디에 놓여도 튀지 않도록 중립 슬레이트 톤의
- * 세그먼트 컨트롤로 통일하고, 실험실 정체성은 작은 핀 하나로만 남긴다.
+ * 공용. 라벨·컨트롤·설명을 같은 좌측 기준선에 맞춘 깔끔한 세그먼트 컨트롤.
+ * 파란 히어로/흰 보드 어디서도 튀지 않도록 흰 배경 + 활성만 sky로 채운다.
  */
 export function EngineSelector({
   engine,
@@ -20,12 +20,12 @@ export function EngineSelector({
   return (
     <div className={className}>
       <div className="flex items-center gap-2">
-        <span className="text-xs font-semibold text-slate-700">녹음 엔진</span>
+        <span className="text-sm font-semibold text-slate-800">녹음 엔진</span>
         <span className="rounded-full bg-violet-100 px-2 py-0.5 text-[10px] font-semibold text-violet-600">
           실험실
         </span>
       </div>
-      <div className="mt-2 inline-flex rounded-xl bg-slate-100 p-1">
+      <div className="mt-2.5 inline-flex divide-x divide-slate-200 overflow-hidden rounded-xl border border-slate-200 bg-white">
         {LAB_ENGINE_OPTIONS.map((o) => {
           const active = engine === o.value;
           return (
@@ -34,10 +34,11 @@ export function EngineSelector({
               type="button"
               onClick={() => onChange(o.value)}
               title={o.desc}
-              className={`rounded-lg px-3.5 py-1.5 text-xs font-semibold transition ${
+              aria-pressed={active}
+              className={`px-4 py-2 text-sm font-medium transition ${
                 active
-                  ? "bg-white text-slate-900 shadow-sm"
-                  : "text-slate-500 hover:text-slate-700"
+                  ? "bg-sky-600 text-white"
+                  : "text-slate-600 hover:bg-slate-50"
               }`}
             >
               {o.label}
@@ -45,7 +46,7 @@ export function EngineSelector({
           );
         })}
       </div>
-      {desc && <p className="mt-2 text-xs text-slate-500">{desc}</p>}
+      {desc && <p className="mt-2.5 text-xs text-slate-500">{desc}</p>}
     </div>
   );
 }
