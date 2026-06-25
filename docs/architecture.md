@@ -65,7 +65,10 @@ components/
 │   ├── signup-form.tsx            # 이메일+비밀번호+기관명 가입 폼
 │   └── onboarding-form.tsx        # Google 신규 사용자 기관명 입력 폼
 ├── chair/
-│   ├── chair-provider.tsx         # ChairProvider (Context + useReducer) — 체어 전역 상태, MediaRecorder refs
+│   ├── chair-provider.tsx         # ChairProvider (Context + useReducer) — 체어 전역 상태, MediaRecorder refs, 녹음 엔진(engine/setEngine·labEnabled) 공유
+│   ├── consult-hero.tsx           # 홈 히어로 — record-first 진입점("상담 기록 시작"=즉시 녹음). 실험실이면 시작 버튼 위 EngineSelector 노출
+│   ├── consultation-board.tsx     # 상담보드(DRAFT_CHAIR_KEY) — 녹음·전사·본문·체어·참여자·처방·저장. idle 폴백으로 EngineSelector
+│   ├── engine-selector.tsx        # 녹음 엔진 세그먼트 컨트롤(기본/다국어/비교) — 히어로·보드 공용, context engine 사용
 │   ├── chair-overlay.tsx          # 체어 기록 다이얼로그 (createPortal → body); 현재 세션 녹음/편집 전용
 │   ├── chair-patient-search.tsx   # 환자 검색 + linkChairRecordToPatient + 인라인 신규 등록
 │   ├── chair-settings.tsx         # 설정 페이지 내 체어 관리 (admin/owner 전용)
