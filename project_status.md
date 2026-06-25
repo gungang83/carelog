@@ -73,7 +73,7 @@
 | 마이그레이션 | `supabase/migrations/20260624000001_engine_lab.sql` |
 | **슈퍼어드민 진입점** | 프로필 드롭다운에 **슈퍼어드민**(최고 관리자 패널 `/admin`) 링크 추가 — `isSuperAdmin`(=SUPER_ADMIN_EMAIL) 계정만. 기존 패널이 메뉴에 없어 URL 직접입력만 되던 것 해소. layout→Header→ProfileDropdown prop |
 | **워크스페이스 실험실 토글** | 슈퍼어드민 콘솔(`/admin` InstitutionList)에 기관별 `lab_enabled` 토글 + 실험실 배지. `setInstitutionLab`(super 전용). 이제 SQL 없이 워크스페이스별 실험실 on/off |
-| 휴고 핸드오프 | 카드 481 — EO 메뉴 구성(설정·슈퍼어드민) 참고자료 요청. `specs/000-backlog/card-481-eo-menu-reference.md` |
+| 휴고 핸드오프 | 카드 481 — EO 메뉴 구성 참고자료 요청 → **✅ 수령·해결**(레포 혼선: 휴고 작성본이 EO 레포에 있었음). EO 4섹션이 Carelog 구조 검증 — 3-tier(staff/관리자/슈퍼어드민)·설정↔슈퍼어드민 경계(데이터범위) 이미 정렬. 적용: 슈퍼어드민 H1 라벨 일치 + 경계원칙 `docs/architecture.md` 명문화. 선택 후속(설정 탭화·라우트 리네임)은 대표 결정 대기 |
 
 > **남은 후속(O-1)**: Level 2 실시간 통역(Soniox/OpenAI realtime PoC), 다국어 엔진 실측(예미안 외국인 신환), 화자분리·용어사전, 토큰 과금 편입. 검토: `specs/000-backlog/o1-multilingual-interpret-feasibility.md`
 
