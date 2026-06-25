@@ -4,7 +4,7 @@ import {
   useChairContext,
   DRAFT_CHAIR_KEY,
 } from "@/components/chair/chair-provider";
-import { LAB_ENGINE_OPTIONS } from "@/lib/transcribe/engines";
+import { EngineSelector } from "@/components/chair/engine-selector";
 
 /**
  * 홈 최상단 히어로 — 상담 기록의 진입점(record-first).
@@ -46,40 +46,7 @@ export function ConsultHero() {
 
       {/* 실험실 — 녹음 엔진 선택. 시작 버튼이 즉시 녹음을 켜므로 반드시 버튼 위(시작 전)에 둔다. */}
       {labEnabled && (
-        <div className="mt-6 max-w-md rounded-2xl border border-violet-200 bg-violet-50 p-4">
-          <div className="flex items-center gap-1.5">
-            <span className="rounded bg-violet-100 px-1.5 py-0.5 text-[10px] font-bold text-violet-700">
-              실험실
-            </span>
-            <p className="text-sm font-semibold text-violet-800">녹음 엔진 선택</p>
-          </div>
-          <p className="mt-0.5 text-xs text-violet-600">
-            녹음을 시작하기 전에 고르세요. 이번 상담에 적용됩니다.
-          </p>
-          <div className="mt-2.5 flex flex-wrap gap-1.5">
-            {LAB_ENGINE_OPTIONS.map((o) => {
-              const active = engine === o.value;
-              return (
-                <button
-                  key={o.value}
-                  type="button"
-                  onClick={() => setEngine(o.value)}
-                  title={o.desc}
-                  className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition ${
-                    active
-                      ? "bg-violet-600 text-white shadow-sm"
-                      : "border border-violet-200 bg-white text-violet-700 hover:bg-violet-100"
-                  }`}
-                >
-                  {o.label}
-                </button>
-              );
-            })}
-          </div>
-          <p className="mt-2 text-xs text-violet-700">
-            {LAB_ENGINE_OPTIONS.find((o) => o.value === engine)?.desc}
-          </p>
-        </div>
+        <EngineSelector engine={engine} onChange={setEngine} className="mt-6" />
       )}
 
       <button
