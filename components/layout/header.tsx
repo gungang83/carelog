@@ -11,6 +11,7 @@ interface HeaderProps {
   userEmail: string;
   userName?: string;
   userAvatarUrl?: string;
+  isSuperAdmin?: boolean;
 }
 
 export function Header({
@@ -19,6 +20,7 @@ export function Header({
   userEmail,
   userName,
   userAvatarUrl,
+  isSuperAdmin = false,
 }: HeaderProps) {
   const activeInst = institutions.find(
     (i) => i.institution.id === activeInstitutionId,
@@ -68,6 +70,7 @@ export function Header({
             userEmail={userEmail}
             userName={userName}
             userAvatarUrl={userAvatarUrl}
+            isSuperAdmin={isSuperAdmin}
           />
         </div>
       </div>

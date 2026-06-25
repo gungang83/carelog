@@ -275,6 +275,7 @@ export type AdminInstitutionView = {
   created_at: string;
   member_count: number;
   active_member_count: number;
+  lab_enabled: boolean;
 };
 
 export async function getAllInstitutions(): Promise<
@@ -289,7 +290,7 @@ export async function getAllInstitutions(): Promise<
   const admin = createAdminSupabaseClient();
   const { data: institutions, error } = await admin
     .from("institutions")
-    .select("id, name, type, created_at")
+    .select("id, name, type, created_at, lab_enabled")
     .order("created_at", { ascending: false });
 
   if (error || !institutions) {
@@ -317,10 +318,32 @@ export async function getAllInstitutions(): Promise<
       created_at: inst.created_at,
       member_count: counts.total,
       active_member_count: counts.active,
+      lab_enabled: (inst as { lab_enabled?: boolean }).lab_enabled === true,
     };
   });
 
   return { ok: true, institutions: result };
+}
+
+// ── US3: 슈퍼 어드민 — 워크스페이스 실험실(Engine Lab) 토글 ──────────────
+export async function setInstitutionLab(
+  institutionId: string,
+  enabled: boolean,
+): Promise<{ ok: true } | { ok: false; message: string }> {
+  const supabase = await createServerSupabaseClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!isSuperAdmin(user?.email)) {
+    return { ok: false, message: "접근 권한이 없습니다." };
+  }
+  const admin = createAdminSupabaseClient();
+  const { error } = await admin
+    .from("institutions")
+    .update({ lab_enabled: enabled })
+    .eq("id", institutionId);
+  if (error) {
+    return { ok: false, message: "실험실 설정 변경에 실패했습니다." };
+  }
+  return { ok: true };
 }
 
 // ── US3: 슈퍼 어드민 — 기관별 직원 조회 ─────────────────────

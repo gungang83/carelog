@@ -41,6 +41,8 @@ Supabase(PostgreSQL) 기반. 전체 스키마는 `supabase/schema.sql` 참고.
 | `id` | uuid PK | gen_random_uuid() |
 | `name` | text NOT NULL | 기관명 (예: 예미안치과) |
 | `type` | text NOT NULL DEFAULT 'dental' | 기관 유형 |
+| `plan` | text DEFAULT 'free' | 요금/기능 게이트 단일 출처 |
+| `lab_enabled` | boolean NOT NULL DEFAULT false | 녹음 엔진 실험실 게이트 — true면 상담별 엔진 picker 노출(예미안 한정). 비-lab은 'basic' 강제 |
 | `created_at` | timestamptz | 생성 시각 |
 
 ---
@@ -140,6 +142,7 @@ create policy "staff sees own institution patients" on public.patient
 | `participants` | jsonb NOT NULL DEFAULT `[]` | 상담 참여자 스냅샷 `[{id,name,role}]` (migration 20260607000001). 이름 변경/EO 이관에도 기록 시점 보존 |
 | `author_employee_id` | uuid | 작성자 EO 직원 id (있으면). 저장 시 세션 멤버에서 자동 기록 (migration 20260608000001) |
 | `author_name` | text | 작성자 표시명 (공용계정 포함). display_name 없으면 이메일 폴백 (migration 20260608000001) |
+| `transcription_engine` | text | 그 기록을 만든 녹음 엔진 — `basic`/`multilingual` (null=레거시·수동). 실험실 평가·비교 데이터 (migration 20260624000001) |
 | `created_at` | timestamptz | 기록 시각 |
 
 > **작성자 귀속 (카드 235)**: `saveConsultation`·`saveChairRecord` 저장 시 `getMyAuthorInfo()`로 세션 멤버의

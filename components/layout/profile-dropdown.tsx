@@ -9,12 +9,14 @@ interface ProfileDropdownProps {
   userEmail: string;
   userName?: string;
   userAvatarUrl?: string;
+  isSuperAdmin?: boolean;
 }
 
 export function ProfileDropdown({
   userEmail,
   userName,
   userAvatarUrl,
+  isSuperAdmin = false,
 }: ProfileDropdownProps) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -91,6 +93,25 @@ export function ProfileDropdown({
             </p>
             <p className="truncate text-xs text-slate-500">{userEmail}</p>
           </div>
+
+          {/* 슈퍼어드민 — 서비스 전체 총괄(최고 관리자만 노출) */}
+          {isSuperAdmin && (
+            <div className="border-b border-slate-100 py-1">
+              <Link
+                href="/admin"
+                role="menuitem"
+                onClick={() => setOpen(false)}
+                className="flex items-center gap-2.5 px-4 py-2 text-sm font-semibold text-violet-700 transition hover:bg-violet-50"
+              >
+                <span className="text-violet-500">
+                  <svg viewBox="0 0 20 20" fill="currentColor" className="size-4">
+                    <path d="M2.5 6.5 5 9l5-5.5L15 9l2.5-2.5L16 16H4L2.5 6.5Z" />
+                  </svg>
+                </span>
+                슈퍼어드민
+              </Link>
+            </div>
+          )}
 
           {/* 메뉴 아이템 */}
           <div className="py-1">

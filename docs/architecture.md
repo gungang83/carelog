@@ -227,6 +227,20 @@ RLS 이중 보호:
   get_my_institution_id() DB 함수 → policy WHERE institution_id = 함수()
 ```
 
+## 메뉴·권한 구조 (3-tier)
+
+권한 3단으로 메뉴를 필터링한다 (EO 메뉴 구조 참고 — 카드 481):
+
+| tier | 식별 | 영역 |
+|---|---|---|
+| 사용자(staff) | `role='staff'` | 본인 작업·알림 |
+| 고객사 관리자 | `role in (owner,admin)` | **내 워크스페이스** 운영설정 = `/settings`(요금제·기관·체어·멤버) |
+| 플랫폼 운영진 | `isSuperAdmin()` | **전체 고객사** 총괄 = `/admin`(슈퍼어드민: 전 기관·직원·실험실 토글) |
+
+**설정 ↔ 슈퍼어드민 경계 = 데이터 범위.** "한 기관 안에서만 의미" → 설정 / "여러 기관에 걸치거나 플랫폼이 고객사를 관리" → 슈퍼어드민. 새 메뉴 추가 시 이 기준으로 배치한다.
+
+프로필 드롭다운: **권한자 전용(슈퍼어드민) 위 · 전원 공통(상담기록·설정·서비스소개) 아래**의 2분할. 슈퍼어드민 진입점은 `isSuperAdmin` 계정에만 노출.
+
 ## UX 원칙
 
 ### 환자 상세 페이지 (`/patients/[patientId]`)
@@ -391,13 +405,19 @@ app/(dashboard)/layout.tsx
 ```
 handleStopRecording()
   → stopRecording(chairId) → Blob (MediaRecorder chunks)
-  → transcribeChairAudio(formData) [Server Action]
-      → transcribeAndSummarize() → Whisper + GPT 요약
-  → setTranscriptionResult(chairId, summary)
+  → transcribeChairAudio(formData, engine) [Server Action]
+      → getMyInstitutionLab(): 비-lab이면 engine='basic' 강제(사고 차단)
+      → transcribeEngine(formData, mode) → runs[]
+          basic        : Whisper(ko) + Claude 요약
+          multilingual : Whisper(자동감지) + Claude 번역·요약 (원문/번역/요약). 실패 시 basic 폴백
+          comparison   : basic + multilingual 동시 → 보드에서 한쪽 선택
+  → setTranscriptionResult(chairId, run.summary) / insertText(run.insertText)
+  ※ 공유 타입·상수: lib/transcribe/engines.ts (LAB_ENGINE_OPTIONS) — "use server" 파일은
+    async 함수만 export 가능하므로 런타임 상수는 일반 모듈에 분리.
 
 handleSave()
-  → saveChairRecord({ chairId, content, prescriptions }) [Server Action]
-      → consultation INSERT (patient_id: null, status: 'draft', chair_id)
+  → saveChairRecord({ chairId, content, prescriptions, transcriptionEngine }) [Server Action]
+      → consultation INSERT (patient_id: null, status: 'draft', chair_id, transcription_engine)
       → chair_audit_logs INSERT (record_created)
       → revalidatePath('/')
 

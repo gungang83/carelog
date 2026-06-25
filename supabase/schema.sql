@@ -14,10 +14,14 @@ create extension if not exists pgcrypto;
 -- ============================================================
 
 create table if not exists public.institutions (
-  id         uuid primary key default gen_random_uuid(),
-  name       text not null,
-  type       text not null default 'dental',
-  created_at timestamptz not null default now()
+  id          uuid primary key default gen_random_uuid(),
+  name        text not null,
+  type        text not null default 'dental',
+  -- plan: 요금/기능 게이트 단일 출처(migration: 20260619000001_audio_archive.sql)
+  -- lab_enabled: 녹음 엔진 실험실 게이트(migration: 20260624000001_engine_lab.sql)
+  --   true인 워크스페이스만 상담별 엔진 picker 노출(예미안 한정). 비-lab은 'basic' 강제.
+  lab_enabled boolean not null default false,
+  created_at  timestamptz not null default now()
 );
 
 create table if not exists public.institution_members (
@@ -525,4 +529,13 @@ alter table public.patient_push_subscriptions enable row level security;
 --     played_at timestamptz default now()); RLS: 같은 기관 직원 select/insert.
 --   주의: consultation.id 는 실제 DB에서 bigint → FK 타입 bigint.
 -- 비공개 Storage 버킷 'consultation-audio'(public=false) — 서명 URL로만 접근.
+-- ───────────────────────────────────────────────────────────────────────────
+
+-- ───────────────────────────────────────────────────────────────────────────
+-- 녹음 엔진 실험실 (Engine Lab) — O-1 다국어 통역 검증. migration: 20260624000001_engine_lab.sql
+-- institutions.lab_enabled boolean default false  (위 institutions 정의 참조)
+-- consultation.transcription_engine: 그 기록을 만든 엔진(null=레거시/수동). 평가·비교 데이터.
+--   alter table public.consultation add column transcription_engine text;
+-- 엔진: basic(한국어 Whisper+요약·기본) / multilingual(자동감지+번역). comparison은 실행 모드.
+-- 비-lab 워크스페이스는 서버(chairs.transcribeChairAudio)에서 'basic' 강제 → 사고 차단.
 -- ───────────────────────────────────────────────────────────────────────────
