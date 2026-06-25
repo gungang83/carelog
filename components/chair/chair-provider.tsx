@@ -7,9 +7,11 @@ import {
   useEffect,
   useReducer,
   useRef,
+  useState,
   type ReactNode,
 } from "react";
 import type { ChairRow, ClinicMemberRow, Participant } from "@/lib/types/database";
+import type { EngineMode } from "@/lib/transcribe/engines";
 import { getUnlinkedChairRecords } from "@/app/actions/chairs";
 
 export type ChairStatus = "idle" | "recording" | "processing" | "has_records";
@@ -152,6 +154,11 @@ type ChairContextValue = {
   resetChair: (chairId: string) => void;
   unlinkedCounts: Record<string, number>;
   refreshUnlinkedCount: (chairId: string) => Promise<void>;
+  /** 실험실(lab) 활성 워크스페이스 여부 — 녹음 엔진 선택 노출 조건 */
+  labEnabled: boolean;
+  /** 다음 녹음에 쓸 엔진(히어로에서 시작 전 선택 → 보드가 사용). 비-lab은 서버에서 basic 강제 */
+  engine: EngineMode;
+  setEngine: (engine: EngineMode) => void;
 };
 
 const ChairContext = createContext<ChairContextValue | null>(null);
@@ -166,13 +173,17 @@ export function ChairProvider({
   initialChairs,
   members = [],
   me = null,
+  labEnabled = false,
   children,
 }: {
   initialChairs: ChairRow[];
   members?: ClinicMemberRow[];
   me?: Participant | null;
+  labEnabled?: boolean;
   children: ReactNode;
 }) {
+  // 녹음 엔진 — 히어로(녹음 시작 전)에서 고르고 보드가 사용. 세션 공유 단일 상태.
+  const [engine, setEngine] = useState<EngineMode>("basic");
   const [state, dispatch] = useReducer(reducer, {
     chairs: initialChairs,
     openChairId: null,
@@ -374,6 +385,9 @@ export function ChairProvider({
     resetChair,
     unlinkedCounts: state.unlinkedCounts,
     refreshUnlinkedCount,
+    labEnabled,
+    engine,
+    setEngine,
   };
 
   return <ChairContext.Provider value={value}>{children}</ChairContext.Provider>;
