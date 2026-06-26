@@ -75,6 +75,7 @@
 | **히어로 카피 — 상담 용어·환자 안심** | "오늘 진료, 기록으로 남겨서 환자에게 전달해요"(진료 기록 뉘앙스) → **"오늘 나눈 상담, 빠짐없이 남겨 환자분께 전해드려요"**. 본문도 상담 용어·안심 톤("정리된 상담 기록은 환자분도 직접 받아 보관"). 제목 크기 ↑(`sm:text-[2.15rem]`). 의료법 용어 규칙(상담 기록) 준수 |
 | **미연결 기록 편집 — 체어·참여자** | 홈 피드 인라인 편집에서 본문·처방만 수정 가능 → **체어 변경 + 참여자 변경** 추가. `updateChairRecordContent`에 `chairId`/`participants` 파라미터(체어는 기관 소속 검증). `AllUnlinkedRecord.participants` 노출, 카드 헤더에 참여자 읽기전용 표시. 편집 UI에 체어 칩 + `ParticipantPicker` 재사용 |
 | **요약 제목 브랜딩** | 기본 엔진 요약이 "## 치과 상담 기록 요약"으로 시작 → 프롬프트에 제목 줄 고정해 **"## 치과 상담 기록 요약 - Carelog"** 로 통일 |
+| **상담 에디터 통일 (Phase 1)** | 입력·편집을 모든 진입점이 같은 기능으로 쓰도록 공용 `components/chair/consultation-editor.tsx` 추출(본문+체어+참여자+처방, 옵션 토글). 홈 피드 미연결 편집을 이걸로 교체(무동작 변경). 후속: 연결완료 카드·환자 페이지로 확대 → **진행 중 (Phase 2~4)** |
 | 빌드 | C-07·실험실 TypeScript ✅ (`/admin` 프리렌더 실패는 컨테이너 env 미설정·무관) |
 | 마이그레이션 | `supabase/migrations/20260624000001_engine_lab.sql` |
 | **슈퍼어드민 진입점** | 프로필 드롭다운에 **슈퍼어드민**(최고 관리자 패널 `/admin`) 링크 추가 — `isSuperAdmin`(=SUPER_ADMIN_EMAIL) 계정만. 기존 패널이 메뉴에 없어 URL 직접입력만 되던 것 해소. layout→Header→ProfileDropdown prop |
