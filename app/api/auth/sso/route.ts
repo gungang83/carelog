@@ -79,6 +79,7 @@ export async function GET(req: NextRequest) {
     const {
       email,
       institution_id,
+      institution_name = null,
       employee_id = null,
       name = null,
       account_type = null,
@@ -86,6 +87,7 @@ export async function GET(req: NextRequest) {
     } = payload as {
       email: string;
       institution_id: string;
+      institution_name?: string | null;
       employee_id?: string | null;
       name?: string | null;
       account_type?: "personal" | "shared" | null;
@@ -95,6 +97,7 @@ export async function GET(req: NextRequest) {
     console.log(
       "[SSO] email:", email,
       "institution_id:", institution_id,
+      "institution_name:", institution_name,
       "employee_id:", employee_id,
       "account_type:", account_type,
       "eo_role:", eo_role,
@@ -143,6 +146,22 @@ export async function GET(req: NextRequest) {
     }
 
     console.log("[SSO] userId:", userId);
+
+    // 1-b. 기관 자동 생성(완전자동, 카드 622) — 멤버십 FK 충족을 위해 선행.
+    //      EO가 자체발급한 institution_id가 institutions에 없으면 {id, name}으로 생성한다.
+    //      ignoreDuplicates: 이미 있으면 DO NOTHING → 기존 기관의 이름·lab 등은 보존
+    //      (강남점처럼 직접가입한 기관을 EO link가 같은 id로 가리키면 그대로 재사용).
+    //      name은 NOT NULL이라 토큰 institution_name이 없으면 안전한 기본값으로 채운다
+    //      (슈퍼어드민이 /admin에서 사후 변경 가능).
+    const { error: instUpsertError } = await admin
+      .from("institutions")
+      .upsert(
+        { id: institution_id, name: institution_name?.trim() || "신규 워크스페이스" },
+        { onConflict: "id", ignoreDuplicates: true },
+      );
+    if (instUpsertError) {
+      console.warn("[SSO] institutions upsert error (non-fatal):", instUpsertError.message);
+    }
 
     // 2. institution_members 멤버십 + 작성자 귀속 정보(eo_employee_id·display_name).
     //    신규는 매핑된 role로 추가, 기존은 role을 건드리지 않고 귀속 정보만 갱신

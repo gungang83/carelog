@@ -76,7 +76,8 @@
 | **미연결 기록 편집 — 체어·참여자** | 홈 피드 인라인 편집에서 본문·처방만 수정 가능 → **체어 변경 + 참여자 변경** 추가. `updateChairRecordContent`에 `chairId`/`participants` 파라미터(체어는 기관 소속 검증). `AllUnlinkedRecord.participants` 노출, 카드 헤더에 참여자 읽기전용 표시. 편집 UI에 체어 칩 + `ParticipantPicker` 재사용 |
 | **요약 제목 브랜딩** | 기본 엔진 요약이 "## 치과 상담 기록 요약"으로 시작 → 프롬프트에 제목 줄 고정해 **"## 치과 상담 기록 요약 - Carelog"** 로 통일 |
 | **상담 에디터 통일 (Phase 1)** | 입력·편집을 모든 진입점이 같은 기능으로 쓰도록 공용 `components/chair/consultation-editor.tsx` 추출(본문+체어+참여자+처방, 옵션 토글). 홈 피드 미연결 편집을 이걸로 교체(무동작 변경). 후속: 연결완료 카드·환자 페이지로 확대 → **보류 (핸드오프 622 우선)** |
-| **/admin 기관 ID 표시·복사 + 기관 생성 (카드 622)** | EO SSO 연동은 Carelog `institution_id` 선발급 필요(멤버십 FK). 슈퍼어드민 콘솔에 ① 기관 ID 표시+복사 ② **기관 생성**(입력→생성/기존이면 그 id 반환→복사) 추가. SQL 없이 self-serve로 EO 연동 id 발급. `createInstitutionAsAdmin`(super 전용) + `institution-list.tsx`. 강남점(EO ws 776eacd1)용 |
+| **/admin 기관 ID 표시·복사 + 기관 생성 (카드 622)** | EO SSO 연동은 Carelog `institution_id` 선발급 필요(멤버십 FK). 슈퍼어드민 콘솔에 ① 기관 ID 표시+복사 ② **기관 생성**(입력→생성/기존이면 그 id 반환→복사) 추가. SQL 없이 self-serve로 EO 연동 id 발급. `createInstitutionAsAdmin`(super 전용) + `institution-list.tsx`. 강남점(EO ws 776eacd1)용 — **완전자동의 폴백으로 유지** |
+| **SSO 완전자동 — institutions UPSERT (카드 622)** | `app/api/auth/sso/route.ts`: 멤버십 insert 전에 `institutions` upsert(`onConflict:id, ignoreDuplicates`) + `institution_name` 클레임 수용. EO 자체발급 id로 **첫 SSO 시 기관 자동생성(FK위반 0)**, 있으면 기존 보존(이름·lab 안 덮음). 이 배포 선행 → 테오 #621(EO 자체발급) 활성. ②완전자동 핵심 선행 |
 | 빌드 | C-07·실험실 TypeScript ✅ (`/admin` 프리렌더 실패는 컨테이너 env 미설정·무관) |
 | 마이그레이션 | `supabase/migrations/20260624000001_engine_lab.sql` |
 | **슈퍼어드민 진입점** | 프로필 드롭다운에 **슈퍼어드민**(최고 관리자 패널 `/admin`) 링크 추가 — `isSuperAdmin`(=SUPER_ADMIN_EMAIL) 계정만. 기존 패널이 메뉴에 없어 URL 직접입력만 되던 것 해소. layout→Header→ProfileDropdown prop |
