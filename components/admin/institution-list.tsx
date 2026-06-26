@@ -1,11 +1,13 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import type { AdminInstitutionView, StaffMemberView } from "@/app/actions/admin";
 import {
   getInstitutionStaff,
   setStaffActiveAsAdmin,
   setInstitutionLab,
+  createInstitutionAsAdmin,
 } from "@/app/actions/admin";
 
 const ROLE_LABEL: Record<string, string> = {
@@ -19,7 +21,12 @@ interface InstitutionListProps {
 }
 
 export function InstitutionList({ institutions }: InstitutionListProps) {
+  const router = useRouter();
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  // 기관 생성(EO 연동 선발급용) — 입력·결과 id
+  const [newName, setNewName] = useState("");
+  const [creating, setCreating] = useState(false);
+  const [createdResult, setCreatedResult] = useState<{ id: string; existed: boolean } | null>(null);
   const [staffMap, setStaffMap] = useState<Record<string, StaffMemberView[]>>({});
   const [loadingInst, setLoadingInst] = useState<string | null>(null);
   const [loadingMember, setLoadingMember] = useState<string | null>(null);
@@ -39,6 +46,23 @@ export function InstitutionList({ institutions }: InstitutionListProps) {
       setTimeout(() => setCopiedId((c) => (c === institutionId ? null : c)), 1500);
     } catch {
       setError("복사에 실패했습니다. 수동으로 선택해 복사하세요.");
+    }
+  }
+
+  async function handleCreateInstitution() {
+    const name = newName.trim();
+    if (!name || creating) return;
+    setError(null);
+    setCreatedResult(null);
+    setCreating(true);
+    const result = await createInstitutionAsAdmin(name);
+    setCreating(false);
+    if (result.ok) {
+      setCreatedResult({ id: result.id, existed: result.existed });
+      setNewName("");
+      router.refresh(); // 목록 갱신(새 기관 노출)
+    } else {
+      setError(result.message);
     }
   }
 
@@ -95,6 +119,52 @@ export function InstitutionList({ institutions }: InstitutionListProps) {
           {error}
         </div>
       )}
+
+      {/* 기관 생성 — EO SSO 연동 선발급용. 같은 이름이 있으면 그 id를 반환. */}
+      <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+        <p className="text-sm font-semibold text-slate-800">기관 생성 (EO 연동용)</p>
+        <p className="mt-0.5 text-xs text-slate-500">
+          EO 워크스페이스에 연결할 Carelog 기관을 만들고 institution_id를 받습니다. 같은
+          이름이 이미 있으면 그 id를 반환합니다.
+        </p>
+        <div className="mt-2 flex gap-2">
+          <input
+            value={newName}
+            onChange={(e) => setNewName(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") handleCreateInstitution();
+            }}
+            placeholder="예: 오늘의치과 강남점"
+            className="flex-1 rounded-lg border border-slate-200 px-3 py-1.5 text-sm text-slate-800 focus:border-sky-400 focus:outline-none"
+          />
+          <button
+            onClick={handleCreateInstitution}
+            disabled={creating || !newName.trim()}
+            className="shrink-0 rounded-lg bg-sky-600 px-4 py-1.5 text-sm font-semibold text-white transition hover:bg-sky-700 disabled:opacity-50"
+          >
+            {creating ? "생성 중…" : "생성"}
+          </button>
+        </div>
+        {createdResult && (
+          <div className="mt-2 flex items-center justify-between gap-3 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2">
+            <div className="min-w-0">
+              <p className="text-xs font-semibold text-emerald-800">
+                {createdResult.existed ? "기존 기관 — institution_id" : "생성됨 — institution_id"}
+              </p>
+              <code className="mt-0.5 block truncate font-mono text-xs text-emerald-700">
+                {createdResult.id}
+              </code>
+            </div>
+            <button
+              onClick={() => handleCopyId(createdResult.id)}
+              className="shrink-0 rounded-lg border border-emerald-200 bg-white px-3 py-1.5 text-xs font-semibold text-emerald-700 transition hover:bg-emerald-100"
+            >
+              {copiedId === createdResult.id ? "복사됨 ✓" : "복사"}
+            </button>
+          </div>
+        )}
+      </div>
+
       {institutions.map((inst) => (
         <div
           key={inst.id}

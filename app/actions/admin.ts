@@ -325,6 +325,40 @@ export async function getAllInstitutions(): Promise<
   return { ok: true, institutions: result };
 }
 
+// ── 슈퍼 어드민 — 기관 생성(EO SSO 연동 선발급용) ──────────────────────────
+// EO 워크스페이스에 연결할 Carelog institution_id가 필요한데, 멤버십 FK 때문에
+// 기관이 먼저 존재해야 한다(EO 임의발급 불가). 슈퍼어드민이 직접 만들고 id를 받는다.
+// 같은 이름의 기관이 이미 있으면 중복 생성 대신 그 id를 반환(카드 622: 있으면 그 id).
+export async function createInstitutionAsAdmin(
+  name: string,
+): Promise<{ ok: true; id: string; existed: boolean } | { ok: false; message: string }> {
+  const supabase = await createServerSupabaseClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!isSuperAdmin(user?.email)) {
+    return { ok: false, message: "접근 권한이 없습니다." };
+  }
+  const trimmed = name.trim();
+  if (!trimmed) return { ok: false, message: "기관명을 입력하세요." };
+
+  const admin = createAdminSupabaseClient();
+  const { data: existing } = await admin
+    .from("institutions")
+    .select("id")
+    .eq("name", trimmed)
+    .maybeSingle();
+  if (existing) return { ok: true, id: existing.id as string, existed: true };
+
+  const { data, error } = await admin
+    .from("institutions")
+    .insert({ name: trimmed, type: "dental" })
+    .select("id")
+    .single();
+  if (error || !data) {
+    return { ok: false, message: "기관 생성에 실패했습니다." };
+  }
+  return { ok: true, id: data.id as string, existed: false };
+}
+
 // ── US3: 슈퍼 어드민 — 워크스페이스 실험실(Engine Lab) 토글 ──────────────
 export async function setInstitutionLab(
   institutionId: string,
