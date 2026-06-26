@@ -16,9 +16,8 @@ import type { ActivityLogEntry } from "@/app/actions/activity";
 import type { Participant } from "@/lib/types/database";
 import { ChairPatientSearch } from "@/components/chair/chair-patient-search";
 import { AudioReplayButton } from "@/components/chair/audio-replay-button";
-import { PrescriptionPicker } from "@/components/chair/prescription-picker";
-import { ParticipantPicker } from "@/components/chair/participant-picker";
-import { RichTextEditor, type RichTextEditorHandle } from "@/components/rich-text-editor";
+import { ConsultationEditor } from "@/components/chair/consultation-editor";
+import { type RichTextEditorHandle } from "@/components/rich-text-editor";
 
 /**
  * 홈 통합 피드 — '미연결 기록'(연결 대기, 액션 카드)과 '최근 활동'(연결 완료 로그)을
@@ -269,50 +268,22 @@ export function HomeFeed({
 
         {isEditing ? (
           <div className="flex flex-col gap-3">
-            <RichTextEditor
+            <ConsultationEditor
               ref={editorRef}
-              value={editContent}
-              onChange={setEditContent}
+              content={editContent}
+              onContentChange={setEditContent}
               placeholder="상담 내용을 수정하세요…"
+              prescriptions={editPrescriptions}
+              onPrescriptionsChange={setEditPrescriptions}
+              chairs={chairs}
+              chairId={editChairId}
+              onChairChange={setEditChairId}
+              members={members}
+              recent={recent}
+              me={me}
+              participants={editParticipants}
+              onParticipantsChange={setEditParticipants}
             />
-
-            {/* 체어 변경 */}
-            <div className="space-y-1.5">
-              <p className="text-xs font-medium text-slate-500">체어</p>
-              <div className="flex flex-wrap gap-1.5">
-                {chairs.map((c) => {
-                  const active = editChairId === c.id;
-                  return (
-                    <button
-                      key={c.id}
-                      type="button"
-                      onClick={() => setEditChairId(c.id)}
-                      className={`rounded-lg px-3 py-1.5 text-xs font-medium transition ${
-                        active
-                          ? "bg-sky-600 text-white shadow-sm"
-                          : "border border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
-                      }`}
-                    >
-                      {c.name}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-
-            {/* 참여자 변경 */}
-            <div className="space-y-1.5">
-              <p className="text-xs font-medium text-slate-500">참여자</p>
-              <ParticipantPicker
-                members={members}
-                recent={recent}
-                me={me}
-                value={editParticipants}
-                onChange={setEditParticipants}
-              />
-            </div>
-
-            <PrescriptionPicker value={editPrescriptions} onChange={setEditPrescriptions} />
             <div className="flex flex-wrap gap-2">
               <button
                 type="button"
