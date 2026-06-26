@@ -164,6 +164,10 @@ export async function updateChairRecordContent(params: {
   consultationId: string;
   content: string;
   prescriptions?: string[];
+  /** 체어 변경(선택) — 미지정 시 기존 체어 유지. */
+  chairId?: string;
+  /** 참여자 변경(선택) — 미지정 시 기존 참여자 유지. */
+  participants?: { id: string; name: string; role: string | null }[];
 }): Promise<UpdateChairRecordContentResult> {
   const supabase = await createServerSupabaseClient();
   const institutionId = await getMyInstitutionId();
@@ -187,16 +191,35 @@ export async function updateChairRecordContent(params: {
 
   const sanitized = sanitizeRichHtml(ensureHtml(params.content));
 
+  const update: Record<string, unknown> = {
+    content: sanitized,
+    prescriptions: params.prescriptions ?? [],
+  };
+
+  // 체어 변경 시 해당 기관 소속인지 검증(타 기관 체어로 이동 차단)
+  if (params.chairId && params.chairId !== existing.chair_id) {
+    const { data: chair } = await supabase
+      .from("chairs")
+      .select("id")
+      .eq("id", params.chairId)
+      .eq("institution_id", institutionId)
+      .maybeSingle();
+    if (!chair) return { ok: false, message: "유효하지 않은 체어입니다." };
+    update.chair_id = params.chairId;
+  }
+
+  if (params.participants) update.participants = params.participants;
+
   const { error } = await supabase
     .from("consultation")
-    .update({ content: sanitized, prescriptions: params.prescriptions ?? [] })
+    .update(update)
     .eq("id", params.consultationId);
 
   if (error) return { ok: false, message: "기록 수정에 실패했습니다." };
 
   await supabase.from("chair_audit_logs").insert({
     institution_id: institutionId,
-    chair_id: existing.chair_id,
+    chair_id: params.chairId ?? existing.chair_id,
     consultation_id: params.consultationId,
     event_type: "record_edited",
     actor_user_id: user.id,
@@ -214,6 +237,8 @@ export type AllUnlinkedRecord = {
   created_at: string;
   chair_id: string;
   prescriptions: string[] | null;
+  /** 상담 참여자 스냅샷 — 편집 시 수정 가능. */
+  participants: Participant[];
   /** 음성 원본 보관 여부(spec 009) — 재청취 버튼 노출 게이트. */
   has_audio: boolean;
 };
@@ -225,7 +250,7 @@ export async function getAllUnlinkedRecords(): Promise<AllUnlinkedRecord[]> {
 
   const { data } = await supabase
     .from("consultation")
-    .select("id, content, created_at, chair_id, prescriptions, audio_path")
+    .select("id, content, created_at, chair_id, prescriptions, participants, audio_path")
     .eq("institution_id", institutionId)
     .is("patient_id", null)
     .not("chair_id", "is", null)
@@ -237,6 +262,7 @@ export async function getAllUnlinkedRecords(): Promise<AllUnlinkedRecord[]> {
     created_at: r.created_at as string,
     chair_id: r.chair_id as string,
     prescriptions: r.prescriptions as string[] | null,
+    participants: (r.participants as Participant[] | null) ?? [],
     has_audio: !!(r.audio_path as string | null),
   }));
 }
