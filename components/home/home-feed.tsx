@@ -7,14 +7,17 @@ import { useChairContext } from "@/components/chair/chair-provider";
 import { CopyAllButton } from "@/components/copy-all-button";
 import {
   getAllUnlinkedRecords,
+  getRecentParticipants,
   deleteChairRecord,
   updateChairRecordContent,
   type AllUnlinkedRecord,
 } from "@/app/actions/chairs";
 import type { ActivityLogEntry } from "@/app/actions/activity";
+import type { Participant } from "@/lib/types/database";
 import { ChairPatientSearch } from "@/components/chair/chair-patient-search";
 import { AudioReplayButton } from "@/components/chair/audio-replay-button";
 import { PrescriptionPicker } from "@/components/chair/prescription-picker";
+import { ParticipantPicker } from "@/components/chair/participant-picker";
 import { RichTextEditor, type RichTextEditorHandle } from "@/components/rich-text-editor";
 
 /**
@@ -29,7 +32,7 @@ export function HomeFeed({
   initialRecords: AllUnlinkedRecord[];
   logs: ActivityLogEntry[];
 }) {
-  const { chairs, openOverlay, refreshUnlinkedCount } = useChairContext();
+  const { chairs, members, me, openOverlay, refreshUnlinkedCount } = useChairContext();
   const router = useRouter();
 
   const [records, setRecords] = useState<AllUnlinkedRecord[]>(initialRecords);
@@ -44,6 +47,9 @@ export function HomeFeed({
   const [viewingId, setViewingId] = useState<string | null>(null);
   const [editContent, setEditContent] = useState("");
   const [editPrescriptions, setEditPrescriptions] = useState<string[]>([]);
+  const [editChairId, setEditChairId] = useState<string>("");
+  const [editParticipants, setEditParticipants] = useState<Participant[]>([]);
+  const [recent, setRecent] = useState<Participant[]>([]);
   const [msg, setMsg] = useState("");
   const [isPending, startTransition] = useTransition();
   const editorRef = useRef<RichTextEditorHandle>(null);
@@ -52,6 +58,11 @@ export function HomeFeed({
   useEffect(() => {
     setRecords(initialRecords);
   }, [initialRecords]);
+
+  // 참여자 피커 "최근 함께한 사람" 후보 — 읽기 전용·비차단.
+  useEffect(() => {
+    getRecentParticipants().then(setRecent).catch(() => {});
+  }, []);
 
   const reload = async () => {
     const data = await getAllUnlinkedRecords();
@@ -71,6 +82,8 @@ export function HomeFeed({
     setEditingId(rec.id);
     setEditContent(rec.content);
     setEditPrescriptions(rec.prescriptions ?? []);
+    setEditChairId(rec.chair_id);
+    setEditParticipants(rec.participants ?? []);
     setMsg("");
     setLinkingId(null);
     setDeleteConfirmId(null);
@@ -83,6 +96,8 @@ export function HomeFeed({
         consultationId: rec.id,
         content: editContent,
         prescriptions: editPrescriptions,
+        chairId: editChairId || undefined,
+        participants: editParticipants,
       });
       if (result.ok) {
         await reload();
@@ -100,6 +115,8 @@ export function HomeFeed({
         consultationId: rec.id,
         content: editContent,
         prescriptions: editPrescriptions,
+        chairId: editChairId || undefined,
+        participants: editParticipants,
       });
       if (result.ok) {
         await reload();
@@ -237,6 +254,12 @@ export function HomeFeed({
             </span>
             {chairName(rec.chair_id)}
           </span>
+          {rec.participants.length > 0 && (
+            <span className="inline-flex items-center gap-1 text-slate-400">
+              <PersonIcon className="size-3.5" />
+              {rec.participants.map((p) => p.name).join(", ")}
+            </span>
+          )}
           <span className="ml-auto flex items-center gap-1.5 text-slate-400">
             <span>{formatDate(rec.created_at)}</span>
             <span className="text-slate-300">·</span>
@@ -252,6 +275,43 @@ export function HomeFeed({
               onChange={setEditContent}
               placeholder="상담 내용을 수정하세요…"
             />
+
+            {/* 체어 변경 */}
+            <div className="space-y-1.5">
+              <p className="text-xs font-medium text-slate-500">체어</p>
+              <div className="flex flex-wrap gap-1.5">
+                {chairs.map((c) => {
+                  const active = editChairId === c.id;
+                  return (
+                    <button
+                      key={c.id}
+                      type="button"
+                      onClick={() => setEditChairId(c.id)}
+                      className={`rounded-lg px-3 py-1.5 text-xs font-medium transition ${
+                        active
+                          ? "bg-sky-600 text-white shadow-sm"
+                          : "border border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
+                      }`}
+                    >
+                      {c.name}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* 참여자 변경 */}
+            <div className="space-y-1.5">
+              <p className="text-xs font-medium text-slate-500">참여자</p>
+              <ParticipantPicker
+                members={members}
+                recent={recent}
+                me={me}
+                value={editParticipants}
+                onChange={setEditParticipants}
+              />
+            </div>
+
             <PrescriptionPicker value={editPrescriptions} onChange={setEditPrescriptions} />
             <div className="flex flex-wrap gap-2">
               <button

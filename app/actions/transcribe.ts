@@ -59,6 +59,7 @@ function isKorean(code?: string): boolean {
 const SUMMARY_PROMPT = (transcript: string) =>
   `다음은 치과 상담 녹취록입니다. 핵심 내용을 자연스러운 상담 기록 형태로 요약해주세요.
 환자 증상, 진찰 소견, 처치 내용, 처방/권고 사항을 중심으로 간결하게 작성하되, 원문에 없는 내용은 추가하지 마세요.
+출력은 반드시 다음 제목 줄로 시작하세요: "## 치과 상담 기록 요약 - Carelog"
 
 [녹취록]
 ${transcript}`;
