@@ -147,7 +147,7 @@ supabase/
 app/api/ 라우트 핸들러:
 ```
 app/api/
-├── auth/sso/route.ts              # EO SSO 진입 — JWT 검증 → 세션 생성 + eo_employee_id·display_name 저장 + EO lazy 동기화
+├── auth/sso/route.ts              # EO SSO 진입 — JWT 검증 → 세션 생성 + institutions UPSERT(완전자동: EO 자체발급 id 첫 SSO 시 {id,name} 생성, 있으면 보존) + institution_members(eo_employee_id·display_name)
 ├── cron/sync-master/route.ts      # Vercel Cron(10분) — 전 기관 syncEoMaster 폴링(미연동 404 스킵)
 └── health/route.ts                # 헬스체크 (edge)
 ```
