@@ -29,6 +29,18 @@ export function InstitutionList({ institutions }: InstitutionListProps) {
     Object.fromEntries(institutions.map((i) => [i.id, i.lab_enabled])),
   );
   const [loadingLab, setLoadingLab] = useState<string | null>(null);
+  // 기관 ID 복사 피드백(EO SSO 연동용 institution_id를 슈퍼어드민이 바로 확인·복사)
+  const [copiedId, setCopiedId] = useState<string | null>(null);
+
+  async function handleCopyId(institutionId: string) {
+    try {
+      await navigator.clipboard.writeText(institutionId);
+      setCopiedId(institutionId);
+      setTimeout(() => setCopiedId((c) => (c === institutionId ? null : c)), 1500);
+    } catch {
+      setError("복사에 실패했습니다. 수동으로 선택해 복사하세요.");
+    }
+  }
 
   async function handleLabToggle(institutionId: string, current: boolean) {
     if (loadingLab) return;
@@ -122,6 +134,21 @@ export function InstitutionList({ institutions }: InstitutionListProps) {
 
           {expandedId === inst.id && (
             <div className="border-t border-slate-100">
+              {/* 기관 ID — EO SSO 연동(JWT institution_id) 선발급용. 슈퍼어드민만 보는 콘솔. */}
+              <div className="flex items-center justify-between gap-3 border-b border-slate-100 bg-slate-50/60 px-5 py-3">
+                <div className="min-w-0">
+                  <p className="text-xs font-semibold text-slate-700">기관 ID (EO 연동용)</p>
+                  <code className="mt-0.5 block truncate font-mono text-xs text-slate-500">
+                    {inst.id}
+                  </code>
+                </div>
+                <button
+                  onClick={() => handleCopyId(inst.id)}
+                  className="shrink-0 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-600 transition hover:bg-slate-50"
+                >
+                  {copiedId === inst.id ? "복사됨 ✓" : "복사"}
+                </button>
+              </div>
               {/* 워크스페이스 실험실 토글 — 녹음 엔진 picker 노출 여부 */}
               <div className="flex items-center justify-between gap-3 border-b border-slate-100 bg-violet-50/40 px-5 py-3">
                 <div>
