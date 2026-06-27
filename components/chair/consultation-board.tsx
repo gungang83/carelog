@@ -267,6 +267,24 @@ function BoardContent({
     // 저장 후 음성 보관(spec 009) 업로드를 위해 원본 보존.
     audioBlobRef.current = blob;
 
+    // 전사 중 크래시(모바일 OOM·함수 타임아웃 등)로 유실되지 않도록, 무거운 전사를
+    // 시작하기 전에 음성+작성물을 IndexedDB에 즉시 1회 저장한다(1초 디바운스 자동저장을
+    // 기다리지 않음). 재진입 시 복구 배너 → applyRecover가 음성을 재전사한다.
+    void saveDraft({
+      content: editText,
+      prescriptions,
+      participants,
+      selectedChair,
+      audioBlob: blob,
+      savedAt: Date.now(),
+    });
+
+    transcribeBlob(blob, secs);
+  };
+
+  // 음성 blob 전사(녹음 종료·복구 공용). secs/sizeKB는 실패 메시지에만 쓰인다.
+  const transcribeBlob = (blob: Blob, secs: number) => {
+    const sizeKB = Math.round((blob.size / 1024) * 10) / 10;
     startTransition(async () => {
       const formData = new FormData();
       formData.append("audio", blob, "recording.webm");
@@ -335,15 +353,21 @@ function BoardContent({
   // 이전 세션 임시본 복구 — 본문(HTML)·처방·참여자·체어·녹음 음성을 되살린다.
   const applyRecover = () => {
     if (!recoverable) return;
-    setEditText(recoverable.content);
-    editorRef.current?.setHTML(recoverable.content);
-    setPrescriptions(recoverable.prescriptions ?? []);
-    setParticipants(recoverable.participants ?? []);
-    setSelectedChair(recoverable.selectedChair ?? null);
-    audioBlobRef.current = recoverable.audioBlob ?? null;
+    const rec = recoverable;
+    setEditText(rec.content);
+    editorRef.current?.setHTML(rec.content);
+    setPrescriptions(rec.prescriptions ?? []);
+    setParticipants(rec.participants ?? []);
+    setSelectedChair(rec.selectedChair ?? null);
+    audioBlobRef.current = rec.audioBlob ?? null;
     // 녹음이 끝난 상태로 복구 → status를 has_records로 전환(저장 가능 상태).
     setTranscriptionResult(DRAFT_CHAIR_KEY, "");
     setRecoverable(null);
+    // 전사 완료 전에 크래시 → 본문은 비고 음성만 남은 경우: 복구한 음성을 재전사한다
+    // (그러지 않으면 음성은 살아도 본문이 없어 저장할 수 없다).
+    if (!rec.content.trim() && rec.audioBlob) {
+      transcribeBlob(rec.audioBlob, 0);
+    }
   };
 
   const dismissRecover = () => {

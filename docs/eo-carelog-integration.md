@@ -116,3 +116,49 @@ Carelog는 자체적으로 다음을 보유한다:
 3. 확정 후 `specs/007-eo-bridge-feedback/` 스펙 착수(spec→plan→tasks): 진료 후 피드백 파일럿 + 환자 단계적 가입(#7·#8) 연결.
 
 > ⚠️ 본 세션 한계: `../eo` 미클론 + GitHub MCP 범위 `gungang83/carelog` 한정 → EO 암호화·RRN 처리(지시1)·EO 기존 기획 대조(지시2)는 **EO 소스 접근 확보 후** 수행. 현재 문서는 카드224 회신 범위까지만 반영(추측 배제).
+
+## 7. EO 소스 교차검증 — SSO 토큰 발급 계약 (카드#638)
+
+> 검증: 다온 · 2026-06-27 · EO 레포 `gungang83/EO@04566f46`(main) 읽기전용 교차검증(단방향 불변).
+> 대상: carelog 측 구현(`app/api/auth/sso/route.ts`, main `01e0d75`)이 기대하는 토큰 계약을
+> EO가 실제로 그대로 발급하는지 EO 소스에서 확인.
+> 근거 파일(EO): `src/app/api/carelog/sso-token/route.ts`(발급) · `src/lib/integrations.ts`(institution_id 조회) ·
+> `src/app/api/superadmin/integrations/route.ts`(institution_id 자체발급/보존) ·
+> `supabase/migrations/20260625_spec082_integrations.sql`(저장 스키마).
+
+**결론: 3개 확인 항목 전부 일치(불일치·누락 없음).** EO #621(자체발급) 코드는 배포 main에 반영됨.
+
+### ① 토큰 클레임·서명 일치 (EO `sign Jwt` → carelog `verifyJwt`)
+| carelog 기대 | EO 발급 클레임(`sso-token/route.ts`) | 출처 | 일치 |
+|---|---|---|---|
+| 서명 HMAC SHA-256 | `alg:"HS256"`, `crypto.subtle.sign("HMAC", SHA-256)` | — | ✅ |
+| secret = `CARELOG_SSO_SECRET` | `process.env.CARELOG_SSO_SECRET`(양측 `stripBom`) | env | ✅ |
+| `exp` 만료 거부(≈60s) | `exp: now + 60`, `iat: now` | — | ✅ |
+| `email` | `email` | 세션 | ✅ |
+| `institution_id` | `institution_id` | `getActiveExternalId(ws,"carelog")` | ✅ |
+| `institution_name`(신규) | `institution_name: ws?.name ?? null` | `workspaces.name` | ✅ |
+| `employee_id` | `employee_id: emp?.id ?? null` | `employees.id` | ✅ |
+| `name` | `name: emp?.name ?? session.user.name ?? email` | `employees.name` | ✅ |
+| `account_type` | `account_type: emp ? "personal" : "shared"` | 직원 존재 여부 | ✅ |
+| `eo_role` | `eo_role: emp?.eo_role ?? "staff"` | `employees.eo_role` | ✅ |
+
+- 인코딩 호환: EO는 base64url(+→-, /→_, `=` 제거), carelog `verifyJwt`는 역변환 후 검증 → 호환.
+- EO가 추가로 싣는 `workspace_id`·`scope`는 carelog가 구조분해에서 무시 → 무해.
+
+### ② institution_id 자체발급·저장 위치 (#621 테오 범위)
+- **발급**: `superadmin/integrations` POST에서 carelog provider 연결 시 미입력이면
+  `extId = crypto.randomUUID()` (EO 자체발급). 그 외 provider는 `externalId` 입력 필수.
+- **보존**: 기존 행이 있으면 기존 `external_id` 고정(예미안 등 기존 기관 **재발급 금지**).
+  같은 external_id가 타 워크스페이스에 활성이면 409(1:1 정합).
+- **저장**: `workspace_integrations.external_id`(= institution_id), `unique(workspace_id, provider_id)`.
+  옛 `workspace_carelog_links.institution_id` → spec-082에서 백필(비트 동일).
+- **발급 시점**: 슈퍼어드민 워크스페이스↔carelog 연결 시. SSO는 이 값을 읽어 실음.
+
+### ③ institution_name 탑재 (carelog 자동생성 기관명 출처)
+- EO가 `institution_name`을 **실제로 싣는다**: 값 = `workspaces.name`(EO 워크스페이스명 = 기관명).
+- 첫 SSO 시 carelog `institutions` UPSERT의 name으로 사용됨. null이면 carelog가 "신규 워크스페이스" 폴백.
+
+### 발견된 갱신 필요(EO 측 — 쓰기 금지, 보고만)
+- EO 정본 계약서 `specs/016-carelog-integration/contracts/eo-gateway-and-sso.md` §2 토큰 클레임 예시에
+  `institution_name`이 누락(카드#226 기준 작성, #621 이전). **실제 EO 코드는 발급함** → 계약서가 구현보다 뒤처짐.
+  carelog 동작과는 무관(이미 일치) → EO 측에서 정본 문서만 #621 반영 권장(헤임달 정합 검증 대상).

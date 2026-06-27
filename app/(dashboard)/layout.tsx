@@ -1,4 +1,7 @@
-export const maxDuration = 120;
+// 긴 상담 전사(Whisper+요약)는 batch라 길이에 비례해 시간이 든다. 18분 녹음 ≈
+// 전사 30~110s + 요약 → 기본 타임아웃(~10s)이면 함수가 죽어 "This page couldn't load".
+// Pro 상한(300s)까지 올려 긴 상담도 완료되게 한다(spec 006 §5 결정의 실효화).
+export const maxDuration = 300;
 
 import { redirect } from "next/navigation";
 import { Header } from "@/components/layout/header";

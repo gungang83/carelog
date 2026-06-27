@@ -2,7 +2,7 @@
 
 > **제품 정체성(SSOT)**: Carelog는 **환자 전용 서비스가 아니다.** 의료기관 상담 기록(B2B) ↔ 환자 평생 보관·생애주기 건강관리(B2C)를 잇는 **연결고리**. 상세: [docs/product-vision.md](docs/product-vision.md)
 
-**최종 업데이트**: 2026-06-26 (세션 44 — 미연결 기록 체어·참여자 편집 + 요약 제목 브랜딩) · 2026-06-25 (세션 43 — 녹음 엔진 picker UX: 홈 히어로 이동·디자인 정리·상담 카피) · 2026-06-24 (세션 42 — C-07 + 오늘의 치과 미팅 기획 + 녹음 엔진 실험실 v1)
+**최종 업데이트**: 2026-06-27 (세션 45 — 긴 상담 녹음 전사 유실 버그 fix: maxDuration page레벨·비트레이트↓·복구 재전사) · 2026-06-26 (세션 44 — 미연결 기록 체어·참여자 편집 + 요약 제목 브랜딩) · 2026-06-25 (세션 43 — 녹음 엔진 picker UX: 홈 히어로 이동·디자인 정리·상담 카피) · 2026-06-24 (세션 42 — C-07 + 오늘의 치과 미팅 기획 + 녹음 엔진 실험실 v1)
 **현재 버전**: main 브랜치
 
 ---
@@ -59,6 +59,22 @@
 | 이미지 줌/팬 | ✅ 완료 | 보기 라이트박스(`ZoomableImage`) + 주석 화면(CSS transform 줌·팬). 휠/버튼/핀치/드래그/더블클릭, 외부 라이브러리 없음 |
 | EO 마스터 게이트웨이 캐시 | ✅ **라이브** (2026-06-10) | EO 직원 마스터를 `clinic_members`에 캐시(`source='eo'`). `lib/eo/gateway.ts`+`sync-master.ts`, Vercel Cron `/api/cron/sync-master`(10분). 수동분 보호. 예미안(0e4e85d6) 직원 30명 동기화 확인 |
 | EO SSO 작성자 귀속 | ✅ **라이브** (2026-06-10) | `/api/auth/sso` 확장 클레임 수용 → `institution_members.eo_employee_id`·`display_name` 저장. 상담 저장 시 `author_employee_id`·`author_name` 자동 기록 |
+
+---
+
+## 2026-06-27 세션 45 (fix) — 긴 상담 녹음 전사 유실 버그 (서범기 18분 케이스)
+
+서범기(오늘의 치과)가 **모바일에서 18분 녹음 → 종료 → "10초쯤 요약하다 This page couldn't load" → 리로드 시 자료 소실**. 코드 대조로 원인 확정·완화 배선.
+
+| 영역 | 내용 |
+|---|---|
+| 근본 원인 | 전사 서버액션이 **batch(통짜 blob)** + Vercel **기본 타임아웃(~10s)에서 함수 강제 종료**. `maxDuration`이 `layout.tsx`에만 있었는데, **Next 16 문서상 Server Action 타임아웃은 page 레벨에 둬야 적용**(`route-segment-config/maxDuration.md` "set at the page level"). 즉 layout의 120은 액션에 무효였음 → spec 006 §5 결정이 실효되지 않은 상태 |
+| 가중 원인 | `bodySizeLimit:10mb` + MediaRecorder 비트레이트 미지정(기본 ~128kbps) → 18분이 10MB 근접/초과 → 업로드 거부·모바일 메모리 압박(별개 실패 경로) |
+| 수정 ① 타임아웃 | `app/(dashboard)/page.tsx`에 `export const maxDuration = 300` 추가(액션 실효) + `layout.tsx` 120→300 |
+| 수정 ② 용량 | MediaRecorder `audioBitsPerSecond: 32000`(~0.25MB/분, spec 009 결정 구현) — `chair-provider.tsx`·`voice-recorder.tsx`. 18분≈4.5MB. `next.config.ts` `bodySizeLimit` 10mb→25mb(Whisper 자체 상한에 정렬) |
+| 수정 ③ 유실 안전망 | `consultation-board.tsx`: 종료 직후 전사 **시작 전** IndexedDB 즉시 1회 저장(1초 디바운스 대기 X). 복구 시 본문이 비고 음성만 남았으면 `applyRecover`가 **음성 재전사**(`transcribeBlob` 공용화) → 크래시해도 음성+본문 복구 가능 |
+| 구조적 후속 | 긴 상담의 진짜 해법은 **스트리밍/청크 전사**(o1 동시통역 Level 2와 합류) — 현재 코드엔 실시간 통역 없음(다국어=사후 batch뿐). 별도 작업으로 분리 |
+| 검증 | `npm run build` TypeScript·compile ✅ (정적 prerender는 컨테이너에 Supabase env 없어 /admin에서만 실패 — 코드 무관) |
 
 ---
 
