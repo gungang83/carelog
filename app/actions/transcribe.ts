@@ -64,6 +64,61 @@ const SUMMARY_PROMPT = (transcript: string) =>
 [녹취록]
 ${transcript}`;
 
+// 상세 요약(detailed) — 섹션 구조화. 정보 없으면 "기록 없음"으로 두고 추측 금지.
+const DETAILED_SUMMARY_PROMPT = (transcript: string) =>
+  `다음은 치과 상담 녹취록입니다. 아래 형식의 자세한 상담 기록으로 정리하세요.
+원문에 없는 내용은 추가하지 말고, 해당 정보가 없으면 "기록 없음"으로 두세요.
+반드시 다음 제목 줄로 시작하세요: "## 치과 상담 기록 (상세) - Carelog"
+
+### 환자 호소·증상
+### 진찰 소견
+### 처치 내용
+### 처방·복약 안내
+### 다음 방문·권고
+
+[녹취록]
+${transcript}`;
+
+// 용어 보정(dental) — 치과 용어/치아번호 교정 후 요약. [요약] 마커만 파싱.
+const DENTAL_PROMPT = (transcript: string) =>
+  `다음은 치과 상담 녹취록입니다(음성 인식 결과라 치과 전문용어가 잘못 적혔을 수 있습니다).
+먼저 치과 용어(크라운·인레이·온레이·크랙·신경치료·임플란트·스케일링·보철·교정 등)와
+치아 번호(예: #16, 6번 어금니)를 문맥에 맞게 교정한 뒤, 그 내용으로 상담 기록을 요약하세요.
+원문에 없는 내용은 추가하지 마세요. 반드시 아래 형식으로만 출력하세요.
+
+[요약]
+## 치과 상담 기록 요약 - Carelog
+(환자 증상·진찰 소견·처치·처방/권고 중심으로 간결하게)
+
+[녹취록]
+${transcript}`;
+
+// 한국어 전사 공용 헬퍼(basic 외 신규 모드들이 재사용). 실패 메시지 일원화.
+async function transcribeKo(
+  audioFile: File,
+  openai: OpenAI,
+): Promise<{ ok: true; text: string } | { ok: false; message: string }> {
+  try {
+    const response = await openai.audio.transcriptions.create({
+      file: audioFile,
+      model: "whisper-1",
+      language: "ko",
+      response_format: "text",
+    });
+    const text =
+      typeof response === "string" ? response : (response as { text: string }).text;
+    if (!text?.trim()) {
+      return { ok: false, message: "음성을 인식하지 못했습니다. 다시 녹음해 주세요." };
+    }
+    return { ok: true, text };
+  } catch (e) {
+    return {
+      ok: false,
+      message: `음성 인식 실패: ${e instanceof Error ? e.message : "알 수 없는 오류"}`,
+    };
+  }
+}
+
 // ─── basic 엔진 ───────────────────────────────────────────────────────────────
 async function runBasic(
   audioFile: File,
@@ -109,6 +164,91 @@ async function runBasic(
       engine: "basic",
       label: "기본모델",
       transcription,
+      summary,
+      insertText: summary,
+    },
+  };
+}
+
+// ─── quick 엔진 (전사만, 요약 생략) ──────────────────────────────────────────
+async function runQuick(
+  audioFile: File,
+  openai: OpenAI,
+): Promise<{ ok: true; run: EngineRun } | { ok: false; message: string }> {
+  const t = await transcribeKo(audioFile, openai);
+  if (!t.ok) return t;
+  return {
+    ok: true,
+    run: {
+      engine: "quick",
+      label: "빠른 메모",
+      transcription: t.text,
+      summary: t.text,
+      insertText: t.text,
+    },
+  };
+}
+
+// ─── detailed 엔진 (구조화 상세 요약) ────────────────────────────────────────
+async function runDetailed(
+  audioFile: File,
+  openai: OpenAI,
+  anthropic: Anthropic,
+): Promise<{ ok: true; run: EngineRun } | { ok: false; message: string }> {
+  const t = await transcribeKo(audioFile, openai);
+  if (!t.ok) return t;
+  let summary = t.text;
+  try {
+    const message = await anthropic.messages.create({
+      model: "claude-sonnet-4-6",
+      max_tokens: 1500,
+      messages: [{ role: "user", content: DETAILED_SUMMARY_PROMPT(t.text) }],
+    });
+    const block = message.content[0];
+    summary = block.type === "text" ? block.text : t.text;
+  } catch {
+    summary = t.text;
+  }
+  return {
+    ok: true,
+    run: {
+      engine: "detailed",
+      label: "상세 요약",
+      transcription: t.text,
+      summary,
+      insertText: summary,
+    },
+  };
+}
+
+// ─── dental 엔진 (치과 용어 보정 + 요약) ─────────────────────────────────────
+async function runDental(
+  audioFile: File,
+  openai: OpenAI,
+  anthropic: Anthropic,
+): Promise<{ ok: true; run: EngineRun } | { ok: false; message: string }> {
+  const t = await transcribeKo(audioFile, openai);
+  if (!t.ok) return t;
+  let summary = t.text;
+  try {
+    const message = await anthropic.messages.create({
+      model: "claude-sonnet-4-6",
+      max_tokens: 1500,
+      messages: [{ role: "user", content: DENTAL_PROMPT(t.text) }],
+    });
+    const block = message.content[0];
+    const text = block.type === "text" ? block.text : "";
+    const sMatch = text.match(/\[요약\]\s*([\s\S]*)$/);
+    summary = sMatch?.[1]?.trim() || text.trim() || t.text;
+  } catch {
+    summary = t.text;
+  }
+  return {
+    ok: true,
+    run: {
+      engine: "dental",
+      label: "용어 보정",
+      transcription: t.text,
       summary,
       insertText: summary,
     },
@@ -208,9 +348,18 @@ async function runEngine(
   openai: OpenAI,
   anthropic: Anthropic,
 ) {
-  return engine === "multilingual"
-    ? runMultilingual(audioFile, openai, anthropic)
-    : runBasic(audioFile, openai, anthropic);
+  switch (engine) {
+    case "multilingual":
+      return runMultilingual(audioFile, openai, anthropic);
+    case "quick":
+      return runQuick(audioFile, openai);
+    case "detailed":
+      return runDetailed(audioFile, openai, anthropic);
+    case "dental":
+      return runDental(audioFile, openai, anthropic);
+    default:
+      return runBasic(audioFile, openai, anthropic);
+  }
 }
 
 // ─── 엔진 전사(실험실) — basic/multilingual/comparison ───────────────────────

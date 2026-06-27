@@ -25,7 +25,8 @@ export function EngineSelector({
           실험실
         </span>
       </div>
-      <div className="mt-2.5 inline-flex divide-x divide-slate-200 overflow-hidden rounded-xl border border-slate-200 bg-white">
+      {/* 모드가 늘어 가로 1줄을 넘으므로 줄바꿈되는 pill 형태로(모바일 안전). */}
+      <div className="mt-2.5 flex flex-wrap gap-1.5">
         {LAB_ENGINE_OPTIONS.map((o) => {
           const active = engine === o.value;
           return (
@@ -35,10 +36,10 @@ export function EngineSelector({
               onClick={() => onChange(o.value)}
               title={o.desc}
               aria-pressed={active}
-              className={`px-4 py-2 text-sm font-medium transition ${
+              className={`rounded-lg border px-3 py-1.5 text-sm font-medium transition ${
                 active
-                  ? "bg-sky-600 text-white"
-                  : "text-slate-600 hover:bg-slate-50"
+                  ? "border-sky-600 bg-sky-600 text-white"
+                  : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
               }`}
             >
               {o.label}
