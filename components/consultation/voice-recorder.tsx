@@ -25,7 +25,11 @@ export function VoiceRecorder({ onResult }: VoiceRecorderProps) {
       const mimeType = MediaRecorder.isTypeSupported("audio/webm;codecs=opus")
         ? "audio/webm;codecs=opus"
         : "audio/webm";
-      const recorder = new MediaRecorder(stream, { mimeType });
+      // 음성용 저비트레이트(~32kbps ≈ 0.25MB/분) — 긴 녹음 용량·업로드 안정화(spec 009).
+      const recorder = new MediaRecorder(stream, {
+        mimeType,
+        audioBitsPerSecond: 32000,
+      });
       chunksRef.current = [];
       recorder.ondataavailable = (e) => {
         if (e.data.size > 0) chunksRef.current.push(e.data);

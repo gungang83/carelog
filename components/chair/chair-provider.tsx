@@ -291,7 +291,12 @@ export function ChairProvider({
         const mimeType = MediaRecorder.isTypeSupported("audio/webm;codecs=opus")
           ? "audio/webm;codecs=opus"
           : "audio/webm";
-        const recorder = new MediaRecorder(stream, { mimeType });
+        // 음성용 저비트레이트(~32kbps ≈ 0.25MB/분). 긴 상담(예 18분≈4.5MB)도
+        // 서버액션 bodySizeLimit·메모리·업로드 시간 안에 들어오게 한다(spec 009 결정).
+        const recorder = new MediaRecorder(stream, {
+          mimeType,
+          audioBitsPerSecond: 32000,
+        });
         const refs = getMediaRefs(chairId);
         refs.chunks = [];
         refs.mediaRecorder = recorder;

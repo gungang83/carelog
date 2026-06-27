@@ -1,3 +1,7 @@
+// 상담 전사 서버액션은 홈(이 라우트)에서 호출된다 → 함수 타임아웃을 라우트에도
+// 명시(layout과 동일)해 긴 상담 전사가 기본 타임아웃에 끊기지 않게 한다.
+export const maxDuration = 300;
+
 import { PatientHome } from "@/components/patient-home";
 import { PushNotificationBanner } from "@/components/push-notification-banner";
 import { ConsultHero } from "@/components/chair/consult-hero";
