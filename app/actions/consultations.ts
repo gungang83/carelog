@@ -477,3 +477,109 @@ export async function getConsultationById(
     return { ok: false, message: e instanceof Error ? e.message : "상담 상세 조회에 실패했습니다." };
   }
 }
+
+// ─── 상담 기록 통합 검색·필터 (spec 011) ─────────────────────────────────────
+// 연결·미연결 상담을 함께 조회. 기관 격리·서버 권위. PII 평문 미노출(이름·차트만).
+export type SearchedConsultation = {
+  id: string;
+  content: string;
+  created_at: string;
+  linked_at: string | null;
+  chair_id: string | null;
+  patient_id: string | null;
+  patient_name: string | null;
+  chart_no: string | null;
+  status: string;
+  prescriptions: string[] | null;
+  has_audio: boolean;
+  sms_sent_at: string | null;
+};
+
+export type SearchConsultationsFilters = {
+  q?: string; // 본문 키워드
+  status?: "all" | "linked" | "unlinked";
+  chairId?: string;
+  patientId?: string;
+  from?: string; // ISO date
+  to?: string; // ISO date
+  sort?: "newest" | "oldest";
+  limit?: number;
+  offset?: number;
+};
+
+export async function searchConsultations(
+  filters: SearchConsultationsFilters = {},
+): Promise<
+  | { ok: true; rows: SearchedConsultation[]; hasMore: boolean }
+  | { ok: false; message: string }
+> {
+  try {
+    const institutionId = await getMyInstitutionId();
+    if (!institutionId) return { ok: false, message: "기관 정보를 찾을 수 없습니다." };
+
+    const limit = Math.min(Math.max(filters.limit ?? 30, 1), 100);
+    const offset = Math.max(filters.offset ?? 0, 0);
+    const ascending = filters.sort === "oldest";
+
+    const supabase = await createServerSupabaseClient();
+    let query = supabase
+      .from(consultationTable)
+      .select(
+        "id, content, created_at, linked_at, chair_id, patient_id, status, prescriptions, audio_path, sms_sent_at, patient:patient_id(name, chart_no)",
+      )
+      .eq("institution_id", institutionId);
+
+    if (filters.status === "linked") query = query.not("patient_id", "is", null);
+    else if (filters.status === "unlinked") query = query.is("patient_id", null);
+    if (filters.chairId) query = query.eq("chair_id", filters.chairId);
+    if (filters.patientId) query = query.eq("patient_id", filters.patientId);
+    if (filters.from) query = query.gte("created_at", filters.from);
+    if (filters.to) query = query.lte("created_at", filters.to);
+    if (filters.q && filters.q.trim()) {
+      // 본문 키워드(HTML 포함 best-effort). 태그 영향 줄이려 공백 보정은 클라이언트 표시에서.
+      query = query.ilike("content", `%${filters.q.trim()}%`);
+    }
+
+    const { data, error } = await query
+      .order("created_at", { ascending })
+      .range(offset, offset + limit); // limit+1 fetch로 hasMore 판정
+
+    if (error) return { ok: false, message: error.message };
+
+    const raw = (data ?? []) as unknown as Array<{
+      id: string;
+      content: string;
+      created_at: string;
+      linked_at: string | null;
+      chair_id: string | null;
+      patient_id: string | null;
+      status: string;
+      prescriptions: string[] | null;
+      audio_path: string | null;
+      sms_sent_at: string | null;
+      patient: { name: string | null; chart_no: string | null } | null;
+    }>;
+    const hasMore = raw.length > limit;
+    const rows: SearchedConsultation[] = raw.slice(0, limit).map((r) => ({
+      id: r.id,
+      content: r.content,
+      created_at: r.created_at,
+      linked_at: r.linked_at,
+      chair_id: r.chair_id,
+      patient_id: r.patient_id,
+      patient_name: r.patient?.name ?? null,
+      chart_no: r.patient?.chart_no ?? null,
+      status: r.status,
+      prescriptions: r.prescriptions,
+      has_audio: !!r.audio_path,
+      sms_sent_at: r.sms_sent_at,
+    }));
+
+    return { ok: true, rows, hasMore };
+  } catch (e) {
+    return {
+      ok: false,
+      message: e instanceof Error ? e.message : "상담 검색에 실패했습니다.",
+    };
+  }
+}

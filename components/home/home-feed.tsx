@@ -176,6 +176,12 @@ export function HomeFeed({
       {/* 헤더 + 토글 */}
       <div className="flex items-center gap-2">
         <h2 className="text-sm font-semibold text-slate-700">기록 · 활동</h2>
+        <Link
+          href="/records"
+          className="text-xs font-medium text-sky-600 hover:text-sky-700"
+        >
+          전체보기 · 검색
+        </Link>
         <div className="ml-auto flex gap-1.5">
           <FilterChip
             active={showUnlinked}
