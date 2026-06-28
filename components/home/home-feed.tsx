@@ -12,7 +12,11 @@ import {
   updateChairRecordContent,
   type AllUnlinkedRecord,
 } from "@/app/actions/chairs";
-import type { ActivityLogEntry } from "@/app/actions/activity";
+import {
+  searchConsultations,
+  deleteConsultation,
+  type SearchedConsultation,
+} from "@/app/actions/consultations";
 import type { Participant } from "@/lib/types/database";
 import { ChairPatientSearch } from "@/components/chair/chair-patient-search";
 import { AudioReplayButton } from "@/components/chair/audio-replay-button";
@@ -26,15 +30,16 @@ import { type RichTextEditorHandle } from "@/components/rich-text-editor";
  */
 export function HomeFeed({
   initialRecords,
-  logs,
+  linked,
 }: {
   initialRecords: AllUnlinkedRecord[];
-  logs: ActivityLogEntry[];
+  linked: SearchedConsultation[];
 }) {
   const { chairs, members, me, openOverlay, refreshUnlinkedCount } = useChairContext();
   const router = useRouter();
 
   const [records, setRecords] = useState<AllUnlinkedRecord[]>(initialRecords);
+  const [linkedRecords, setLinkedRecords] = useState<SearchedConsultation[]>(linked);
   const [showUnlinked, setShowUnlinked] = useState(true);
   const [showActivity, setShowActivity] = useState(true);
   const [expanded, setExpanded] = useState(false);
@@ -57,6 +62,9 @@ export function HomeFeed({
   useEffect(() => {
     setRecords(initialRecords);
   }, [initialRecords]);
+  useEffect(() => {
+    setLinkedRecords(linked);
+  }, [linked]);
 
   // 참여자 피커 "최근 함께한 사람" 후보 — 읽기 전용·비차단.
   useEffect(() => {
@@ -68,10 +76,21 @@ export function HomeFeed({
     setRecords(data);
   };
 
-  // 연결/삭제처럼 '활동' 쪽에도 영향을 주는 변경은 서버 재검증으로 양쪽을 동기화.
+  // 연결/삭제처럼 연결완료 쪽에도 영향을 주는 변경은 양쪽 목록을 다시 받아 동기화.
   const reloadAll = async () => {
     await reload();
+    const res = await searchConsultations({ status: "linked", limit: 50 });
+    if (res.ok) setLinkedRecords(res.rows);
     router.refresh();
+  };
+
+  // 연결완료 상담 삭제(연결 포함 삭제 — deleteChairRecord는 미연결만 가능).
+  const handleDeleteLinked = (id: string) => {
+    setDeleteConfirmId(null);
+    startTransition(async () => {
+      await deleteConsultation({ consultationId: id });
+      await reloadAll();
+    });
   };
 
   const chairName = (chairId: string) =>
@@ -146,7 +165,7 @@ export function HomeFeed({
   // ── 시간순 병합 ────────────────────────────────────────────────────────────
   type FeedItem =
     | { kind: "unlinked"; time: number; rec: AllUnlinkedRecord }
-    | { kind: "activity"; time: number; log: ActivityLogEntry };
+    | { kind: "linked"; time: number; rec: SearchedConsultation };
 
   const allItems: FeedItem[] = [
     ...(showUnlinked
@@ -157,10 +176,14 @@ export function HomeFeed({
         }))
       : []),
     ...(showActivity
-      ? logs.map((log) => ({
-          kind: "activity" as const,
-          time: new Date(log.created_at).getTime(),
-          log,
+      ? linkedRecords.map((rec) => ({
+          kind: "linked" as const,
+          // 최근 작업순 — 방금 연결한 기록(linked_at=지금)이 위로 오게 max 사용
+          time: Math.max(
+            new Date(rec.created_at).getTime(),
+            rec.linked_at ? new Date(rec.linked_at).getTime() : 0,
+          ),
+          rec,
         }))
       : []),
   ].sort((a, b) => b.time - a.time);
@@ -169,7 +192,7 @@ export function HomeFeed({
   const COLLAPSED = 10;
   const items = expanded ? allItems : allItems.slice(0, COLLAPSED);
 
-  if (records.length === 0 && logs.length === 0) return null;
+  if (records.length === 0 && linkedRecords.length === 0) return null;
 
   return (
     <section className="flex flex-col gap-3">
@@ -194,10 +217,10 @@ export function HomeFeed({
           <FilterChip
             active={showActivity}
             onClick={() => setShowActivity((v) => !v)}
-            count={logs.length}
-            tone="sky"
+            count={linkedRecords.length}
+            tone="emerald"
           >
-            활동
+            연결 완료
           </FilterChip>
         </div>
       </div>
@@ -213,9 +236,12 @@ export function HomeFeed({
       ) : (
         <ul className="flex flex-col gap-3">
           {items.map((item) =>
-            item.kind === "activity" ? (
-              <li key={`a-${item.log.id}`}>
-                <ActivityRow log={item.log} />
+            item.kind === "linked" ? (
+              <li
+                key={`l-${item.rec.id}`}
+                className="rounded-2xl border border-slate-100 border-l-4 border-l-emerald-400 bg-emerald-50/20 p-4 shadow-sm"
+              >
+                {renderLinkedCard(item.rec)}
               </li>
             ) : (
               <li
@@ -440,6 +466,130 @@ export function HomeFeed({
       </>
     );
   }
+
+  // ── 연결완료 카드 렌더 (미연결과 통일된 디자인·인터페이스 — spec 011) ─────────
+  // 미연결 카드와 동일 chrome(배지·체어·미리보기·눌러서 전체보기·처방) + 동일 액션
+  // (전체복사·음성듣기·삭제). 차이는 배지(연결 완료)·환자명 표시·편집은 환자 상세로.
+  function renderLinkedCard(rec: SearchedConsultation) {
+    const isDeleteConfirm = deleteConfirmId === rec.id;
+    const isViewing = viewingId === rec.id;
+    const preview = stripHtml(rec.content).slice(0, 120);
+    const charCount = stripHtml(rec.content).length;
+
+    return (
+      <>
+        <div className="mb-2 flex flex-wrap items-center gap-2 text-xs text-slate-500">
+          <StatusPill tone="emerald">연결 완료</StatusPill>
+          {rec.chair_id && (
+            <span className="inline-flex items-center gap-1.5 font-medium text-slate-700">
+              <span className="flex size-5 items-center justify-center rounded-lg bg-emerald-600 text-[9px] font-bold text-white">
+                {chairName(rec.chair_id).slice(0, 2)}
+              </span>
+              {chairName(rec.chair_id)}
+            </span>
+          )}
+          <span className="inline-flex items-center gap-1 font-medium text-slate-700">
+            <PersonIcon className="size-3.5 text-slate-400" />
+            {rec.patient_name ?? "환자"}
+          </span>
+          <span className="ml-auto flex items-center gap-1.5 text-slate-400">
+            <span>{formatDate(rec.created_at)}</span>
+            <span className="text-slate-300">·</span>
+            <span>{charCount}자</span>
+          </span>
+        </div>
+
+        {/* 카드 본문 — 클릭하면 전체 내용 펼침/접힘(미연결과 동일) */}
+        <div
+          role="button"
+          tabIndex={0}
+          aria-expanded={isViewing}
+          onClick={() => setViewingId(isViewing ? null : rec.id)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" || e.key === " ") {
+              e.preventDefault();
+              setViewingId(isViewing ? null : rec.id);
+            }
+          }}
+          className="mb-3 cursor-pointer rounded-xl px-2 py-1.5 -mx-2 transition hover:bg-emerald-50/60"
+        >
+          {isViewing ? (
+            <div
+              className="rich-content text-sm leading-6 text-slate-800"
+              dangerouslySetInnerHTML={{ __html: rec.content || "<p>내용 없음</p>" }}
+            />
+          ) : (
+            <p className="text-sm leading-relaxed text-slate-700">
+              {preview || "내용 없음"}
+              {charCount > 120 && <span className="text-slate-400">…</span>}
+            </p>
+          )}
+          <span className="mt-1.5 inline-flex items-center gap-0.5 text-xs font-medium text-emerald-600">
+            {isViewing ? "접기 ▲" : "눌러서 전체 보기 ▼"}
+          </span>
+        </div>
+
+        {(rec.prescriptions ?? []).length > 0 && (
+          <div className="mb-3 flex flex-wrap gap-1.5">
+            {(rec.prescriptions ?? []).map((name) => (
+              <span
+                key={name}
+                className="rounded-full border border-emerald-100 bg-emerald-50 px-2.5 py-0.5 text-xs font-medium text-emerald-700"
+              >
+                {name}
+              </span>
+            ))}
+          </div>
+        )}
+
+        {isDeleteConfirm ? (
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-red-600">삭제하시겠습니까?</span>
+            <button
+              type="button"
+              onClick={() => handleDeleteLinked(rec.id)}
+              disabled={isPending}
+              className="rounded-lg bg-red-500 px-2.5 py-1 text-xs font-semibold text-white hover:bg-red-600 disabled:opacity-50"
+            >
+              삭제
+            </button>
+            <button
+              type="button"
+              onClick={() => setDeleteConfirmId(null)}
+              className="rounded-lg border border-slate-200 px-2.5 py-1 text-xs text-slate-600 hover:bg-slate-50"
+            >
+              취소
+            </button>
+          </div>
+        ) : (
+          <div className="flex flex-wrap gap-2">
+            <CopyAllButton
+              html={rec.content}
+              label="전체 복사"
+              className="inline-flex min-h-8 items-center justify-center gap-1.5 rounded-xl bg-slate-800 px-3 text-xs font-semibold text-white transition hover:bg-slate-900"
+            />
+            {rec.has_audio && <AudioReplayButton consultationId={rec.id} />}
+            {rec.patient_id && (
+              <Link
+                href={`/patients/${rec.patient_id}`}
+                className="inline-flex min-h-8 items-center justify-center rounded-xl border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-600 transition hover:bg-slate-50"
+              >
+                편집
+              </Link>
+            )}
+            <button
+              type="button"
+              onClick={() => setDeleteConfirmId(rec.id)}
+              disabled={isPending}
+              className="inline-flex min-h-8 items-center justify-center rounded-xl border border-red-100 bg-white px-3 text-xs font-semibold text-red-500 transition hover:bg-red-50 disabled:opacity-40"
+            >
+              삭제
+            </button>
+          </div>
+        )}
+      </>
+    );
+  }
 }
 
 // ── 토글 칩 ──────────────────────────────────────────────────────────────────
@@ -453,13 +603,17 @@ function FilterChip({
   active: boolean;
   onClick: () => void;
   count: number;
-  tone: "amber" | "sky";
+  tone: "amber" | "sky" | "emerald";
   children: React.ReactNode;
 }) {
   const activeCls =
     tone === "amber"
       ? "border-amber-300 bg-amber-50 text-amber-700"
+      : tone === "emerald"
+      ? "border-emerald-300 bg-emerald-50 text-emerald-700"
       : "border-sky-300 bg-sky-50 text-sky-700";
+  const dotCls =
+    tone === "amber" ? "bg-amber-500" : tone === "emerald" ? "bg-emerald-500" : "bg-sky-500";
   return (
     <button
       type="button"
@@ -470,9 +624,7 @@ function FilterChip({
       }`}
     >
       <span
-        className={`inline-block size-1.5 rounded-full ${
-          active ? (tone === "amber" ? "bg-amber-500" : "bg-sky-500") : "bg-slate-300"
-        }`}
+        className={`inline-block size-1.5 rounded-full ${active ? dotCls : "bg-slate-300"}`}
       />
       {children}
       <span className={active ? "" : "text-slate-300"}>{count}</span>
@@ -518,79 +670,12 @@ function CheckIcon({ className }: { className?: string }) {
   );
 }
 
-// 환자 식별정보 칩 — 값이 있으면 회색, 없으면(미등록) 앰버로 경고.
-function MetaItem({ value, missing }: { value: string | null; missing: string }) {
-  if (value) {
-    return (
-      <span className="rounded-md bg-slate-100 px-1.5 py-0.5 text-[11px] text-slate-500">
-        {value}
-      </span>
-    );
-  }
-  return (
-    <span className="rounded-md bg-amber-50 px-1.5 py-0.5 text-[11px] font-medium text-amber-600">
-      {missing}
-    </span>
-  );
-}
-
 function PersonIcon({ className }: { className?: string }) {
   return (
     <svg className={className} viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
       <path d="M10 8a3 3 0 1 0 0-6 3 3 0 0 0 0 6ZM3.465 14.493a1.23 1.23 0 0 0 .41 1.412A9.957 9.957 0 0 0 10 18c2.31 0 4.438-.784 6.131-2.1.43-.333.604-.903.408-1.41a7.002 7.002 0 0 0-13.074.003Z" />
     </svg>
   );
-}
-
-// ── 활동 행(연결 완료 로그) ───────────────────────────────────────────────────
-const EVENT_LABEL: Record<string, string> = {
-  "consultation.created": "상담 기록",
-};
-
-function ActivityRow({ log }: { log: ActivityLogEntry }) {
-  const inner = (
-    <>
-      <div className="mb-2 flex flex-wrap items-center gap-2 text-xs">
-        <StatusPill tone="emerald">연결 완료</StatusPill>
-        <span className="inline-flex items-center gap-1.5 text-sm font-semibold text-slate-800">
-          <PersonIcon className="size-4 text-emerald-600" />
-          {log.patient_name ?? "알 수 없는 환자"}
-        </span>
-        <span className="ml-auto text-slate-400">{formatRelative(log.created_at)}</span>
-      </div>
-
-      {/* 환자 등록 확인용 식별정보(민감정보 마스킹). 미등록 항목은 앰버로 표시해 누락을 드러냄. */}
-      <div className="mb-2 flex flex-wrap items-center gap-1.5">
-        <MetaItem value={log.chart_no ? `차트 ${log.chart_no}` : null} missing="차트번호 없음" />
-        <MetaItem value={log.resident_masked} missing="주민번호 없음" />
-        <MetaItem value={log.phone_masked} missing="전화 없음" />
-      </div>
-
-      <div className="flex items-center gap-2">
-        <span className="rounded-full bg-slate-100 px-1.5 py-0.5 text-[10px] font-medium text-slate-500">
-          {EVENT_LABEL[log.event_type] ?? log.event_type}
-        </span>
-        {log.content_preview && (
-          <p className="truncate text-xs text-slate-500">{log.content_preview}</p>
-        )}
-      </div>
-    </>
-  );
-
-  const cardCls =
-    "block rounded-2xl border border-slate-100 border-l-4 border-l-emerald-400 bg-white p-4 shadow-sm transition";
-
-  if (log.consultation_id && log.patient_id) {
-    return (
-      <Link
-        href={`/patients/${log.patient_id}#consultation-${log.consultation_id}`}
-        className={`${cardCls} hover:border-emerald-200 hover:bg-emerald-50/40`}
-      >
-        {inner}
-      </Link>
-    );
-  }
-  return <div className={cardCls}>{inner}</div>;
 }
 
 // ── 헬퍼 ─────────────────────────────────────────────────────────────────────
@@ -608,12 +693,3 @@ function formatDate(iso: string): string {
   });
 }
 
-function formatRelative(iso: string): string {
-  const d = new Date(iso);
-  const diff = (Date.now() - d.getTime()) / 1000;
-  if (diff < 60) return "방금 전";
-  if (diff < 3600) return `${Math.floor(diff / 60)}분 전`;
-  if (diff < 86400) return `${Math.floor(diff / 3600)}시간 전`;
-  if (diff < 86400 * 7) return `${Math.floor(diff / 86400)}일 전`;
-  return d.toLocaleDateString("ko-KR", { month: "short", day: "numeric" });
-}

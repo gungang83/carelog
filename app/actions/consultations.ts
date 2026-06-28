@@ -522,10 +522,11 @@ export async function searchConsultations(
     const ascending = filters.sort === "oldest";
 
     const supabase = await createServerSupabaseClient();
+    // ★ patient 임베드 조인은 관계 해석 실패 위험 → 수동 조인(activity.ts와 동일 패턴).
     let query = supabase
       .from(consultationTable)
       .select(
-        "id, content, created_at, linked_at, chair_id, patient_id, status, prescriptions, audio_path, sms_sent_at, patient:patient_id(name, chart_no)",
+        "id, content, created_at, linked_at, chair_id, patient_id, status, prescriptions, audio_path, sms_sent_at",
       )
       .eq("institution_id", institutionId);
 
@@ -557,18 +558,35 @@ export async function searchConsultations(
       prescriptions: string[] | null;
       audio_path: string | null;
       sms_sent_at: string | null;
-      patient: { name: string | null; chart_no: string | null } | null;
     }>;
     const hasMore = raw.length > limit;
-    const rows: SearchedConsultation[] = raw.slice(0, limit).map((r) => ({
+    const page = raw.slice(0, limit);
+
+    // 연결 상담의 환자명·차트번호 일괄 조회(수동 조인). PII는 이름·차트만(주민번호 등 평문 미노출).
+    const patientIds = [
+      ...new Set(page.map((r) => r.patient_id).filter((v): v is string => !!v)),
+    ];
+    const pmap = new Map<string, { name: string | null; chart_no: string | null }>();
+    if (patientIds.length > 0) {
+      const { data: pts } = await supabase
+        .from("patient")
+        .select("id, name, chart_no")
+        .eq("institution_id", institutionId)
+        .in("id", patientIds);
+      for (const p of (pts ?? []) as Array<{ id: unknown; name: string | null; chart_no: string | null }>) {
+        pmap.set(String(p.id), { name: p.name, chart_no: p.chart_no });
+      }
+    }
+
+    const rows: SearchedConsultation[] = page.map((r) => ({
       id: r.id,
       content: r.content,
       created_at: r.created_at,
       linked_at: r.linked_at,
       chair_id: r.chair_id,
       patient_id: r.patient_id,
-      patient_name: r.patient?.name ?? null,
-      chart_no: r.patient?.chart_no ?? null,
+      patient_name: r.patient_id ? pmap.get(String(r.patient_id))?.name ?? null : null,
+      chart_no: r.patient_id ? pmap.get(String(r.patient_id))?.chart_no ?? null : null,
       status: r.status,
       prescriptions: r.prescriptions,
       has_audio: !!r.audio_path,
@@ -581,5 +599,53 @@ export async function searchConsultations(
       ok: false,
       message: e instanceof Error ? e.message : "상담 검색에 실패했습니다.",
     };
+  }
+}
+
+// ─── 상담 삭제 (연결 포함, spec 011) ──────────────────────────────────────────
+// deleteChairRecord는 미연결만 삭제 가능 → 연결완료 카드의 삭제용. 기관 격리·감사 로그.
+export async function deleteConsultation(params: {
+  consultationId: string;
+}): Promise<{ ok: true } | { ok: false; message: string }> {
+  try {
+    const institutionId = await getMyInstitutionId();
+    if (!institutionId) return { ok: false, message: "기관 정보를 찾을 수 없습니다." };
+    const supabase = await createServerSupabaseClient();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+
+    const { data: row } = await supabase
+      .from(consultationTable)
+      .select("id, chair_id, patient_id")
+      .eq("id", params.consultationId)
+      .eq("institution_id", institutionId)
+      .maybeSingle();
+    if (!row) return { ok: false, message: "대상 상담을 찾을 수 없습니다." };
+
+    const r = row as { chair_id: string | null; patient_id: string | null };
+    // 감사 로그(체어 기록인 경우) — 데이터 손실 추적(헌법 III)
+    if (r.chair_id) {
+      await supabase.from("chair_audit_logs").insert({
+        institution_id: institutionId,
+        chair_id: r.chair_id,
+        consultation_id: params.consultationId,
+        event_type: "record_deleted",
+        actor_user_id: user?.id ?? null,
+      });
+    }
+
+    const { error } = await supabase
+      .from(consultationTable)
+      .delete()
+      .eq("id", params.consultationId)
+      .eq("institution_id", institutionId);
+    if (error) return { ok: false, message: "삭제에 실패했습니다." };
+
+    revalidatePath("/");
+    if (r.patient_id) revalidatePath(`/patients/${r.patient_id}`);
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, message: e instanceof Error ? e.message : "삭제에 실패했습니다." };
   }
 }
