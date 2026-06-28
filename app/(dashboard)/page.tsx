@@ -9,18 +9,18 @@ import { HomeFeed } from "@/components/home/home-feed";
 import { PatientShield } from "@/components/home/patient-shield";
 import { WorkspaceHelpBanner } from "@/components/help/workspace-help-banner";
 import { LiveSessionsBanner } from "@/components/notifications/live-sessions-banner";
-import { getActivityLogs } from "@/app/actions/activity";
+import { searchConsultations } from "@/app/actions/consultations";
 import { getAllUnlinkedRecords } from "@/app/actions/chairs";
 import { getMyInstitutions, getMyInstitutionId } from "@/lib/auth/institution";
 
 export default async function Home() {
-  const [activityResult, initialUnlinked, institutions, institutionId] = await Promise.all([
-    getActivityLogs(50),
+  const [linkedResult, initialUnlinked, institutions, institutionId] = await Promise.all([
+    searchConsultations({ status: "linked", limit: 50 }),
     getAllUnlinkedRecords(),
     getMyInstitutions(),
     getMyInstitutionId(),
   ]);
-  const logs = activityResult.ok ? activityResult.logs : [];
+  const linked = linkedResult.ok ? linkedResult.rows : [];
 
   return (
     <div className="mx-auto flex w-full max-w-3xl flex-col gap-8 px-4 py-10 sm:px-6">
@@ -38,8 +38,8 @@ export default async function Home() {
 
       {/* 환자 대면 보호막 — 환자가 화면을 함께 볼 때 민감한 목록을 기본 가림(C-02) */}
       <PatientShield>
-        {/* 미연결 기록 + 최근 활동 통합 피드 (토글로 함께/하나씩) */}
-        <HomeFeed initialRecords={initialUnlinked} logs={logs} />
+        {/* 미연결 + 연결완료 상담 카드 통합 피드 (토글로 함께/하나씩) */}
+        <HomeFeed initialRecords={initialUnlinked} linked={linked} />
 
         <PatientHome />
       </PatientShield>
