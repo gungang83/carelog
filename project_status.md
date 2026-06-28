@@ -2,10 +2,30 @@
 
 > **제품 정체성(SSOT)**: Carelog는 **환자 전용 서비스가 아니다.** 의료기관 상담 기록(B2B) ↔ 환자 평생 보관·생애주기 건강관리(B2C)를 잇는 **연결고리**. 상세: [docs/product-vision.md](docs/product-vision.md)
 
-**최종 업데이트**: 2026-06-28 (세션 51 — 알림함 spec 012: EO 벤치마크 포팅, 종+읽음관리+실시간) · 2026-06-28 (세션 50 — /records 빈화면 수정 + 홈 연결완료 카드 통일) · 2026-06-28 (세션 49 — 상담 기록 열람·검색·필터 + 환자별 간략 보기 spec 011) · 2026-06-28 (세션 48 — 예미안 피드백 1차: 중복등록·이름표기·녹음 안내문) · 2026-06-28 (세션 47 — 긴 상담 청크 분할 전사 모드 spec 010 구현: 분할녹음·구간전사·실패격리·복구) · 2026-06-27 (세션 46 — 전사 모드 3종 추가: 빠른메모·상세요약·용어보정, 실험실 픽커) · 2026-06-27 (세션 45 — 긴 상담 녹음 전사 유실 버그 fix: maxDuration page레벨·비트레이트↓·복구 재전사) · 2026-06-26 (세션 44 — 미연결 기록 체어·참여자 편집 + 요약 제목 브랜딩) · 2026-06-25 (세션 43 — 녹음 엔진 picker UX: 홈 히어로 이동·디자인 정리·상담 카피) · 2026-06-24 (세션 42 — C-07 + 오늘의 치과 미팅 기획 + 녹음 엔진 실험실 v1)
+**최종 업데이트**: 2026-06-28 (세션 52 — 사용량·크레딧 대시보드 spec 013: EO menu-usage+크레딧 벤치마크, 메뉴추적+AI크레딧 원장·통계) · 2026-06-28 (세션 51b — 슈퍼어드민 기관명 깨짐(mojibake) fix: SSO verifyJwt UTF-8 디코드 + 과거데이터 복구) · 2026-06-28 (세션 51 — 알림함 spec 012: EO 벤치마크 포팅, 종+읽음관리+실시간) · 2026-06-28 (세션 50 — /records 빈화면 수정 + 홈 연결완료 카드 통일) · 2026-06-28 (세션 49 — 상담 기록 열람·검색·필터 + 환자별 간략 보기 spec 011) · 2026-06-28 (세션 48 — 예미안 피드백 1차: 중복등록·이름표기·녹음 안내문) · 2026-06-28 (세션 47 — 긴 상담 청크 분할 전사 모드 spec 010 구현: 분할녹음·구간전사·실패격리·복구) · 2026-06-27 (세션 46 — 전사 모드 3종 추가: 빠른메모·상세요약·용어보정, 실험실 픽커) · 2026-06-27 (세션 45 — 긴 상담 녹음 전사 유실 버그 fix: maxDuration page레벨·비트레이트↓·복구 재전사) · 2026-06-26 (세션 44 — 미연결 기록 체어·참여자 편집 + 요약 제목 브랜딩) · 2026-06-25 (세션 43 — 녹음 엔진 picker UX: 홈 히어로 이동·디자인 정리·상담 카피) · 2026-06-24 (세션 42 — C-07 + 오늘의 치과 미팅 기획 + 녹음 엔진 실험실 v1)
 **현재 버전**: main 브랜치
 
 ---
+
+## 2026-06-28 세션 52 (feat) — 사용량·크레딧 대시보드 (spec 013, EO 벤치마크 포팅)
+
+EO `/superadmin/menu-usage`(spec-075)·크레딧(spec-011)을 Carelog 슈퍼어드민으로 포팅 + 통합. **누가·얼마나·어떤 기능에서** AI 크레딧을 쓰는지 상세+통계, 그리고 화면(메뉴) 사용량. **마이그레이션 동반, 전사·네비 회귀 0.**
+
+- **스키마**(`20260628000002_usage_credits.sql`): `menu_usage_daily`(일별 진입 집계) + `institution_credits`(잔액) + `credit_log`(차감/충전 원장) + RPC 3개(`increment_menu_usage`·`deduct_credit`·`grant_credit`). RLS enable+정책0(service_role만), 기관격리=쿼리필터.
+- **크레딧 모델(사용자 결정)**: 원장+로그, **잔액 부족해도 전사 차단 안 함**(임상 안정성). `deduct_credit`·`recordUsage` 비차단·비throw. 단가는 `lib/credits.ts` CREDIT_PRICES(기능별 고정).
+- **메뉴 추적**: `components/usage/route-tracker.tsx`(sendBeacon) → `/api/menu-usage/track`(세션 신뢰원·화이트리스트·KST). 정의 `lib/usage/menu-config.ts`.
+- **배선**: `app/actions/transcribe.ts` 각 전사 성공 직후 `recordUsage(feature)`(엔진/청크별 단가).
+- **API 4개**: `/api/menu-usage/{track,summary}`, `/api/credits/{summary,grant}` — 집계/충전은 `isSuperAdmin` 게이트.
+- **UI**: `/admin/usage`(슈퍼어드민) 2탭 대시보드 — 크레딧(기능별·사용자별·기관별·잔액·최근내역+충전) / 메뉴(역할분해·기관별·미사용). `/admin`에 진입 링크.
+- 검증: `npm run build` TypeScript ✅(/about prerender 에러는 컨테이너 env 누락, 코드 무관). 배포 전 **마이그레이션 적용 필수**.
+- 비범위(후속): 실결제 빌링, 잔액 기반 차단, 토큰 실측 단가, 네비 외 세밀 이벤트.
+
+## 2026-06-28 세션 51b (fix) — 슈퍼어드민 기관명·이름 깨짐(mojibake)
+
+SSO 토큰의 한글 클레임이 `atob`(Latin-1) 디코드로 깨지던 버그 수정 + 과거 데이터 복구.
+
+- **근본 원인**: `app/api/auth/sso/route.ts` `verifyJwt`가 `JSON.parse(atob(payload))` — atob가 UTF-8 바이트를 Latin-1 문자로 줘 한글(institution_name·name) mojibake. `Uint8Array.from(atob(...)) + TextDecoder`로 UTF-8 디코드 수정.
+- **데이터 복구**: `convert_from(convert_to(x,'LATIN1'),'UTF8')` (가드: 비ASCII 있고 한글 없는 행만). institutions.name·institution_members.display_name·consultation.author_name 복구. content는 오탐 확인 후 제외.
 
 ## 2026-06-28 세션 51 (feat) — 알림함 (spec 012, EO 벤치마크 포팅)
 

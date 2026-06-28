@@ -226,3 +226,33 @@ export type NotificationItem = {
   link: string;
   isRead: boolean;
 };
+
+// ─── spec 013 사용량·크레딧 ──────────────────────────────────────────────
+export type MenuUsageRow = {
+  id: string;
+  institution_id: string;
+  user_email: string;
+  menu_id: string;
+  day: string;
+  role_snap: string | null;
+  count: number;
+  updated_at: string;
+};
+
+export type InstitutionCreditRow = {
+  institution_id: string;
+  balance: number;
+  updated_at: string;
+};
+
+export type CreditLogRow = {
+  id: string;
+  institution_id: string;
+  delta: number;
+  feature: string;
+  ref_id: string | null;
+  balance_after: number;
+  memo: string | null;
+  created_by: string | null;
+  created_at: string;
+};

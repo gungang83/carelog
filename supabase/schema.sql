@@ -555,3 +555,26 @@ alter table public.patient_push_subscriptions enable row level security;
 -- Realtime: alter publication supabase_realtime add table public.notifications;  (chair_audit_logs와 동일 패턴)
 -- 적재 진입점: lib/notifications.ts sendNotification (chairs.saveChairRecord·consultations.saveConsultation에서 호출).
 -- ───────────────────────────────────────────────────────────────────────────
+
+-- ───────────────────────────────────────────────────────────────────────────
+-- 사용량·크레딧 (spec 013-usage-credit-dashboard) — migration: 20260628000002_usage_credits.sql
+-- A. menu_usage_daily   — 화면 진입 일별 집계(클릭당 row 폭증 방지, 카운트 +1)
+--   create table public.menu_usage_daily(
+--     id uuid pk, institution_id uuid not null → institutions, user_email text not null,
+--     menu_id text not null, day date not null, role_snap text, count int default 0,
+--     updated_at, unique(institution_id, user_email, menu_id, day));
+--   func increment_menu_usage(p_inst,p_email,p_menu,p_day,p_role)  -- UPSERT +1, SECURITY DEFINER
+-- B. institution_credits — 기관 크레딧 잔액(시뮬레이션, 음수 허용)
+--   create table public.institution_credits(institution_id uuid pk → institutions, balance int default 0, updated_at);
+-- C. credit_log         — 차감/충전 원장(누가·얼마·어떤 기능)
+--   create table public.credit_log(
+--     id uuid pk, institution_id uuid not null → institutions, delta int not null,
+--     feature text not null, ref_id text, balance_after int not null, memo text,
+--     created_by text, created_at);  -- delta<0=차감, >0=충전(grant)
+--   func deduct_credit(...)  -- ★비차단: 잔액 부족해도 차감·기록(음수 허용), 차감 후 잔액 반환
+--   func grant_credit(...)   -- 충전 + grant 로그
+-- RLS: 세 테이블 enable + 정책 0개 → 클라(anon/authenticated) 전면 차단, service_role만 접근.
+--   기관 격리는 조회 쿼리 institution_id 필터. (EO는 RLS disable였으나 Carelog는 정책0으로 더 강하게 잠금)
+-- 배선: app/actions/transcribe.ts recordUsage(비차단) → deduct_credit. 메뉴는 RouteTracker→/api/menu-usage/track.
+-- 단가(lib/credits.ts): quick1/basic2/detailed3/dental3/multilingual3/comparison5/chunk_segment1/summarize_chunk2.
+-- ───────────────────────────────────────────────────────────────────────────

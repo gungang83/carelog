@@ -2,13 +2,36 @@
 
 import OpenAI from "openai";
 import Anthropic from "@anthropic-ai/sdk";
-import { getMyInstitutionLab } from "@/lib/auth/institution";
+import { getMyInstitutionLab, getMyInstitutionId, getSessionUser } from "@/lib/auth/institution";
+import { deductCredit, type CreditFeature } from "@/lib/credits";
 import type {
   EngineId,
   EngineMode,
   EngineRun,
   EngineTranscribeResult,
 } from "@/lib/transcribe/engines";
+
+// spec 013 — AI 전사 사용량(크레딧) 기록. ★비차단: 잔액과 무관하게 흐름을 막지 않는다.
+//   institution·user를 세션에서 확인해 deductCredit(로그 적재)만 수행. 실패는 무시.
+async function recordUsage(feature: CreditFeature, refId?: string | null): Promise<void> {
+  try {
+    const [institutionId, user] = await Promise.all([getMyInstitutionId(), getSessionUser()]);
+    if (!institutionId || !user?.email) return;
+    await deductCredit(institutionId, feature, user.email, refId ?? null);
+  } catch {
+    /* 사용량 기록 실패는 무시 */
+  }
+}
+
+// EngineId(또는 comparison) → 크레딧 기능 키
+const ENGINE_FEATURE: Record<string, CreditFeature> = {
+  basic: "transcribe_basic",
+  quick: "transcribe_quick",
+  detailed: "transcribe_detailed",
+  dental: "transcribe_dental",
+  multilingual: "transcribe_multilingual",
+  comparison: "transcribe_comparison",
+};
 
 // ─── 엔진 레지스트리 (실험실) ────────────────────────────────────────────────
 // 공유 타입·상수(EngineId/EngineMode/EngineRun/LAB_ENGINE_OPTIONS)는 lib/transcribe/engines.ts.
@@ -390,6 +413,7 @@ export async function transcribeEngine(
     if (runs.length === 0) {
       return { ok: false, message: basic.ok ? "" : basic.message };
     }
+    await recordUsage("transcribe_comparison");
     return { ok: true, runs };
   }
 
@@ -398,10 +422,15 @@ export async function transcribeEngine(
     // 실험 엔진(multilingual) 실패 시 basic으로 자동 폴백 — 실 상담 끊김 방지
     if (mode === "multilingual") {
       const fallback = await runBasic(audioFile, openai, anthropic);
-      if (fallback.ok) return { ok: true, runs: [fallback.run] };
+      if (fallback.ok) {
+        await recordUsage("transcribe_basic");
+        return { ok: true, runs: [fallback.run] };
+      }
     }
     return { ok: false, message: result.message };
   }
+  // 실제 사용 엔진 기준으로 기록(폴백 포함 정확)
+  await recordUsage(ENGINE_FEATURE[result.run.engine] ?? "transcribe_basic");
   return { ok: true, runs: [result.run] };
 }
 
@@ -417,6 +446,7 @@ export async function transcribeAndSummarize(
   if (!clients.ok) return { ok: false, message: clients.message };
   const result = await runBasic(audioFile, clients.openai, clients.anthropic);
   if (!result.ok) return { ok: false, message: result.message };
+  await recordUsage("transcribe_basic");
   return { ok: true, transcription: result.run.transcription, summary: result.run.summary };
 }
 
@@ -444,6 +474,7 @@ export async function transcribeSegment(
     if (t.message.includes("인식하지 못")) return { ok: true, text: "", index };
     return { ok: false, message: t.message, index };
   }
+  await recordUsage("transcribe_chunk_segment");
   return { ok: true, text: t.text, index };
 }
 
@@ -465,6 +496,7 @@ export async function summarizeChunkTranscript(
     });
     const block = message.content[0];
     const summary = block.type === "text" ? block.text : fullText;
+    await recordUsage("summarize_chunk");
     return { ok: true, summary };
   } catch (e) {
     return {
