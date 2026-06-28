@@ -12,7 +12,7 @@ import { sanitizeRichHtml, ensureHtml } from "@/lib/sanitize-html";
 import type { ChairRow, Participant } from "@/lib/types/database";
 import { transcribeEngine } from "@/app/actions/transcribe";
 import type { EngineMode, EngineTranscribeResult } from "@/lib/transcribe/engines";
-import { sendPushToInstitution } from "@/app/actions/push";
+import { sendNotification } from "@/lib/notifications";
 
 // ─── transcribeChairAudio ─────────────────────────────────────────────────────
 // Server Action 파일 간 임포트 — client component는 이 파일만 참조.
@@ -144,13 +144,16 @@ export async function saveChairRecord(params: {
     actor_user_id: user.id,
   });
 
-  // 화면 꺼짐/백그라운드 기기 대비 Web Push (spec 007 US3) — fire-and-forget(저장 결과 비차단).
+  // 알림함 적재 + Web Push 통합(spec 012) — fire-and-forget(저장 결과 비차단).
   // 환자정보·진료내용은 싣지 않는다(체어 이름 + 도착 사실만).
-  sendPushToInstitution(institutionId, {
+  void sendNotification({
     title: "새 상담 기록",
     body: `${chair.name} · 상담 기록이 올라왔습니다`,
-    url: "/",
-    kind: "chair-record",
+    type: "consultation_saved",
+    link: "/records",
+    recipients: "all",
+    institutionId,
+    createdBy: user.id,
   }).catch(() => {});
 
   revalidatePath("/");

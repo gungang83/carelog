@@ -565,3 +565,18 @@ saveChairRecord (Server Action)
 - 등급 정책 단일 출처: `lib/plan.ts`(retentionDays·FREE_ROLLING_MAX·auditReplay), `institutions.plan`.
 - 신규 파일: `app/actions/audio.ts`, `components/chair/audio-replay-button.tsx`, `app/api/cron/prune-audio/route.ts`, `lib/plan.ts`.
 - 음성은 비공개·서명URL·기관격리(헌법 I), 모든 mutation·URL발급은 Server Action(헌법 II).
+
+## 알림함 (spec 012-notification-inbox)
+
+```
+이벤트(saveChairRecord/saveConsultation)
+  → lib/notifications.sendNotification()
+      → notifications insert(admin)  +  sendPushToInstitution (통합)
+  → Supabase Realtime(notifications INSERT, institution_id 필터)
+      → components/notifications/notification-bell.tsx (헤더) 재fetch + 배지 + setAppBadge
+조회/읽음: app/api/notifications (GET) · /[id]/read (POST·PATCH) · /read-all (POST)
+  → lib/notifications (getNotificationContext·getNotifications·markRead·markUnread·markAllRead)
+데이터: notifications(broadcast) + notification_reads(user_id×id, 행=읽음). RLS 기관격리·본인읽음.
+구독 헬퍼: lib/realtime/institution-events.ts subscribeNotifications (chair_audit_logs 패턴 재사용).
+```
+- 기존 실시간 토스트(LiveAlertsProvider, 일시적)와 별개 — 알림함은 영속 기록·읽음관리.

@@ -3,6 +3,7 @@ import { HamburgerDrawer } from "@/components/layout/hamburger-drawer";
 import { ProfileDropdown } from "@/components/layout/profile-dropdown";
 import { RefreshButton } from "@/components/layout/refresh-button";
 import { SoundArmButton } from "@/components/notifications/sound-arm-button";
+import { NotificationBell } from "@/components/notifications/notification-bell";
 import type { InstitutionWithRole } from "@/lib/auth/institution";
 
 interface HeaderProps {
@@ -64,6 +65,7 @@ export function Header({
           >
             EO로 돌아가기
           </a>
+          <NotificationBell institutionId={activeInstitutionId} />
           <SoundArmButton />
           <RefreshButton />
           <ProfileDropdown

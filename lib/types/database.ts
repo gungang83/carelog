@@ -195,3 +195,34 @@ export type PatientPushSubscriptionRow = {
   auth: string;
   created_at: string;
 };
+
+// ── 알림함 (spec 012) ────────────────────────────────────────────────────────
+export type NotificationRow = {
+  id: string;
+  institution_id: string;
+  created_at: string;
+  title: string;
+  body: string | null;
+  type: string;
+  link: string;
+  recipients: string; // 'all' | 'admins' | 이메일
+  created_by: string | null;
+};
+
+export type NotificationReadRow = {
+  id: string;
+  notification_id: string;
+  user_id: string;
+  created_at: string;
+};
+
+// 벨/조회 표시용(읽음 계산 포함)
+export type NotificationItem = {
+  id: string;
+  timestamp: string;
+  title: string;
+  body: string;
+  type: string;
+  link: string;
+  isRead: boolean;
+};

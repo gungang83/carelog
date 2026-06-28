@@ -539,3 +539,19 @@ alter table public.patient_push_subscriptions enable row level security;
 -- 엔진: basic(한국어 Whisper+요약·기본) / multilingual(자동감지+번역). comparison은 실행 모드.
 -- 비-lab 워크스페이스는 서버(chairs.transcribeChairAudio)에서 'basic' 강제 → 사고 차단.
 -- ───────────────────────────────────────────────────────────────────────────
+
+-- ───────────────────────────────────────────────────────────────────────────
+-- 알림함 (spec 012-notification-inbox) — migration: 20260628000001_notifications.sql
+-- 메시지(notifications)와 유저별 읽음(notification_reads=행 존재) 분리.
+--   create table public.notifications(
+--     id uuid pk default gen_random_uuid(), institution_id uuid not null → institutions,
+--     created_at timestamptz default now(), title text, body text,
+--     type text default 'system', link text default '/', recipients text default 'all', created_by uuid);
+--   create table public.notification_reads(
+--     id uuid pk, notification_id uuid → notifications on delete cascade, user_id uuid,
+--     created_at, unique(notification_id, user_id));  -- 행 존재 = 읽음
+-- RLS: notifications select = institution_id = get_my_institution_id()(브라우저 realtime 구독도 이 정책).
+--      notification_reads select/insert/delete = user_id = auth.uid(). 적재는 service_role.
+-- Realtime: alter publication supabase_realtime add table public.notifications;  (chair_audit_logs와 동일 패턴)
+-- 적재 진입점: lib/notifications.ts sendNotification (chairs.saveChairRecord·consultations.saveConsultation에서 호출).
+-- ───────────────────────────────────────────────────────────────────────────

@@ -1,5 +1,5 @@
 import { createBrowserSupabaseClient } from "@/lib/supabase/client";
-import type { ChairAuditLogRow } from "@/lib/types/database";
+import type { ChairAuditLogRow, NotificationRow } from "@/lib/types/database";
 
 /**
  * 기관 내 실시간 이벤트 구독 (spec 007 — 실시간 알림·소통 기반의 최소 단위).
@@ -30,6 +30,40 @@ export function subscribeChairEvents(opts: {
         filter: `institution_id=eq.${opts.institutionId}`,
       },
       (payload: { new: ChairAuditEvent }) => {
+        opts.onEvent(payload.new);
+      },
+    )
+    .subscribe((status) => {
+      if (status === "SUBSCRIBED") opts.onSubscribed?.();
+    });
+
+  return () => {
+    void supabase.removeChannel(channel);
+  };
+}
+
+/**
+ * 알림함(spec 012) 실시간 구독 — notifications INSERT를 institution_id 필터로 구독.
+ * 기관 격리는 RLS("staff reads own institution notifications") + 채널 필터 이중.
+ */
+export function subscribeNotifications(opts: {
+  institutionId: string;
+  onEvent: (row: NotificationRow) => void;
+  onSubscribed?: () => void;
+}): () => void {
+  const supabase = createBrowserSupabaseClient();
+
+  const channel = supabase
+    .channel(`institution:${opts.institutionId}:notifications`)
+    .on(
+      "postgres_changes",
+      {
+        event: "INSERT",
+        schema: "public",
+        table: "notifications",
+        filter: `institution_id=eq.${opts.institutionId}`,
+      },
+      (payload: { new: NotificationRow }) => {
         opts.onEvent(payload.new);
       },
     )

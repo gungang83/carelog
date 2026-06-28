@@ -2,10 +2,22 @@
 
 > **제품 정체성(SSOT)**: Carelog는 **환자 전용 서비스가 아니다.** 의료기관 상담 기록(B2B) ↔ 환자 평생 보관·생애주기 건강관리(B2C)를 잇는 **연결고리**. 상세: [docs/product-vision.md](docs/product-vision.md)
 
-**최종 업데이트**: 2026-06-28 (세션 50 — /records 빈화면 수정 + 홈 연결완료 카드 통일) · 2026-06-28 (세션 49 — 상담 기록 열람·검색·필터 + 환자별 간략 보기 spec 011) · 2026-06-28 (세션 48 — 예미안 피드백 1차: 중복등록·이름표기·녹음 안내문) · 2026-06-28 (세션 47 — 긴 상담 청크 분할 전사 모드 spec 010 구현: 분할녹음·구간전사·실패격리·복구) · 2026-06-27 (세션 46 — 전사 모드 3종 추가: 빠른메모·상세요약·용어보정, 실험실 픽커) · 2026-06-27 (세션 45 — 긴 상담 녹음 전사 유실 버그 fix: maxDuration page레벨·비트레이트↓·복구 재전사) · 2026-06-26 (세션 44 — 미연결 기록 체어·참여자 편집 + 요약 제목 브랜딩) · 2026-06-25 (세션 43 — 녹음 엔진 picker UX: 홈 히어로 이동·디자인 정리·상담 카피) · 2026-06-24 (세션 42 — C-07 + 오늘의 치과 미팅 기획 + 녹음 엔진 실험실 v1)
+**최종 업데이트**: 2026-06-28 (세션 51 — 알림함 spec 012: EO 벤치마크 포팅, 종+읽음관리+실시간) · 2026-06-28 (세션 50 — /records 빈화면 수정 + 홈 연결완료 카드 통일) · 2026-06-28 (세션 49 — 상담 기록 열람·검색·필터 + 환자별 간략 보기 spec 011) · 2026-06-28 (세션 48 — 예미안 피드백 1차: 중복등록·이름표기·녹음 안내문) · 2026-06-28 (세션 47 — 긴 상담 청크 분할 전사 모드 spec 010 구현: 분할녹음·구간전사·실패격리·복구) · 2026-06-27 (세션 46 — 전사 모드 3종 추가: 빠른메모·상세요약·용어보정, 실험실 픽커) · 2026-06-27 (세션 45 — 긴 상담 녹음 전사 유실 버그 fix: maxDuration page레벨·비트레이트↓·복구 재전사) · 2026-06-26 (세션 44 — 미연결 기록 체어·참여자 편집 + 요약 제목 브랜딩) · 2026-06-25 (세션 43 — 녹음 엔진 picker UX: 홈 히어로 이동·디자인 정리·상담 카피) · 2026-06-24 (세션 42 — C-07 + 오늘의 치과 미팅 기획 + 녹음 엔진 실험실 v1)
 **현재 버전**: main 브랜치
 
 ---
+
+## 2026-06-28 세션 51 (feat) — 알림함 (spec 012, EO 벤치마크 포팅)
+
+EO '알림' 기능을 같은 UX로 Carelog에 포팅. 그동안 fire-and-forget이던 푸시를 영속 알림으로 적재 + 읽음관리 + 실시간. **마이그레이션·RLS 동반, 기존 헤더·실시간 토스트 회귀 0.**
+
+- **스키마**: `notifications`(broadcast) + `notification_reads`(user_id×id, 행=읽음) + RLS(기관 멤버 read / 본인 읽음) + realtime publication. schema.sql·database.md 동반.
+- **lib/notifications.ts**: `sendNotification`(적재 + 기존 sendPushToInstitution 통합) / `getNotifications`(기관 격리·대상 필터 all·admins·이메일·본인 읽음) / markRead·markUnread·markAllRead / getNotificationContext.
+- **API 4개**: `/api/notifications`(GET), `/[id]/read`(POST·PATCH), `/read-all`(POST) — getSessionUser 인증, lib 위임.
+- **NotificationBell**(헤더): 종+미읽음 배지(9+)+드롭다운(타입아이콘·제목·본문·상대시간·미읽음 강조·읽음✓토글·전체읽음)+클릭 읽음+이동, Realtime(`subscribeNotifications`)+30초 폴백+PWA setAppBadge. Carelog 팔레트.
+- **배선**: chairs.saveChairRecord·consultations.saveConsultation → sendNotification(직원 대상 적재). 환자 푸시는 분리.
+- 검증: `npm run build` TypeScript ✅. 배포 전 **마이그레이션 적용 필수**(notifications 테이블·publication).
+- 비범위(후속): 환자 포털 알림함, 이메일/SMS 채널·설정 페이지, 과거 푸시 백필.
 
 ## 구현 완료 기능
 
