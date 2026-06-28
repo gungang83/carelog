@@ -9,7 +9,7 @@ import { getMyInstitutionId, getMyAuthorInfo } from "@/lib/auth/institution";
 import { resolveResidentMatchHashForPatient } from "@/app/actions/patients";
 import { revalidatePath } from "next/cache";
 import { sanitizeRichHtml } from "@/lib/sanitize-html";
-import { sendPushToInstitution } from "@/app/actions/push";
+import { sendNotification } from "@/lib/notifications";
 import { sendPushToPatient } from "@/app/actions/patient-portal";
 import { createAdminSupabaseClient } from "@/lib/supabase/admin";
 import { sendSms } from "@/lib/sms/solapi";
@@ -169,10 +169,14 @@ export async function saveConsultation(
       }
 
       const preview = trimmed.replace(/<[^>]*>/g, "").slice(0, 60);
-      sendPushToInstitution(institutionId, {
+      // 알림함 적재 + Web Push 통합(spec 012)
+      void sendNotification({
         title: "새 상담 기록",
         body: `${patientName} — ${preview}`,
-        url: `/patients/${patientId}#consultation-${inserted.id}`,
+        type: "consultation_saved",
+        link: `/patients/${patientId}#consultation-${inserted.id}`,
+        recipients: "all",
+        institutionId,
       }).catch(() => {});
 
       const admin = createAdminSupabaseClient();
