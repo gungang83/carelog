@@ -45,7 +45,10 @@ async function verifyJwt(
   if (!valid) return null;
 
   const paddedPayload = payload.replace(/-/g, "+").replace(/_/g, "/");
-  const decoded = JSON.parse(atob(paddedPayload));
+  // ★UTF-8 디코드 — atob는 바이트를 Latin-1 문자로 주므로, 한글(멀티바이트) 클레임
+  //   (institution_name·name 등)이 깨진다(mojibake). 바이트로 되돌려 UTF-8로 디코드한다.
+  const payloadBytes = Uint8Array.from(atob(paddedPayload), (c) => c.charCodeAt(0));
+  const decoded = JSON.parse(new TextDecoder().decode(payloadBytes));
   if (decoded.exp < Math.floor(Date.now() / 1000)) return null;
 
   return decoded;
