@@ -15,7 +15,7 @@
 <!-- SPECKIT START -->
 For additional context about technologies to be used, project structure,
 shell commands, and other important information, read the current plan at:
-specs/009-audio-archive/plan.md
+specs/010-chunked-transcription/plan.md
 <!-- SPECKIT END -->
 
 ## 문서 관리 원칙
