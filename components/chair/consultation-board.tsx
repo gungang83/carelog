@@ -664,6 +664,20 @@ function BoardContent({
             </div>
           </div>
 
+          {/* 녹음 시작 안내(정확도 가이드) — 녹음 중에만 노출. 말하는 사람이
+              이름을 먼저, 부위(치식)를 말로 표현하도록 유도해 인식 정확도를 높인다. */}
+          {recording && (
+            <div className="border-b border-sky-100 bg-sky-50/70 px-5 py-2.5">
+              <p className="text-sm font-semibold text-sky-800 break-keep">
+                🎙️ 녹음이 시작되었습니다
+              </p>
+              <p className="mt-0.5 text-xs leading-snug text-sky-700 break-keep">
+                환자분 성함을 먼저 말씀해 주세요. 치아 부위(번호)를 말로 또렷이
+                표현하시면 더 정확하게 기록돼요.
+              </p>
+            </div>
+          )}
+
           <div className="flex-1 space-y-4 overflow-y-auto px-5 py-4">
             {micError && (
               <p className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-600">
