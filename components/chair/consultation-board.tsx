@@ -21,7 +21,11 @@ import {
   transcribeSegment,
   summarizeChunkTranscript,
 } from "@/app/actions/transcribe";
-import { CHUNK_CONCURRENCY, type EngineRun } from "@/lib/transcribe/engines";
+import {
+  CHUNK_CONCURRENCY,
+  CHUNK_SEGMENT_RETRY,
+  type EngineRun,
+} from "@/lib/transcribe/engines";
 import { EngineSelector } from "@/components/chair/engine-selector";
 import { RichTextEditor, type RichTextEditorHandle } from "@/components/rich-text-editor";
 import { PrescriptionPicker } from "@/components/chair/prescription-picker";
@@ -99,6 +103,8 @@ function BoardContent({
   // 저장 시 기록할 사용 엔진(어떤 엔진 결과를 본문에 넣었는지).
   const [usedEngine, setUsedEngine] = useState<string | null>(null);
   const [recoverable, setRecoverable] = useState<BoardDraft | null>(null);
+  // 청크(긴 상담) 전사 진행률 — "n/m 구간 전사 중" 표시(spec 010 US4).
+  const [chunkProgress, setChunkProgress] = useState<{ done: number; total: number } | null>(null);
   const [isPending, startTransition] = useTransition();
   const [isCreatingChair, startCreateChair] = useTransition();
 
@@ -355,33 +361,68 @@ function BoardContent({
     transcribeSegments(segments);
   };
 
-  // 구간 배열을 동시성 제한으로 전사 → 순서대로 이어붙여 전체 요약(녹음 종료·복구 공용).
+  // 구간 배열을 동시성 제한으로 전사(실패 격리·1회 재시도) → 순서대로 이어붙여 전체 요약.
+  // 녹음 종료·복구 공용. 일부 실패해도 성공 구간은 보존(전손 0), 전 구간 실패 시에만 전체 실패.
   const transcribeSegments = (segments: Blob[]) => {
     startTransition(async () => {
       const total = segments.length;
-      const texts: string[] = new Array(total).fill("");
+      setChunkProgress({ done: 0, total });
+      const texts: (string | null)[] = new Array(total).fill(null); // null = 전사 실패
+      let done = 0;
       let cursor = 0;
-      const worker = async () => {
-        while (cursor < total) {
-          const i = cursor++;
+
+      const transcribeOne = async (i: number) => {
+        const attempt = async () => {
           const fd = new FormData();
           fd.append("audio", segments[i], `segment_${i}.webm`);
           fd.append("index", String(i));
-          const r = await transcribeSegment(fd);
-          if (r.ok) texts[i] = r.text; // 실패 구간은 공백(US2에서 재시도·표시 강화)
+          return transcribeSegment(fd).catch(
+            () => ({ ok: false as const, message: "네트워크 오류" }),
+          );
+        };
+        let r = await attempt();
+        for (let k = 0; !r.ok && k < CHUNK_SEGMENT_RETRY; k++) {
+          r = await attempt(); // 실패 구간 재시도
+        }
+        texts[i] = r.ok ? r.text : null;
+        done++;
+        setChunkProgress({ done, total });
+      };
+
+      const worker = async () => {
+        while (cursor < total) {
+          await transcribeOne(cursor++);
         }
       };
       await Promise.all(
         Array.from({ length: Math.min(CHUNK_CONCURRENCY, total) }, worker),
       );
-      const joined = texts.filter((t) => t.trim()).join("\n");
-      if (!joined.trim()) {
-        setMicError("전사된 내용이 없어요. 다시 시도해 주세요.");
+      setChunkProgress(null);
+
+      const failed = texts.flatMap((t, i) => (t === null ? [i] : []));
+      const succeeded = texts.filter((t): t is string => !!t && t.trim() !== "");
+
+      if (succeeded.length === 0) {
+        // 전 구간 실패 → 전체 실패. 녹음물(구간)은 IndexedDB에 보존돼 복구·재시도 가능.
+        setMicError(
+          "전사에 실패했어요. 녹음은 보관돼 있으니 잠시 후 다시 시도해 주세요.",
+        );
         setTranscriptionResult(DRAFT_CHAIR_KEY, "");
         return;
       }
-      const sum = await summarizeChunkTranscript(joined);
-      const summary = sum.ok ? sum.summary : joined; // 요약 실패 시 원문 폴백
+
+      const sum = await summarizeChunkTranscript(succeeded.join("\n"));
+      // 요약 실패 시 성공 구간 원문(실패 구간 자리표시 포함)으로 폴백.
+      const fallback = texts
+        .map((t, i) => (t !== null ? t : `[⚠️ ${i + 1}번째 구간 전사 실패]`))
+        .join("\n")
+        .trim();
+      let summary = sum.ok ? sum.summary : fallback;
+      if (failed.length > 0) {
+        summary += `\n\n> ⚠️ ${total}개 구간 중 ${failed.length}개 전사 실패(${failed
+          .map((i) => i + 1)
+          .join(", ")}번). 해당 부분이 누락됐을 수 있어요. 음성은 보관됩니다.`;
+      }
       setTranscriptionResult(DRAFT_CHAIR_KEY, summary);
       editorRef.current?.insertText(summary);
       setUsedEngine("chunk");
@@ -440,13 +481,18 @@ function BoardContent({
     setParticipants(rec.participants ?? []);
     setSelectedChair(rec.selectedChair ?? null);
     audioBlobRef.current = rec.audioBlob ?? null;
+    audioSegmentsRef.current = rec.audioSegments ?? [];
     // 녹음이 끝난 상태로 복구 → status를 has_records로 전환(저장 가능 상태).
     setTranscriptionResult(DRAFT_CHAIR_KEY, "");
     setRecoverable(null);
     // 전사 완료 전에 크래시 → 본문은 비고 음성만 남은 경우: 복구한 음성을 재전사한다
     // (그러지 않으면 음성은 살아도 본문이 없어 저장할 수 없다).
-    if (!rec.content.trim() && rec.audioBlob) {
-      transcribeBlob(rec.audioBlob, 0);
+    if (!rec.content.trim()) {
+      if (rec.audioSegments && rec.audioSegments.length > 0) {
+        transcribeSegments(rec.audioSegments); // 청크 — 구간 재전사
+      } else if (rec.audioBlob) {
+        transcribeBlob(rec.audioBlob, 0); // 통짜
+      }
     }
   };
 
@@ -557,7 +603,11 @@ function BoardContent({
             ) : processing ? (
               <>
                 <span className="inline-block size-4 animate-spin rounded-full border-2 border-sky-400 border-t-transparent" />
-                <span className="text-sm text-sky-700">음성 인식 중…</span>
+                <span className="text-sm text-sky-700">
+                  {chunkProgress
+                    ? `음성 인식 중… (${chunkProgress.done}/${chunkProgress.total} 구간)`
+                    : "음성 인식 중…"}
+                </span>
               </>
             ) : (
               <>

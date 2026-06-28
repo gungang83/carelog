@@ -68,7 +68,7 @@ components/
 │   ├── chair-provider.tsx         # ChairProvider (Context + useReducer) — 체어 전역 상태, MediaRecorder refs, 녹음 엔진(engine/setEngine·labEnabled) 공유
 │   ├── consult-hero.tsx           # 홈 히어로 — record-first 진입점("상담 기록 시작"=즉시 녹음). 실험실이면 시작 버튼 위 EngineSelector 노출
 │   ├── consultation-board.tsx     # 상담보드(DRAFT_CHAIR_KEY) — 녹음·전사·본문·체어·참여자·처방·저장. idle 폴백으로 EngineSelector
-│   ├── engine-selector.tsx        # 녹음 엔진 세그먼트 컨트롤(기본/다국어/비교) — 히어로·보드 공용, context engine 사용
+│   ├── engine-selector.tsx        # 녹음 엔진 픽커(기본/빠른메모/상세요약/용어보정/긴상담/다국어/비교) — 줄바꿈 pill, 히어로·보드 공용, context engine 사용
 │   ├── chair-overlay.tsx          # 체어 기록 다이얼로그 (createPortal → body); 현재 세션 녹음/편집 전용
 │   ├── chair-patient-search.tsx   # 환자 검색 + linkChairRecordToPatient + 인라인 신규 등록
 │   ├── chair-settings.tsx         # 설정 페이지 내 체어 관리 (admin/owner 전용)
@@ -412,10 +412,24 @@ handleStopRecording()
       → getMyInstitutionLab(): 비-lab이면 engine='basic' 강제(사고 차단)
       → transcribeEngine(formData, mode) → runs[]
           basic        : Whisper(ko) + Claude 요약
+          quick        : Whisper(ko)만(요약 생략)
+          detailed     : Whisper(ko) + Claude 구조화 상세 요약
+          dental       : Whisper(ko) + Claude 치과 용어 교정·요약
           multilingual : Whisper(자동감지) + Claude 번역·요약 (원문/번역/요약). 실패 시 basic 폴백
           comparison   : basic + multilingual 동시 → 보드에서 한쪽 선택
   → setTranscriptionResult(chairId, run.summary) / insertText(run.insertText)
-  ※ 공유 타입·상수: lib/transcribe/engines.ts (LAB_ENGINE_OPTIONS) — "use server" 파일은
+
+  ◆ chunk(긴 상담, spec 010) — 단일 호출이 아닌 클라이언트 오케스트레이션:
+    녹음: chair-provider가 CHUNK_SEGMENT_MS(5분)마다 MediaRecorder stop→restart로
+          유효 webm 구간 blob 배열 생성 → stopRecordingChunked(chairId): Promise<Blob[]>
+    전사: consultation-board가 구간별 transcribeSegment(formData) 호출(동시성 CHUNK_CONCURRENCY=3,
+          실패 1회 재시도, 실패 격리) → 성공 전사문 순서대로 join
+    요약: summarizeChunkTranscript(join) [Server Action] 1회 → 전체 맥락 요약
+    진행률: chunkProgress(done/total) "n/m 구간 전사 중". 실패 구간은 본문에 표시.
+    보관: 구간 concat 단일 blob을 uploadConsultationAudio(기존 단일 경로, 스키마 불변)
+    복구: draft-store BoardDraft.audioSegments[]로 영속화 → applyRecover가 구간 재전사
+    ※ transcribeSegment/summarizeChunkTranscript도 getMyInstitutionLab 게이트(lab 전용)
+  ※ 공유 타입·상수: lib/transcribe/engines.ts (LAB_ENGINE_OPTIONS, CHUNK_* 상수) — "use server" 파일은
     async 함수만 export 가능하므로 런타임 상수는 일반 모듈에 분리.
 
 handleSave()

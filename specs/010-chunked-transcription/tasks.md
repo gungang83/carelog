@@ -66,10 +66,10 @@ description: "Task list for 긴 상담 청크 분할 전사 모드 (010-chunked-
 
 **Independent Test**: 한 구간 전사를 강제 실패시켜도 성공 구간이 본문에 보존되고 실패가 표시/재시도되는지(quickstart 시나리오 2·5).
 
-- [ ] T012 [US2] `components/chair/consultation-board.tsx`: 구간 전사를 `allSettled` 기반으로 변경 + 실패 구간 `SEGMENT_RETRY`회 재시도
-- [ ] T013 [US2] `components/chair/consultation-board.tsx`: 부분 보존 — 실패 구간은 join에서 자리표시/생략, `failedSegments` 기록 후 본문/결과에 명시; **전 구간 실패 시에만** 전체 실패(`setMicError`)
-- [ ] T014 [US2] `components/chair/consultation-board.tsx`: chunk 종료 직후(전사 시작 전) `saveDraft({ ..., audioSegments: segments })` 즉시 영속화(복구 안전망)
-- [ ] T015 [US2] `components/chair/consultation-board.tsx`: `applyRecover` — 복구본에 `audioSegments`가 있고 본문이 비면 청크 재전사(US1 오케스트레이션 재사용)
+- [X] T012 [US2] `components/chair/consultation-board.tsx`: 구간 전사를 `allSettled` 기반으로 변경 + 실패 구간 `SEGMENT_RETRY`회 재시도
+- [X] T013 [US2] `components/chair/consultation-board.tsx`: 부분 보존 — 실패 구간은 join에서 자리표시/생략, `failedSegments` 기록 후 본문/결과에 명시; **전 구간 실패 시에만** 전체 실패(`setMicError`)
+- [X] T014 [US2] `components/chair/consultation-board.tsx`: chunk 종료 직후(전사 시작 전) `saveDraft({ ..., audioSegments: segments })` 즉시 영속화(복구 안전망)
+- [X] T015 [US2] `components/chair/consultation-board.tsx`: `applyRecover` — 복구본에 `audioSegments`가 있고 본문이 비면 청크 재전사(US1 오케스트레이션 재사용)
 
 **Checkpoint**: 부분 실패·크래시에도 데이터 손실 0(SC-002).
 
@@ -81,7 +81,7 @@ description: "Task list for 긴 상담 청크 분할 전사 모드 (010-chunked-
 
 **Independent Test**: 같은 음원을 기본/긴상담으로 각각 전사 → 결과 식별(사용 엔진 기록)·비교 가능(quickstart 시나리오 3).
 
-- [ ] T016 [US3] 검증·보강 — 픽커 "긴 상담" lab 노출(자동) + `transcription_engine="chunk"`로 결과 식별 확인. 필요 시 본문 머리말/배지에 사용 모드 표기로 비교 가독성 보강(`components/chair/consultation-board.tsx`)
+- [X] T016 [US3] 검증·보강 — 픽커 "긴 상담" lab 노출(자동) + `transcription_engine="chunk"`로 결과 식별 확인. 필요 시 본문 머리말/배지에 사용 모드 표기로 비교 가독성 보강(`components/chair/consultation-board.tsx`)
 
 **Checkpoint**: 두 모드 결과를 사람이 나란히 비교 가능(C안 검증 기반).
 
@@ -93,8 +93,8 @@ description: "Task list for 긴 상담 청크 분할 전사 모드 (010-chunked-
 
 **Independent Test**: 여러 구간 전사 중 진행률이 갱신 표시되는지(quickstart 시나리오 1 관찰).
 
-- [ ] T017 [US4] `components/chair/consultation-board.tsx`: chunk 전사 진행 상태(`done/total`) state 추가, 각 구간 호출 완료마다 갱신
-- [ ] T018 [US4] `components/chair/consultation-board.tsx`: processing UI에 "n/m 구간 전사 중" 표시(기존 "음성 인식 중…" 영역 확장)
+- [X] T017 [US4] `components/chair/consultation-board.tsx`: chunk 전사 진행 상태(`done/total`) state 추가, 각 구간 호출 완료마다 갱신
+- [X] T018 [US4] `components/chair/consultation-board.tsx`: processing UI에 "n/m 구간 전사 중" 표시(기존 "음성 인식 중…" 영역 확장)
 
 **Checkpoint**: 모든 스토리 독립 동작.
 
@@ -102,9 +102,9 @@ description: "Task list for 긴 상담 청크 분할 전사 모드 (010-chunked-
 
 ## Phase 7: Polish & Cross-Cutting
 
-- [ ] T019 [P] `docs/architecture.md`: 분할 녹음 + 구간별 전사(서버액션) + 전체 통짜 요약 데이터 흐름 추가
-- [ ] T020 [P] `project_status.md`: 세션 기록(완료 기능·검증·보류한 후속)
-- [ ] T021 `npm run build` 그린 확인(TypeScript·compile; /admin prerender는 env 부재로 제외)
+- [X] T019 [P] `docs/architecture.md`: 분할 녹음 + 구간별 전사(서버액션) + 전체 통짜 요약 데이터 흐름 추가
+- [X] T020 [P] `project_status.md`: 세션 기록(완료 기능·검증·보류한 후속)
+- [X] T021 `npm run build` 그린 확인(TypeScript·compile; /admin prerender는 env 부재로 제외)
 - [ ] T022 quickstart.md 시나리오 1~6 예미안(lab) 수동 검증
 - [ ] T023 비-lab 회귀 0 확인(SC-006) — 비-lab 워크스페이스 전사 동작·결과가 도입 전과 동일
 

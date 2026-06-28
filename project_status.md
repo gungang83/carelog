@@ -2,7 +2,7 @@
 
 > **제품 정체성(SSOT)**: Carelog는 **환자 전용 서비스가 아니다.** 의료기관 상담 기록(B2B) ↔ 환자 평생 보관·생애주기 건강관리(B2C)를 잇는 **연결고리**. 상세: [docs/product-vision.md](docs/product-vision.md)
 
-**최종 업데이트**: 2026-06-27 (세션 46 — 전사 모드 3종 추가: 빠른메모·상세요약·용어보정, 실험실 픽커) · 2026-06-27 (세션 45 — 긴 상담 녹음 전사 유실 버그 fix: maxDuration page레벨·비트레이트↓·복구 재전사) · 2026-06-26 (세션 44 — 미연결 기록 체어·참여자 편집 + 요약 제목 브랜딩) · 2026-06-25 (세션 43 — 녹음 엔진 picker UX: 홈 히어로 이동·디자인 정리·상담 카피) · 2026-06-24 (세션 42 — C-07 + 오늘의 치과 미팅 기획 + 녹음 엔진 실험실 v1)
+**최종 업데이트**: 2026-06-28 (세션 47 — 긴 상담 청크 분할 전사 모드 spec 010 구현: 분할녹음·구간전사·실패격리·복구) · 2026-06-27 (세션 46 — 전사 모드 3종 추가: 빠른메모·상세요약·용어보정, 실험실 픽커) · 2026-06-27 (세션 45 — 긴 상담 녹음 전사 유실 버그 fix: maxDuration page레벨·비트레이트↓·복구 재전사) · 2026-06-26 (세션 44 — 미연결 기록 체어·참여자 편집 + 요약 제목 브랜딩) · 2026-06-25 (세션 43 — 녹음 엔진 picker UX: 홈 히어로 이동·디자인 정리·상담 카피) · 2026-06-24 (세션 42 — C-07 + 오늘의 치과 미팅 기획 + 녹음 엔진 실험실 v1)
 **현재 버전**: main 브랜치
 
 ---
@@ -59,6 +59,25 @@
 | 이미지 줌/팬 | ✅ 완료 | 보기 라이트박스(`ZoomableImage`) + 주석 화면(CSS transform 줌·팬). 휠/버튼/핀치/드래그/더블클릭, 외부 라이브러리 없음 |
 | EO 마스터 게이트웨이 캐시 | ✅ **라이브** (2026-06-10) | EO 직원 마스터를 `clinic_members`에 캐시(`source='eo'`). `lib/eo/gateway.ts`+`sync-master.ts`, Vercel Cron `/api/cron/sync-master`(10분). 수동분 보호. 예미안(0e4e85d6) 직원 30명 동기화 확인 |
 | EO SSO 작성자 귀속 | ✅ **라이브** (2026-06-10) | `/api/auth/sso` 확장 클레임 수용 → `institution_members.eo_employee_id`·`display_name` 저장. 상담 저장 시 `author_employee_id`·`author_name` 자동 기록 |
+
+---
+
+## 2026-06-28 세션 47 (feat) — 긴 상담 청크 분할 전사 모드 (spec 010, speckit 전과정)
+
+긴 상담의 batch 천장(타임아웃·전손)을 구조적으로 푸는 **"긴 상담(청크)" 모드** 추가. C안(수동 모드 먼저 검증 → 나중에 자동 전환 승격). speckit 전과정(specify→plan→tasks→implement) 수행. **lab 전용·새 인프라 0·마이그레이션 0·비-lab 회귀 0.**
+
+| 영역 | 구현 |
+|---|---|
+| 스펙 | `specs/010-chunked-transcription/`(spec·plan·research·data-model·contracts·quickstart·tasks). 음성보관 A안(단일 경로 concat) |
+| 분할 녹음 | `chair-provider.tsx` — chunk 모드 시 5분(`CHUNK_SEGMENT_MS`)마다 MediaRecorder stop→restart로 유효 webm 구간 배열. `stopRecordingChunked(): Promise<Blob[]>` |
+| 구간 전사 | `transcribe.ts` 신규 서버액션 `transcribeSegment`(구간1개)·`summarizeChunkTranscript`(전체요약) — 둘 다 lab 게이트 |
+| 오케스트레이션 | `consultation-board.tsx` — 구간 동시 전사(동시성 3·실패1회 재시도·격리)→순서 join→전체 요약 1회→삽입. 부분 실패 보존(전 구간 실패 시만 전체 실패), 실패 구간 본문 표시 |
+| 진행률 | "음성 인식 중… (n/m 구간)" 표시(`chunkProgress`) |
+| 복구 | `draft-store` `BoardDraft.audioSegments[]` + 종료 직후 영속화 → `applyRecover` 구간 재전사. 자동저장이 구간 배열 덮어쓰지 않도록 보강 |
+| 보관 | 저장 시 구간 concat 단일 blob을 기존 `uploadConsultationAudio`로(스키마 불변), `transcription_engine="chunk"` |
+| 픽커 | `engines.ts` `EngineId`에 chunk + `LAB_ENGINE_OPTIONS` "긴 상담". 셀렉터 줄바꿈 pill로 7모드 수용 |
+| 검증 | `npm run build` TypeScript·compile ✅. quickstart 6시나리오는 예미안 수동 검증 대기(T022/T023) |
+| 보류 | chunk 음성 재청취 완전 패리티(v1 한계), 자동 전환(짧으면 batch/길면 chunk) 승격은 검증 후 |
 
 ---
 
