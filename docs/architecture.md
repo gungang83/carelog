@@ -69,6 +69,11 @@ components/
 │   ├── consult-hero.tsx           # 홈 히어로 — record-first 진입점("상담 기록 시작"=즉시 녹음). 실험실이면 시작 버튼 위 EngineSelector 노출
 │   ├── consultation-board.tsx     # 상담보드(DRAFT_CHAIR_KEY) — 녹음·전사·본문·체어·참여자·처방·저장. idle 폴백으로 EngineSelector
 │   ├── engine-selector.tsx        # 녹음 엔진 픽커(기본/빠른메모/상세요약/용어보정/긴상담/다국어/비교) — 줄바꿈 pill, 히어로·보드 공용, context engine 사용
+│
+├── records/
+│   └── records-browser.tsx        # 상담 기록 전체 열람·검색·필터(spec 011) — searchConsultations 호출, 날짜그룹·접이식 카드·전체복사. /records 페이지에서 사용
+# (참고) app/(dashboard)/records/page.tsx = 전체보기 화면, consultations.searchConsultations(통합 검색),
+#        consultation-history.tsx = 환자상세 접이식+환자내 검색(A6). 홈 home-feed '전체보기·검색'→/records.
 │   ├── chair-overlay.tsx          # 체어 기록 다이얼로그 (createPortal → body); 현재 세션 녹음/편집 전용
 │   ├── chair-patient-search.tsx   # 환자 검색 + linkChairRecordToPatient + 인라인 신규 등록
 │   ├── chair-settings.tsx         # 설정 페이지 내 체어 관리 (admin/owner 전용)

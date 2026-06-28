@@ -47,6 +47,15 @@ function iconLabel(name: string) {
   return label.length > 3 ? label.slice(0, 3) : label;
 }
 
+// 본문 HTML → 평문(접힌 카드 미리보기·검색 매칭용)
+function stripHtmlPlain(html: string): string {
+  return html
+    .replace(/<[^>]*>/g, " ")
+    .replace(/&nbsp;/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 // ─── 임시저장 액션 버튼 ───────────────────────────────────────────────────────
 function DraftActions({
   item,
@@ -425,6 +434,9 @@ function SmsControls({
 export function ConsultationHistory({ consultations, patientId }: Props) {
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
   const [highlightId, setHighlightId] = useState<string | null>(null);
+  // spec 011 A6 — 카드 접이식 보기 + 환자 내 키워드 검색
+  const [openId, setOpenId] = useState<string | null>(null);
+  const [query, setQuery] = useState("");
 
   const closeLightbox = useCallback(() => setLightboxUrl(null), []);
 
@@ -455,10 +467,25 @@ export function ConsultationHistory({ consultations, patientId }: Props) {
     return <p className="mt-6 text-sm text-slate-600">아직 저장된 상담 기록이 없습니다.</p>;
   }
 
+  const q = query.trim().toLowerCase();
+  const filtered = q
+    ? consultations.filter((c) => stripHtmlPlain(c.content).toLowerCase().includes(q))
+    : consultations;
+
   return (
     <>
-      <ol className="mt-6 space-y-4">
-        {consultations.map((c) => {
+      <input
+        type="search"
+        value={query}
+        onChange={(e) => setQuery(e.target.value)}
+        placeholder="이 환자 상담 내용 검색"
+        className="mt-6 w-full rounded-xl border border-slate-300 px-3 py-2 text-sm outline-none focus:border-sky-500"
+      />
+      {filtered.length === 0 ? (
+        <p className="mt-4 text-sm text-slate-500">검색 결과가 없어요.</p>
+      ) : (
+      <ol className="mt-4 space-y-4">
+        {filtered.map((c) => {
           const created = new Date(c.created_at);
           const createdLabel = Number.isNaN(created.getTime())
             ? c.created_at
@@ -474,6 +501,8 @@ export function ConsultationHistory({ consultations, patientId }: Props) {
           const prescriptions = c.prescriptions ?? [];
           const isDraft = c.status === "draft";
           const isHighlighted = highlightId === `consultation-${c.id}`;
+          const open = openId === c.id || isHighlighted;
+          const preview = stripHtmlPlain(c.content);
 
           return (
             <li
@@ -487,26 +516,42 @@ export function ConsultationHistory({ consultations, patientId }: Props) {
                   : "border-sky-100 bg-white"
               }`}
             >
-              {/* 헤더 */}
-              <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
-                <time dateTime={c.created_at} className="text-xs font-semibold text-slate-500">
-                  {createdLabel}
-                </time>
-                {isDraft ? (
-                  <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-semibold text-amber-700">
-                    임시저장
-                  </span>
-                ) : null}
-                {c.station_name ? (
-                  <>
-                    <span className="text-[11px] text-sky-200" aria-hidden>·</span>
-                    <span className="text-[11px] font-medium tracking-tight text-sky-700">
-                      {c.station_name}
-                    </span>
-                  </>
-                ) : null}
-              </div>
+              {/* 헤더 — 클릭 시 펼침/접힘(기본 접힘, A6) */}
+              <button
+                type="button"
+                onClick={() => setOpenId(open ? null : c.id)}
+                className="flex w-full items-start gap-2 text-left"
+              >
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
+                    <time dateTime={c.created_at} className="text-xs font-semibold text-slate-500">
+                      {createdLabel}
+                    </time>
+                    {isDraft ? (
+                      <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-semibold text-amber-700">
+                        임시저장
+                      </span>
+                    ) : null}
+                    {c.station_name ? (
+                      <>
+                        <span className="text-[11px] text-sky-200" aria-hidden>·</span>
+                        <span className="text-[11px] font-medium tracking-tight text-sky-700">
+                          {c.station_name}
+                        </span>
+                      </>
+                    ) : null}
+                  </div>
+                  {!open && (
+                    <p className="mt-1 truncate text-sm text-slate-600">
+                      {preview || "(내용 없음)"}
+                    </p>
+                  )}
+                </div>
+                <span className="mt-0.5 shrink-0 text-xs text-slate-400">{open ? "▲" : "▼"}</span>
+              </button>
 
+              {open && (
+              <>
               {/* 본문 */}
               <div
                 className="rich-content mt-3 text-sm leading-6 text-slate-800"
@@ -579,10 +624,13 @@ export function ConsultationHistory({ consultations, patientId }: Props) {
                   )}
                 </div>
               )}
+              </>
+              )}
             </li>
           );
         })}
       </ol>
+      )}
 
       {/* 이미지 라이트박스 */}
       {lightboxUrl ? (

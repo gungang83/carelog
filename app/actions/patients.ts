@@ -233,6 +233,28 @@ export async function createPatient(formData: FormData): Promise<
     resident_no = merged;
   }
 
+  // 동시 등록·기존 환자 중복 방지(A1) — 주민번호가 있으면 해시로 기존 환자를 먼저 찾는다.
+  // 주민번호 전체 일치 = 같은 사람이므로 새로 만들지 않고 기존 환자를 반환(멱등).
+  // 두 명이 같은 환자를 동시에 등록해도 한 명은 기존을 받아 'patient_resident_no_hash_uidx'
+  // 충돌 에러("계속 에러") 없이 곧장 연결로 이어진다.
+  if (resident_no) {
+    const normalizedForHash = normalizeFullResidentNo(resident_no);
+    if (normalizedForHash) {
+      const admin = createAdminSupabaseClient();
+      const { data: existing } = await admin
+        .from(patientTable)
+        .select(PATIENT_SELECT_PUBLIC)
+        .eq("institution_id", institutionId)
+        .eq("resident_no_hash", hashResidentNoForMatching(normalizedForHash))
+        .maybeSingle();
+      const existingPatient = existing ? mapPatientRow(existing) : null;
+      if (existingPatient) {
+        revalidatePath("/");
+        return { ok: true, patient: existingPatient };
+      }
+    }
+  }
+
   try {
     const supabase = await createServerSupabaseClient();
     const { data, error } = await supabase
@@ -248,7 +270,14 @@ export async function createPatient(formData: FormData): Promise<
       .single();
 
     if (error) {
-      return { ok: false, message: error.message };
+      // 동시 등록으로 유니크 충돌이 나면 사용자 친화 메시지로(원시 DB 에러 노출 금지).
+      const dup = /duplicate|unique|resident_no_hash/i.test(error.message);
+      return {
+        ok: false,
+        message: dup
+          ? "이미 등록된 환자예요. 환자 검색으로 찾아 연결해 주세요."
+          : error.message,
+      };
     }
 
     if (resident_no && data) {
