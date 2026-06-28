@@ -580,3 +580,27 @@ saveChairRecord (Server Action)
 구독 헬퍼: lib/realtime/institution-events.ts subscribeNotifications (chair_audit_logs 패턴 재사용).
 ```
 - 기존 실시간 토스트(LiveAlertsProvider, 일시적)와 별개 — 알림함은 영속 기록·읽음관리.
+
+## 사용량·크레딧 (spec 013-usage-credit-dashboard)
+
+```
+[메뉴 사용량]
+화면 진입(usePathname 변경)
+  → components/usage/route-tracker.tsx (sendBeacon {menuId})
+  → POST /api/menu-usage/track (세션에서 institution·user·role 신뢰원 확인, 화이트리스트)
+  → increment_menu_usage RPC (institution,user,menu,day 카운트 +1, KST)
+
+[크레딧 사용량]
+AI 전사 성공(app/actions/transcribe.ts: transcribeEngine·transcribeAndSummarize·transcribeSegment·summarizeChunkTranscript)
+  → recordUsage(feature)  ★비차단·비throw
+  → lib/credits.deductCredit → deduct_credit RPC (credit_log 적재 + 잔액 차감, 음수 허용)
+
+[조회 — 슈퍼어드민]
+/admin → /admin/usage (app/(dashboard)/admin/usage/page.tsx, isSuperAdmin 게이트)
+  → components/admin/usage-dashboard.tsx (2탭: 크레딧/메뉴, 기간·기관 필터)
+  → GET /api/credits/summary  (총사용·기능별·사용자별·기관별·잔액·최근내역)
+  → GET /api/menu-usage/summary (총합·기관별·메뉴별 역할분해·미사용)
+  → POST /api/credits/grant (충전 시뮬레이션)
+데이터: menu_usage_daily · institution_credits · credit_log. RLS enable+정책0(service_role만), 기관격리=쿼리필터.
+```
+- EO `/superadmin/menu-usage`(spec-075)·크레딧(spec-011) 벤치마크. 차이: RLS 정책0(더 강한 격리) + 크레딧 비차단(임상 안정성). 메뉴 정의는 `lib/usage/menu-config.ts`.

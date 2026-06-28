@@ -16,6 +16,7 @@ import { ChairProvider } from "@/components/chair/chair-provider";
 import { ChairOverlay } from "@/components/chair/chair-overlay";
 import { ConsultationBoard } from "@/components/chair/consultation-board";
 import { LiveAlertsProvider } from "@/components/notifications/live-alerts-provider";
+import { RouteTracker } from "@/components/usage/route-tracker";
 import type { Participant } from "@/lib/types/database";
 
 export default async function DashboardLayout({
@@ -85,6 +86,7 @@ export default async function DashboardLayout({
         userAvatarUrl={userAvatarUrl}
         isSuperAdmin={superAdmin}
       />
+      <RouteTracker />
       <main className="flex-1">{children}</main>
       <Footer />
     </ChairProvider>

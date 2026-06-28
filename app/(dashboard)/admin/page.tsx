@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import Link from "next/link";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { isSuperAdmin } from "@/lib/admin";
 import { getAllInstitutions } from "@/app/actions/admin";
@@ -20,11 +21,19 @@ export default async function AdminPage() {
 
   return (
     <div className="mx-auto max-w-4xl space-y-8 px-4 py-10 sm:px-6">
-      <div>
-        <h1 className="text-2xl font-bold text-slate-900">슈퍼어드민</h1>
-        <p className="mt-1 text-sm text-slate-500">
-          모든 기관·직원·실험실을 통합 관리합니다. (최고 관리자 전용)
-        </p>
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold text-slate-900">슈퍼어드민</h1>
+          <p className="mt-1 text-sm text-slate-500">
+            모든 기관·직원·실험실을 통합 관리합니다. (최고 관리자 전용)
+          </p>
+        </div>
+        <Link
+          href="/admin/usage"
+          className="shrink-0 rounded-xl border border-sky-200 bg-sky-50 px-3 py-2 text-sm font-medium text-sky-700 transition hover:bg-sky-100"
+        >
+          사용량 · 크레딧 →
+        </Link>
       </div>
 
       <div className="grid grid-cols-3 gap-4">
