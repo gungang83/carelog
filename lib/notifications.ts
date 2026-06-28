@@ -92,15 +92,25 @@ export async function getNotifications(ctx: NotificationContext): Promise<Notifi
   const isAdmin = role === "admin" || role === "owner";
   const admin = createAdminSupabaseClient();
 
-  const [{ data: notifs }, { data: reads }] = await Promise.all([
-    admin
-      .from("notifications")
-      .select("id, created_at, title, body, type, link, recipients")
-      .eq("institution_id", institutionId)
-      .order("created_at", { ascending: false })
-      .limit(100),
-    admin.from("notification_reads").select("notification_id").eq("user_id", userId),
-  ]);
+  // 마이그레이션 미적용 등으로 조회 실패 시 빈 목록으로 graceful 처리(앱 깨짐 방지).
+  let notifs: Record<string, unknown>[] | null = null;
+  let reads: { notification_id: string }[] | null = null;
+  try {
+    const [r1, r2] = await Promise.all([
+      admin
+        .from("notifications")
+        .select("id, created_at, title, body, type, link, recipients")
+        .eq("institution_id", institutionId)
+        .order("created_at", { ascending: false })
+        .limit(100),
+      admin.from("notification_reads").select("notification_id").eq("user_id", userId),
+    ]);
+    if (r1.error || r2.error) return [];
+    notifs = r1.data as Record<string, unknown>[] | null;
+    reads = r2.data as { notification_id: string }[] | null;
+  } catch {
+    return [];
+  }
 
   const readSet = new Set((reads ?? []).map((r) => r.notification_id as string));
 
@@ -124,30 +134,42 @@ export async function getNotifications(ctx: NotificationContext): Promise<Notifi
 }
 
 export async function markNotificationRead(userId: string, notificationId: string): Promise<void> {
-  const admin = createAdminSupabaseClient();
-  await admin
-    .from("notification_reads")
-    .upsert({ notification_id: notificationId, user_id: userId }, { onConflict: "notification_id,user_id" });
+  try {
+    const admin = createAdminSupabaseClient();
+    await admin
+      .from("notification_reads")
+      .upsert({ notification_id: notificationId, user_id: userId }, { onConflict: "notification_id,user_id" });
+  } catch {
+    /* 비차단 */
+  }
 }
 
 export async function markNotificationUnread(userId: string, notificationId: string): Promise<void> {
-  const admin = createAdminSupabaseClient();
-  await admin
-    .from("notification_reads")
-    .delete()
-    .eq("notification_id", notificationId)
-    .eq("user_id", userId);
+  try {
+    const admin = createAdminSupabaseClient();
+    await admin
+      .from("notification_reads")
+      .delete()
+      .eq("notification_id", notificationId)
+      .eq("user_id", userId);
+  } catch {
+    /* 비차단 */
+  }
 }
 
 export async function markAllNotificationsRead(ctx: NotificationContext): Promise<void> {
-  const items = await getNotifications(ctx);
-  const unread = items.filter((n) => !n.isRead);
-  if (unread.length === 0) return;
-  // 중복 id 제거 — 같은 (notification_id,user_id)가 배치에 2개면 onConflict upsert가 전체 실패한다.
-  const seen = new Set<string>();
-  const rows = unread
-    .filter((n) => (seen.has(n.id) ? false : (seen.add(n.id), true)))
-    .map((n) => ({ notification_id: n.id, user_id: ctx.userId }));
-  const admin = createAdminSupabaseClient();
-  await admin.from("notification_reads").upsert(rows, { onConflict: "notification_id,user_id" });
+  try {
+    const items = await getNotifications(ctx);
+    const unread = items.filter((n) => !n.isRead);
+    if (unread.length === 0) return;
+    // 중복 id 제거 — 같은 (notification_id,user_id)가 배치에 2개면 onConflict upsert가 전체 실패한다.
+    const seen = new Set<string>();
+    const rows = unread
+      .filter((n) => (seen.has(n.id) ? false : (seen.add(n.id), true)))
+      .map((n) => ({ notification_id: n.id, user_id: ctx.userId }));
+    const admin = createAdminSupabaseClient();
+    await admin.from("notification_reads").upsert(rows, { onConflict: "notification_id,user_id" });
+  } catch {
+    /* 비차단 */
+  }
 }
