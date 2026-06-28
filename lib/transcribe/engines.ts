@@ -6,9 +6,10 @@
 // quick        = 전사만(요약 생략). 가장 빠르고 저렴 — 직접 정리하는 사람용.
 // detailed     = 증상·소견·처치·처방·다음방문을 구조화한 자세한 상담기록.
 // dental       = 치과 용어 교정 후 요약(Whisper 오인식 보정) — 정확도↑.
+// chunk        = 긴 상담 — 5분 구간 분할 녹음 → 구간별 전사(실패 격리) → 전체 통짜 요약(spec 010).
 // multilingual = 자동 언어감지 + 번역(원문/번역/요약). 실험실(예미안) 전용.
 // 'comparison' = 엔진이 아니라 실행 모드(basic+multilingual 동시).
-export type EngineId = "basic" | "quick" | "detailed" | "dental" | "multilingual";
+export type EngineId = "basic" | "quick" | "detailed" | "dental" | "chunk" | "multilingual";
 export type EngineMode = EngineId | "comparison";
 
 export const LAB_ENGINE_OPTIONS: { value: EngineMode; label: string; desc: string }[] = [
@@ -16,9 +17,15 @@ export const LAB_ENGINE_OPTIONS: { value: EngineMode; label: string; desc: strin
   { value: "quick", label: "빠른 메모", desc: "요약 없이 말한 그대로 전사만 — 가장 빠름(직접 정리용)" },
   { value: "detailed", label: "상세 요약", desc: "증상·소견·처치·처방·다음 방문을 구조화한 자세한 상담기록" },
   { value: "dental", label: "용어 보정", desc: "치과 용어(크라운·인레이·크랙 등) 교정 후 요약 — 정확도↑" },
+  { value: "chunk", label: "긴 상담", desc: "5분 단위로 나눠 끊김 없이 전사(긴 상담·중간 실패에 강함)" },
   { value: "multilingual", label: "다국어", desc: "자동 언어감지 + 번역(원문/번역/요약)" },
   { value: "comparison", label: "비교", desc: "기본 + 다국어 동시 실행해 나란히 비교" },
 ];
+
+// 청크(긴 상담) 모드 상수 — 분할 녹음·전사 오케스트레이션 공용(spec 010 research R5).
+export const CHUNK_SEGMENT_MS = 5 * 60 * 1000; // 구간 길이 5분
+export const CHUNK_CONCURRENCY = 3; // 구간 전사 동시성
+export const CHUNK_SEGMENT_RETRY = 1; // 구간 전사 실패 재시도 횟수
 
 /** 단일 엔진 실행 결과 — UI는 insertText를 그대로 에디터에 넣으면 된다. */
 export type EngineRun = {
@@ -29,6 +36,7 @@ export type EngineRun = {
   translation?: string; // 번역(원문이 한국어가 아니면 한국어로, 한국어면 영어로)
   detectedLang?: string; // 감지된 원문 언어 코드
   insertText: string; // 에디터 삽입용 정형 텍스트
+  failedSegments?: number[]; // 청크 모드: 전사 실패한 구간 인덱스(있으면 표시)
 };
 
 export type EngineTranscribeResult =

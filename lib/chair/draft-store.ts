@@ -21,6 +21,8 @@ export type BoardDraft = {
   participants: Participant[];
   selectedChair: { id: string; name: string } | null;
   audioBlob: Blob | null;
+  // 청크(긴 상담) 모드: 분할 녹음 구간 blob 배열(복구 시 재전사용). 단일 blob과 병존.
+  audioSegments?: Blob[] | null;
   savedAt: number;
 };
 
@@ -90,5 +92,10 @@ export async function clearDraft(): Promise<void> {
 
 /** 복구할 만한 내용이 있는지 — 빈 임시본은 복구 제안하지 않는다. */
 export function draftHasContent(d: BoardDraft | null): d is BoardDraft {
-  return !!d && (d.content.trim() !== "" || d.audioBlob !== null);
+  return (
+    !!d &&
+    (d.content.trim() !== "" ||
+      d.audioBlob !== null ||
+      (d.audioSegments?.length ?? 0) > 0)
+  );
 }

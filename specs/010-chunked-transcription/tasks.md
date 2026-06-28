@@ -24,8 +24,8 @@ description: "Task list for 긴 상담 청크 분할 전사 모드 (010-chunked-
 
 **Purpose**: 모드 등록·상수 — 로직 없는 공유 기반.
 
-- [ ] T001 [P] `lib/transcribe/engines.ts`: `EngineId`에 `"chunk"` 추가, `LAB_ENGINE_OPTIONS`에 `{ value:"chunk", label:"긴 상담", desc:"긴 상담을 5분 단위로 나눠 끊김 없이 전사(중간 실패에 강함)" }` 추가, `EngineRun`에 `failedSegments?: number[]` 옵셔널 추가
-- [ ] T002 [P] 청크 상수 정의(`lib/transcribe/engines.ts` 또는 인접): `SEGMENT_MS = 5*60*1000`, `CHUNK_CONCURRENCY = 3`, `SEGMENT_RETRY = 1`
+- [X] T001 [P] `lib/transcribe/engines.ts`: `EngineId`에 `"chunk"` 추가, `LAB_ENGINE_OPTIONS`에 `{ value:"chunk", label:"긴 상담", desc:"긴 상담을 5분 단위로 나눠 끊김 없이 전사(중간 실패에 강함)" }` 추가, `EngineRun`에 `failedSegments?: number[]` 옵셔널 추가
+- [X] T002 [P] 청크 상수 정의(`lib/transcribe/engines.ts` 또는 인접): `SEGMENT_MS = 5*60*1000`, `CHUNK_CONCURRENCY = 3`, `SEGMENT_RETRY = 1`
 
 **Checkpoint**: 픽커에 "긴 상담"이 lab에서 렌더된다(engine-selector 자동). 아직 전사 로직 없음.
 
@@ -35,10 +35,10 @@ description: "Task list for 긴 상담 청크 분할 전사 모드 (010-chunked-
 
 **Purpose**: 분할 녹음·구간 전사·요약·복구 영속화의 기반. **완료 전 어떤 스토리도 동작 불가.**
 
-- [ ] T003 `lib/chair/draft-store.ts`: `BoardDraft`에 `audioSegments?: Blob[]` 추가, `draftHasContent`가 `audioSegments?.length`도 복구 대상으로 포함(기존 `audioBlob` 유지)
-- [ ] T004 `components/chair/chair-provider.tsx`: **분할 녹음** — chunk 모드 녹음 시 `SEGMENT_MS`마다 `MediaRecorder.stop()`→즉시 `start(250)`로 구간을 끊어 유효 webm blob을 `refs.segments[]`에 누적. `stopRecording`이 마지막 구간 flush 후 `segments` 배열을 반환/노출, `resetChair`가 `segments` 비움. 32kbps·wake lock 유지. **비-chunk 단일 blob 경로는 불변.**
-- [ ] T005 `app/actions/transcribe.ts`: `transcribeSegment(formData)` 신규 Server Action — `getMyInstitutionLab()` 게이트(비-lab `{ok:false}`), 구간 1개 `transcribeKo` 전사, `{ ok:true, text, index? } | { ok:false, message, index? }` 반환(무음 구간은 `text:""`로 성공)
-- [ ] T006 `app/actions/transcribe.ts`: `summarizeChunkTranscript(fullText)` 신규 Server Action — lab 게이트, `SUMMARY_PROMPT` 재사용 Claude 요약 1회, `{ ok:true, summary } | { ok:false, message }` 반환(빈 입력 거부)
+- [X] T003 `lib/chair/draft-store.ts`: `BoardDraft`에 `audioSegments?: Blob[]` 추가, `draftHasContent`가 `audioSegments?.length`도 복구 대상으로 포함(기존 `audioBlob` 유지)
+- [X] T004 `components/chair/chair-provider.tsx`: **분할 녹음** — chunk 모드 녹음 시 `SEGMENT_MS`마다 `MediaRecorder.stop()`→즉시 `start(250)`로 구간을 끊어 유효 webm blob을 `refs.segments[]`에 누적. `stopRecording`이 마지막 구간 flush 후 `segments` 배열을 반환/노출, `resetChair`가 `segments` 비움. 32kbps·wake lock 유지. **비-chunk 단일 blob 경로는 불변.**
+- [X] T005 `app/actions/transcribe.ts`: `transcribeSegment(formData)` 신규 Server Action — `getMyInstitutionLab()` 게이트(비-lab `{ok:false}`), 구간 1개 `transcribeKo` 전사, `{ ok:true, text, index? } | { ok:false, message, index? }` 반환(무음 구간은 `text:""`로 성공)
+- [X] T006 `app/actions/transcribe.ts`: `summarizeChunkTranscript(fullText)` 신규 Server Action — lab 게이트, `SUMMARY_PROMPT` 재사용 Claude 요약 1회, `{ ok:true, summary } | { ok:false, message }` 반환(빈 입력 거부)
 
 **Checkpoint**: 분할 녹음·구간 전사·요약 단위가 준비됨. 오케스트레이션(스토리)에서 조립 가능.
 
@@ -50,11 +50,11 @@ description: "Task list for 긴 상담 청크 분할 전사 모드 (010-chunked-
 
 **Independent Test**: lab에서 "긴 상담"으로 30분+ 녹음→종료→전 구간 전사문+전체 요약이 본문에 삽입·저장되는지(quickstart 시나리오 1).
 
-- [ ] T007 [US1] `components/chair/consultation-board.tsx`: `handleStop` 분기 — `engine==="chunk"`면 chair-provider의 `segments` 기반 오케스트레이션 진입, 아니면 기존 단일 경로(`transcribeBlob`) 유지
-- [ ] T008 [US1] `components/chair/consultation-board.tsx`: 구간별 `transcribeSegment` 호출을 동시성 `CHUNK_CONCURRENCY`로 실행(happy path) → 성공 `text`를 `index` 순서로 join
-- [ ] T009 [US1] `components/chair/consultation-board.tsx`: join 전체 원문으로 `summarizeChunkTranscript` 호출 → `summary`, `EngineRun{ engine:"chunk", transcription:join, summary, insertText:summary }` 구성 → 에디터 삽입, `setUsedEngine("chunk")` (요약 실패 시 join 원문 폴백)
-- [ ] T010 [US1] `components/chair/consultation-board.tsx`: 저장(`handleSave`) 시 `transcriptionEngine:"chunk"` 기록 + 보관용 `new Blob(segments)` concat 단일 blob을 `uploadConsultationAudio(id, fd)`로 업로드(A안, 기존 단일 경로)
-- [ ] T011 [US1] `components/chair/consultation-board.tsx`: 짧은 녹음 edge — `segments.length <= 1`이면 단일 구간으로 통짜와 동등 처리(분할 경로가 1구간도 정상)
+- [X] T007 [US1] `components/chair/consultation-board.tsx`: `handleStop` 분기 — `engine==="chunk"`면 chair-provider의 `segments` 기반 오케스트레이션 진입, 아니면 기존 단일 경로(`transcribeBlob`) 유지
+- [X] T008 [US1] `components/chair/consultation-board.tsx`: 구간별 `transcribeSegment` 호출을 동시성 `CHUNK_CONCURRENCY`로 실행(happy path) → 성공 `text`를 `index` 순서로 join
+- [X] T009 [US1] `components/chair/consultation-board.tsx`: join 전체 원문으로 `summarizeChunkTranscript` 호출 → `summary`, `EngineRun{ engine:"chunk", transcription:join, summary, insertText:summary }` 구성 → 에디터 삽입, `setUsedEngine("chunk")` (요약 실패 시 join 원문 폴백)
+- [X] T010 [US1] `components/chair/consultation-board.tsx`: 저장(`handleSave`) 시 `transcriptionEngine:"chunk"` 기록 + 보관용 `new Blob(segments)` concat 단일 blob을 `uploadConsultationAudio(id, fd)`로 업로드(A안, 기존 단일 경로)
+- [X] T011 [US1] `components/chair/consultation-board.tsx`: 짧은 녹음 edge — `segments.length <= 1`이면 단일 구간으로 통짜와 동등 처리(분할 경로가 1구간도 정상)
 
 **Checkpoint**: chunk 모드로 긴 상담이 완료·저장된다(MVP). 실패 처리·진행률은 다음 단계.
 

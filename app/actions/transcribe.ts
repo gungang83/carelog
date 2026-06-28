@@ -2,6 +2,7 @@
 
 import OpenAI from "openai";
 import Anthropic from "@anthropic-ai/sdk";
+import { getMyInstitutionLab } from "@/lib/auth/institution";
 import type {
   EngineId,
   EngineMode,
@@ -415,4 +416,58 @@ export async function transcribeAndSummarize(
   const result = await runBasic(audioFile, clients.openai, clients.anthropic);
   if (!result.ok) return { ok: false, message: result.message };
   return { ok: true, transcription: result.run.transcription, summary: result.run.summary };
+}
+
+// ─── 청크(긴 상담) — 구간 1개 전사 (spec 010) ────────────────────────────────
+// 클라이언트가 구간마다 호출(동시성·재시도는 클라이언트 오케스트레이션). lab 전용.
+export async function transcribeSegment(
+  formData: FormData,
+): Promise<
+  | { ok: true; text: string; index?: number }
+  | { ok: false; message: string; index?: number }
+> {
+  const indexRaw = formData.get("index");
+  const index = typeof indexRaw === "string" ? Number(indexRaw) : undefined;
+  const lab = await getMyInstitutionLab();
+  if (!lab) return { ok: false, message: "실험실 전용 기능입니다.", index };
+  const audioFile = formData.get("audio") as File | null;
+  if (!audioFile || audioFile.size === 0) {
+    return { ok: false, message: "구간 음성이 없습니다.", index };
+  }
+  const clients = getClients();
+  if (!clients.ok) return { ok: false, message: clients.message, index };
+  const t = await transcribeKo(audioFile, clients.openai);
+  if (!t.ok) {
+    // 무음/빈 구간은 빈 텍스트로 성공 처리(전손 아님). API 오류만 실패로.
+    if (t.message.includes("인식하지 못")) return { ok: true, text: "", index };
+    return { ok: false, message: t.message, index };
+  }
+  return { ok: true, text: t.text, index };
+}
+
+// ─── 청크(긴 상담) — 전체 전사문 1회 요약 (spec 010) ─────────────────────────
+// 이어붙인 전체 원문을 받아 전체 맥락으로 요약. lab 전용.
+export async function summarizeChunkTranscript(
+  fullText: string,
+): Promise<{ ok: true; summary: string } | { ok: false; message: string }> {
+  const lab = await getMyInstitutionLab();
+  if (!lab) return { ok: false, message: "실험실 전용 기능입니다." };
+  if (!fullText?.trim()) return { ok: false, message: "전사된 내용이 없습니다." };
+  const clients = getClients();
+  if (!clients.ok) return { ok: false, message: clients.message };
+  try {
+    const message = await clients.anthropic.messages.create({
+      model: "claude-sonnet-4-6",
+      max_tokens: 1500,
+      messages: [{ role: "user", content: SUMMARY_PROMPT(fullText) }],
+    });
+    const block = message.content[0];
+    const summary = block.type === "text" ? block.text : fullText;
+    return { ok: true, summary };
+  } catch (e) {
+    return {
+      ok: false,
+      message: `요약 실패: ${e instanceof Error ? e.message : "알 수 없는 오류"}`,
+    };
+  }
 }

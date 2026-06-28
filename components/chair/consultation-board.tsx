@@ -17,7 +17,11 @@ import {
   getOrCreateChairByName,
   getRecentParticipants,
 } from "@/app/actions/chairs";
-import { type EngineRun } from "@/lib/transcribe/engines";
+import {
+  transcribeSegment,
+  summarizeChunkTranscript,
+} from "@/app/actions/transcribe";
+import { CHUNK_CONCURRENCY, type EngineRun } from "@/lib/transcribe/engines";
 import { EngineSelector } from "@/components/chair/engine-selector";
 import { RichTextEditor, type RichTextEditorHandle } from "@/components/rich-text-editor";
 import { PrescriptionPicker } from "@/components/chair/prescription-picker";
@@ -70,6 +74,7 @@ function BoardContent({
     getChairStatus,
     startRecording,
     stopRecording,
+    stopRecordingChunked,
     setTranscriptionResult,
     resetChair,
     refreshUnlinkedCount,
@@ -101,6 +106,8 @@ function BoardContent({
   const editorRef = useRef<RichTextEditorHandle | null>(null);
   // 녹음 원본 blob — 저장 후 음성 보관 업로드용(spec 009). 저장/버리기 시 해제.
   const audioBlobRef = useRef<Blob | null>(null);
+  // 청크(긴 상담) 모드 분할 녹음 구간 blob 배열 — 복구 재전사용(spec 010).
+  const audioSegmentsRef = useRef<Blob[]>([]);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const status = getChairStatus(DRAFT_CHAIR_KEY);
@@ -171,6 +178,10 @@ function BoardContent({
         participants,
         selectedChair,
         audioBlob: audioBlobRef.current,
+        // 청크 구간 배열 보존(자동저장이 handleStopChunked 저장본을 덮어쓰지 않도록)
+        audioSegments: audioSegmentsRef.current.length
+          ? audioSegmentsRef.current
+          : null,
         savedAt: Date.now(),
       });
     }, 1000);
@@ -251,6 +262,11 @@ function BoardContent({
   };
 
   const handleStop = () => {
+    // 청크(긴 상담) 모드는 분할 녹음 → 별도 오케스트레이션.
+    if (engine === "chunk") {
+      void handleStopChunked();
+      return;
+    }
     const secs = elapsed;
     const blob = stopRecording(DRAFT_CHAIR_KEY);
     const sizeKB = blob ? Math.round((blob.size / 1024) * 10) / 10 : 0;
@@ -309,6 +325,69 @@ function BoardContent({
     });
   };
 
+  // ── 청크(긴 상담) 모드 — 분할 녹음 종료 → 구간별 전사 → 전체 요약 (spec 010) ──
+  const handleStopChunked = async () => {
+    const segments = await stopRecordingChunked(DRAFT_CHAIR_KEY);
+    if (segments.length === 0) {
+      resetChair(DRAFT_CHAIR_KEY);
+      setMicError(
+        "녹음이 비어 있어요. 화면이 잠기거나 다른 앱으로 전환되면 녹음이 끊깁니다. 화면을 켠 채로 다시 녹음해 주세요.",
+      );
+      return;
+    }
+    audioSegmentsRef.current = segments;
+    // 보관(spec 009)·복구용 단일 blob — 구간을 이어붙인다(A안). 짧은 녹음=구간 1개도 동일.
+    audioBlobRef.current = new Blob(segments, {
+      type: segments[0]?.type || "audio/webm",
+    });
+
+    // 전사 시작 전 즉시 영속화(복구 안전망) — 구간 배열도 함께 저장.
+    void saveDraft({
+      content: editText,
+      prescriptions,
+      participants,
+      selectedChair,
+      audioBlob: audioBlobRef.current,
+      audioSegments: segments,
+      savedAt: Date.now(),
+    });
+
+    transcribeSegments(segments);
+  };
+
+  // 구간 배열을 동시성 제한으로 전사 → 순서대로 이어붙여 전체 요약(녹음 종료·복구 공용).
+  const transcribeSegments = (segments: Blob[]) => {
+    startTransition(async () => {
+      const total = segments.length;
+      const texts: string[] = new Array(total).fill("");
+      let cursor = 0;
+      const worker = async () => {
+        while (cursor < total) {
+          const i = cursor++;
+          const fd = new FormData();
+          fd.append("audio", segments[i], `segment_${i}.webm`);
+          fd.append("index", String(i));
+          const r = await transcribeSegment(fd);
+          if (r.ok) texts[i] = r.text; // 실패 구간은 공백(US2에서 재시도·표시 강화)
+        }
+      };
+      await Promise.all(
+        Array.from({ length: Math.min(CHUNK_CONCURRENCY, total) }, worker),
+      );
+      const joined = texts.filter((t) => t.trim()).join("\n");
+      if (!joined.trim()) {
+        setMicError("전사된 내용이 없어요. 다시 시도해 주세요.");
+        setTranscriptionResult(DRAFT_CHAIR_KEY, "");
+        return;
+      }
+      const sum = await summarizeChunkTranscript(joined);
+      const summary = sum.ok ? sum.summary : joined; // 요약 실패 시 원문 폴백
+      setTranscriptionResult(DRAFT_CHAIR_KEY, summary);
+      editorRef.current?.insertText(summary);
+      setUsedEngine("chunk");
+    });
+  };
+
   const handlePickCustomChair = () => {
     const name = customName.trim();
     if (!name) return;
@@ -338,6 +417,7 @@ function BoardContent({
       return;
     }
     audioBlobRef.current = null;
+    audioSegmentsRef.current = [];
     resetChair(DRAFT_CHAIR_KEY);
     setEditText("");
     editorRef.current?.clear();
@@ -409,6 +489,7 @@ function BoardContent({
           void uploadConsultationAudio(result.consultationId, fd);
         }
         audioBlobRef.current = null;
+    audioSegmentsRef.current = [];
         void clearDraft();
         setLastChairId(chair.id);
         resetChair(DRAFT_CHAIR_KEY);

@@ -11,7 +11,7 @@ import {
   type ReactNode,
 } from "react";
 import type { ChairRow, ClinicMemberRow, Participant } from "@/lib/types/database";
-import type { EngineMode } from "@/lib/transcribe/engines";
+import { CHUNK_SEGMENT_MS, type EngineMode } from "@/lib/transcribe/engines";
 import { getUnlinkedChairRecords } from "@/app/actions/chairs";
 
 export type ChairStatus = "idle" | "recording" | "processing" | "has_records";
@@ -126,6 +126,14 @@ function reducer(state: ChairState, action: ChairAction): ChairState {
 type MediaRefs = {
   mediaRecorder: MediaRecorder | null;
   chunks: Blob[];
+  // 청크(긴 상담) 분할 녹음 — spec 010
+  segments: Blob[]; // 완료된 구간 blob들
+  segmentTimer: ReturnType<typeof setInterval> | null; // 구간 회전 타이머
+  stream: MediaStream | null; // 구간 재시작 간 유지하는 스트림
+  mimeType: string;
+  chunked: boolean; // 이번 녹음이 청크 모드인가
+  userStopping: boolean; // 사용자 종료 중(다음 구간 재시작 금지)
+  onSegmentsReady: ((segs: Blob[]) => void) | null; // 종료 시 구간 배열 resolve
 };
 
 // Wake Lock API 타입 (tsconfig lib에 없을 수 있어 최소 정의)
@@ -149,6 +157,8 @@ type ChairContextValue = {
   getSavedConsultationId: (chairId: string) => string | null;
   startRecording: (chairId: string) => Promise<{ ok: boolean; error?: string }>;
   stopRecording: (chairId: string) => Blob | null;
+  /** 청크(긴 상담) 종료 — 분할 구간 blob 배열 반환(spec 010) */
+  stopRecordingChunked: (chairId: string) => Promise<Blob[]>;
   setTranscriptionResult: (chairId: string, text: string) => void;
   setSavedConsultationId: (chairId: string, consultationId: string) => void;
   resetChair: (chairId: string) => void;
@@ -184,6 +194,9 @@ export function ChairProvider({
 }) {
   // 녹음 엔진 — 히어로(녹음 시작 전)에서 고르고 보드가 사용. 세션 공유 단일 상태.
   const [engine, setEngine] = useState<EngineMode>("basic");
+  // startRecording이 최신 엔진을 읽도록 ref 미러(콜백 의존성 churn 방지)
+  const engineRef = useRef(engine);
+  engineRef.current = engine;
   const [state, dispatch] = useReducer(reducer, {
     chairs: initialChairs,
     openChairId: null,
@@ -210,7 +223,17 @@ export function ChairProvider({
 
   const getMediaRefs = (chairId: string): MediaRefs => {
     if (!mediaRefsMap.current[chairId]) {
-      mediaRefsMap.current[chairId] = { mediaRecorder: null, chunks: [] };
+      mediaRefsMap.current[chairId] = {
+        mediaRecorder: null,
+        chunks: [],
+        segments: [],
+        segmentTimer: null,
+        stream: null,
+        mimeType: "",
+        chunked: false,
+        userStopping: false,
+        onSegmentsReady: null,
+      };
     }
     return mediaRefsMap.current[chairId];
   };
@@ -291,23 +314,67 @@ export function ChairProvider({
         const mimeType = MediaRecorder.isTypeSupported("audio/webm;codecs=opus")
           ? "audio/webm;codecs=opus"
           : "audio/webm";
-        // 음성용 저비트레이트(~32kbps ≈ 0.25MB/분). 긴 상담(예 18분≈4.5MB)도
-        // 서버액션 bodySizeLimit·메모리·업로드 시간 안에 들어오게 한다(spec 009 결정).
-        const recorder = new MediaRecorder(stream, {
-          mimeType,
-          audioBitsPerSecond: 32000,
-        });
         const refs = getMediaRefs(chairId);
-        refs.chunks = [];
-        refs.mediaRecorder = recorder;
-        recorder.ondataavailable = (e) => {
-          if (e.data.size > 0) refs.chunks.push(e.data);
+        refs.stream = stream;
+        refs.mimeType = mimeType;
+        refs.segments = [];
+        refs.userStopping = false;
+        refs.onSegmentsReady = null;
+        if (refs.segmentTimer) {
+          clearInterval(refs.segmentTimer);
+          refs.segmentTimer = null;
+        }
+        // 청크(긴 상담) 모드면 분할 녹음 — 구간마다 stop→onstop이 다음 구간 시작(spec 010).
+        const chunked = engineRef.current === "chunk";
+        refs.chunked = chunked;
+
+        // 음성용 저비트레이트(~32kbps ≈ 0.25MB/분). 긴 상담도 용량·메모리 안전(spec 009).
+        const newRecorder = () => {
+          const recorder = new MediaRecorder(stream, {
+            mimeType,
+            audioBitsPerSecond: 32000,
+          });
+          refs.chunks = [];
+          refs.mediaRecorder = recorder;
+          recorder.ondataavailable = (e) => {
+            if (e.data.size > 0) refs.chunks.push(e.data);
+          };
+          if (chunked) {
+            recorder.onstop = () => {
+              const blob = new Blob(refs.chunks, { type: mimeType });
+              if (blob.size > 0) refs.segments.push(blob);
+              refs.chunks = [];
+              if (!refs.userStopping) {
+                newRecorder(); // 다음 구간 시작
+              } else {
+                // 사용자 종료 — 스트림 정리 후 구간 배열 resolve
+                refs.stream?.getTracks().forEach((t) => t.stop());
+                refs.stream = null;
+                refs.mediaRecorder = null;
+                const done = refs.onSegmentsReady;
+                refs.onSegmentsReady = null;
+                done?.(refs.segments);
+              }
+            };
+          } else {
+            recorder.onerror = () => {
+              // 백그라운드/잠금으로 OS가 녹음을 끊은 경우 등 — 트랙 정리
+              recorder.stream.getTracks().forEach((t) => t.stop());
+            };
+          }
+          recorder.start(250);
         };
-        recorder.onerror = () => {
-          // 백그라운드/잠금으로 OS가 녹음을 끊은 경우 등 — 트랙 정리
-          recorder.stream.getTracks().forEach((t) => t.stop());
-        };
-        recorder.start(250);
+        newRecorder();
+
+        if (chunked) {
+          // 일정 간격마다 현재 구간을 끊는다(stop→onstop이 다음 구간을 시작).
+          refs.segmentTimer = setInterval(() => {
+            if (refs.mediaRecorder && refs.mediaRecorder.state === "recording") {
+              refs.mediaRecorder.stop();
+            }
+          }, CHUNK_SEGMENT_MS);
+        }
+
         // 녹음 중 화면 꺼짐 방지 (모바일 잠금으로 인한 녹음 손상 방지)
         wantWakeLockRef.current = true;
         void acquireWakeLock();
@@ -337,6 +404,32 @@ export function ChairProvider({
     return blob;
   }, [releaseWakeLock]);
 
+  // 청크(긴 상담) 종료 — 마지막 구간 flush 후 구간 blob 배열을 반환(spec 010).
+  const stopRecordingChunked = useCallback(
+    (chairId: string): Promise<Blob[]> => {
+      releaseWakeLock();
+      const refs = mediaRefsMap.current[chairId];
+      if (!refs?.mediaRecorder || !refs.chunked) {
+        return Promise.resolve(refs?.segments ?? []);
+      }
+      dispatch({ type: "SET_STATUS", chairId, status: "processing" });
+      if (refs.segmentTimer) {
+        clearInterval(refs.segmentTimer);
+        refs.segmentTimer = null;
+      }
+      refs.userStopping = true;
+      return new Promise<Blob[]>((resolve) => {
+        refs.onSegmentsReady = resolve;
+        try {
+          refs.mediaRecorder?.stop(); // onstop이 마지막 구간 push 후 resolve
+        } catch {
+          resolve(refs.segments);
+        }
+      });
+    },
+    [releaseWakeLock],
+  );
+
   const setTranscriptionResult = useCallback(
     (chairId: string, text: string) => {
       dispatch({ type: "SET_TRANSCRIPTION", chairId, text });
@@ -352,6 +445,15 @@ export function ChairProvider({
   );
 
   const resetChair = useCallback((chairId: string) => {
+    // 청크 잔여물 정리(타이머·구간 배열) — 다음 녹음에 누수 방지
+    const refs = mediaRefsMap.current[chairId];
+    if (refs) {
+      if (refs.segmentTimer) {
+        clearInterval(refs.segmentTimer);
+        refs.segmentTimer = null;
+      }
+      refs.segments = [];
+    }
     dispatch({ type: "RESET_CHAIR", chairId });
   }, []);
 
@@ -385,6 +487,7 @@ export function ChairProvider({
     getSavedConsultationId,
     startRecording,
     stopRecording,
+    stopRecordingChunked,
     setTranscriptionResult,
     setSavedConsultationId,
     resetChair,
