@@ -1,12 +1,18 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { SearchSelect, type SelectOption } from "@/components/admin/search-select";
 
-// spec 013 — 사용량·크레딧 대시보드(클라). 메뉴/크레딧 두 탭 + 기간·기관 필터.
+// spec 013/015 — 사용량·크레딧 대시보드(클라). 메뉴/크레딧 두 탭.
+//   기간: 프리셋(7/30/90/365) 또는 직접 지정(특정 일·기간). 필터: 기관·사용자(검색형).
 
 type Tab = "credits" | "menu";
 
 interface InstitutionOpt { id: string; name: string }
+interface FilterOptions {
+  institutions: { id: string; name: string }[];
+  users: { email: string; institutions: string[] }[];
+}
 
 interface CreditSummary {
   totalSpent: number;
@@ -44,15 +50,37 @@ function fmtDate(iso: string) {
 
 export function UsageDashboard() {
   const [tab, setTab] = useState<Tab>("credits");
+  const [rangeMode, setRangeMode] = useState<"preset" | "custom">("preset");
   const [days, setDays] = useState(30);
+  const [from, setFrom] = useState("");
+  const [to, setTo] = useState("");
   const [inst, setInst] = useState("");
+  const [userEmail, setUserEmail] = useState("");
+  const [filters, setFilters] = useState<FilterOptions | null>(null);
   const [credit, setCredit] = useState<CreditSummary | null>(null);
   const [menu, setMenu] = useState<MenuSummary | null>(null);
   const [loading, setLoading] = useState(false);
 
+  // 필터 옵션(기관·사용자)은 한 번만 로드 — 검색형 드롭다운에서 클라 필터링.
+  useEffect(() => {
+    fetch("/api/usage/filters")
+      .then((r) => r.json())
+      .then((j) => setFilters(j))
+      .catch(() => {});
+  }, []);
+
+  // 기간 쿼리: custom이면 from/to(둘 다 있을 때), 아니면 days.
+  function rangeQuery(): string {
+    if (rangeMode === "custom" && from) return `from=${from}&to=${to || from}`;
+    return `days=${days}`;
+  }
+
   const load = useCallback(async () => {
     setLoading(true);
-    const qs = `days=${days}${inst ? `&institution=${inst}` : ""}`;
+    const parts = [rangeQuery()];
+    if (inst) parts.push(`institution=${inst}`);
+    if (userEmail) parts.push(`user=${encodeURIComponent(userEmail)}`);
+    const qs = parts.join("&");
     try {
       if (tab === "credits") {
         const r = await fetch(`/api/credits/summary?${qs}`);
@@ -66,13 +94,19 @@ export function UsageDashboard() {
     } finally {
       setLoading(false);
     }
-  }, [tab, days, inst]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tab, rangeMode, days, from, to, inst, userEmail]);
 
   useEffect(() => {
     load();
   }, [load]);
 
-  const institutions = (tab === "credits" ? credit?.institutions : menu?.institutions) ?? [];
+  const instOptions: SelectOption[] = (filters?.institutions ?? []).map((i) => ({ value: i.id, label: i.name }));
+  const userOptions: SelectOption[] = (filters?.users ?? []).map((u) => ({
+    value: u.email,
+    label: u.email,
+    sub: u.institutions.join(", "),
+  }));
 
   async function handleGrant() {
     if (!inst) {
@@ -111,25 +145,44 @@ export function UsageDashboard() {
 
       {/* 필터 */}
       <div className="flex flex-wrap items-center gap-2">
+        {/* 기간: 프리셋 / 직접 지정 */}
         <select
-          value={days}
-          onChange={(e) => setDays(Number(e.target.value))}
+          value={rangeMode === "custom" ? "custom" : String(days)}
+          onChange={(e) => {
+            if (e.target.value === "custom") setRangeMode("custom");
+            else { setRangeMode("preset"); setDays(Number(e.target.value)); }
+          }}
           className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-700"
         >
           {DAYS_OPTIONS.map((d) => (
             <option key={d} value={d}>최근 {d}일</option>
           ))}
+          <option value="custom">직접 지정…</option>
         </select>
-        <select
-          value={inst}
-          onChange={(e) => setInst(e.target.value)}
-          className="min-w-[10rem] rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-700"
-        >
-          <option value="">전체 기관</option>
-          {institutions.map((i) => (
-            <option key={i.id} value={i.id}>{i.name}</option>
-          ))}
-        </select>
+
+        {rangeMode === "custom" && (
+          <div className="flex items-center gap-1">
+            <input
+              type="date"
+              value={from}
+              max={to || undefined}
+              onChange={(e) => setFrom(e.target.value)}
+              className="rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-sm text-slate-700"
+            />
+            <span className="text-slate-400">~</span>
+            <input
+              type="date"
+              value={to}
+              min={from || undefined}
+              onChange={(e) => setTo(e.target.value)}
+              className="rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-sm text-slate-700"
+            />
+          </div>
+        )}
+
+        <SearchSelect value={inst} onChange={setInst} options={instOptions} allLabel="전체 기관" placeholder="기관 검색…" />
+        <SearchSelect value={userEmail} onChange={setUserEmail} options={userOptions} allLabel="전체 사용자" placeholder="사용자 검색…" width="min-w-[14rem]" />
+
         {tab === "credits" && (
           <button
             type="button"

@@ -604,6 +604,7 @@ AI 전사 성공(app/actions/transcribe.ts: transcribeEngine·transcribeAndSumma
 데이터: menu_usage_daily · institution_credits · credit_log. RLS enable+정책0(service_role만), 기관격리=쿼리필터.
 ```
 - EO `/superadmin/menu-usage`(spec-075)·크레딧(spec-011) 벤치마크. 차이: RLS 정책0(더 강한 격리) + 크레딧 비차단(임상 안정성). 메뉴 정의는 `lib/usage/menu-config.ts`.
+- **필터 고도화(spec 015)**: summary API가 `days` 프리셋 외 `from`/`to`(KST 커스텀 기간)·`user`(이메일)를 수용(`lib/usage/range.ts`로 KST 경계 일원화). 옵션 목록은 `/api/usage/filters`(기관+사용자) 1회 로드 → `components/admin/search-select.tsx` 검색형 드롭다운. 리포트는 `components/admin/report-date-nav.tsx`로 날짜 직접 선택.
 
 ## 일일 사용 리포트 (spec 014-daily-usage-report)
 

@@ -3,6 +3,7 @@ import { getSessionUser } from "@/lib/auth/institution";
 import { isSuperAdmin } from "@/lib/admin";
 import { createAdminSupabaseClient } from "@/lib/supabase/admin";
 import { MENU_ITEMS, menuLabel } from "@/lib/usage/menu-config";
+import { resolveRange } from "@/lib/usage/range";
 
 // spec 013 §A — 메뉴(화면) 사용량 집계 (슈퍼어드민 전용).
 //   전체(모든 기관) 또는 특정 기관. 다각도: 총합 · 기관별 · 메뉴별(역할분해) · 미사용.
@@ -13,17 +14,19 @@ export async function GET(req: Request) {
   if (!isSuperAdmin(user.email)) return NextResponse.json({ error: "forbidden" }, { status: 403 });
 
   const url = new URL(req.url);
-  const days = Math.min(Math.max(parseInt(url.searchParams.get("days") || "30", 10) || 30, 1), 365);
+  const range = resolveRange(url.searchParams);
   const instFilter = url.searchParams.get("institution") || "";
-  const since = new Date(Date.now() - days * 86400000).toLocaleDateString("en-CA", { timeZone: "Asia/Seoul" });
+  const userFilter = url.searchParams.get("user") || "";
 
   const admin = createAdminSupabaseClient();
 
   let q = admin
     .from("menu_usage_daily")
     .select("menu_id, role_snap, user_email, institution_id, count")
-    .gte("day", since);
+    .gte("day", range.dateFrom)
+    .lte("day", range.dateTo);
   if (instFilter) q = q.eq("institution_id", instFilter);
+  if (userFilter) q = q.eq("user_email", userFilter);
   const { data: rows } = await q;
 
   const { data: instRows } = await admin.from("institutions").select("id, name");
@@ -69,9 +72,10 @@ export async function GET(req: Request) {
     .sort((a, b) => a.name.localeCompare(b.name, "ko"));
 
   return NextResponse.json({
-    days, since, total,
+    days: range.days, dateFrom: range.dateFrom, dateTo: range.dateTo, total,
     activeUsers: userSet.size,
     scope: instFilter || "all",
+    user: userFilter || null,
     institutions, byInstitution, menus, unused,
   });
 }

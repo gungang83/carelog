@@ -3,6 +3,7 @@ import { getSessionUser } from "@/lib/auth/institution";
 import { isSuperAdmin } from "@/lib/admin";
 import { createAdminSupabaseClient } from "@/lib/supabase/admin";
 import { featureLabel } from "@/lib/credits";
+import { resolveRange } from "@/lib/usage/range";
 import type { CreditLogRow } from "@/lib/types/database";
 
 // spec 013 §B/C — 크레딧 사용량 집계 (슈퍼어드민 전용).
@@ -15,18 +16,20 @@ export async function GET(req: Request) {
   if (!isSuperAdmin(user.email)) return NextResponse.json({ error: "forbidden" }, { status: 403 });
 
   const url = new URL(req.url);
-  const days = Math.min(Math.max(parseInt(url.searchParams.get("days") || "30", 10) || 30, 1), 365);
+  const range = resolveRange(url.searchParams);
   const instFilter = url.searchParams.get("institution") || "";
-  const since = new Date(Date.now() - days * 86400000).toISOString();
+  const userFilter = url.searchParams.get("user") || "";
 
   const admin = createAdminSupabaseClient();
 
   let q = admin
     .from("credit_log")
     .select("id, institution_id, delta, feature, ref_id, balance_after, memo, created_by, created_at")
-    .gte("created_at", since)
+    .gte("created_at", range.sinceIso)
+    .lt("created_at", range.untilIso)
     .order("created_at", { ascending: false });
   if (instFilter) q = q.eq("institution_id", instFilter);
+  if (userFilter) q = q.eq("created_by", userFilter);
   const { data: logs } = await q;
 
   const { data: instRows } = await admin.from("institutions").select("id, name");
@@ -95,8 +98,9 @@ export async function GET(req: Request) {
   }));
 
   return NextResponse.json({
-    days, since,
+    days: range.days, dateFrom: range.dateFrom, dateTo: range.dateTo,
     scope: instFilter || "all",
+    user: userFilter || null,
     totalSpent, totalGranted,
     institutions: (instRows ?? [])
       .map((i) => ({ id: (i as { id: string }).id, name: (i as { name: string | null }).name || (i as { id: string }).id }))
