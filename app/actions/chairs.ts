@@ -160,6 +160,32 @@ export async function saveChairRecord(params: {
   return { ok: true, consultationId: consultation.id };
 }
 
+// ─── reportAutoSaveFailure (spec 016) ─────────────────────────────────────────
+// 자동 저장(상담 종료 및 저장) 실패를 서버 로그(Vercel)에 남긴다. 환자 PII 미포함 —
+// 사유·길이·체어id 등 진단 메타만. 클라가 실패 시 비차단으로 호출(로그 보존 목적).
+export async function reportAutoSaveFailure(meta: {
+  reason: string; // 'transcribe' | 'save' | 'empty' | 'no_chair' | ...
+  message?: string;
+  chairId?: string | null;
+  contentLength?: number;
+  segmentsTotal?: number;
+  segmentsFailed?: number;
+}): Promise<{ ok: true }> {
+  try {
+    const institutionId = await getMyInstitutionId().catch(() => null);
+    const { author_name } = await getMyAuthorInfo().catch(() => ({ author_name: null }));
+    console.error("[autosave-failure]", JSON.stringify({
+      institutionId,
+      author: author_name,
+      ...meta,
+      at: new Date().toISOString(),
+    }));
+  } catch (e) {
+    console.error("[autosave-failure] 로깅 자체 실패:", e);
+  }
+  return { ok: true };
+}
+
 // ─── updateChairRecordContent ─────────────────────────────────────────────────
 type UpdateChairRecordContentResult = { ok: true } | { ok: false; message: string };
 

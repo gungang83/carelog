@@ -137,6 +137,8 @@ export type RichTextEditorHandle = {
   insertText: (text: string) => void;
   clear: () => void;
   setHTML: (html: string) => void;
+  /** 현재 에디터 내용을 HTML로 즉시 읽는다(자동저장 — React 상태 갱신 대기 없이 동기 캡처). */
+  getHTML: () => string;
 };
 
 type Props = {
@@ -170,6 +172,10 @@ function RichTextEditor({ value, onChange, placeholder }, ref) {
     },
     setHTML(html: string) {
       editorRef.current?.commands.setContent(html || "");
+    },
+    getHTML() {
+      const html = editorRef.current?.getHTML() ?? "";
+      return html === "<p></p>" ? "" : html;
     },
   }));
 
