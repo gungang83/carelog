@@ -424,10 +424,15 @@ handleStopRecording()
           comparison   : basic + multilingual 동시 → 보드에서 한쪽 선택
   → setTranscriptionResult(chairId, run.summary) / insertText(run.insertText)
 
-  ◆ chunk(긴 상담, spec 010) — 단일 호출이 아닌 클라이언트 오케스트레이션:
+  ◆ chunk(긴 상담, spec 010 + 점진 전사 spec 016) — 클라이언트 오케스트레이션:
     녹음: chair-provider가 CHUNK_SEGMENT_MS(5분)마다 MediaRecorder stop→restart로
           유효 webm 구간 blob 배열 생성 → stopRecordingChunked(chairId): Promise<Blob[]>
-    전사: consultation-board가 구간별 transcribeSegment(formData) 호출(동시성 CHUNK_CONCURRENCY=3,
+    ★점진 전사(spec 016): 청크 onstop이 구간 push 직후 onSegmentReady(seg,index) 통지.
+          보드가 녹음 시작 시 registerSegmentHandler로 등록 → 구간 완료 즉시 백그라운드 전사
+          (liveTextsRef/liveTasksRef 누적). 종료 시 finalizeChunked가 진행 중 작업 대기 +
+          누락 구간 안전망 전사 → 종료 후 대기가 "전체 전사"→"마지막 구간+요약"으로 단축.
+          기존 일괄 transcribeSegments는 복구(applyRecover) 전용. 요약·삽입은 finishChunkTexts 공용.
+    전사(복구 경로): 구간별 transcribeSegment(formData)(동시성 CHUNK_CONCURRENCY=3,
           실패 1회 재시도, 실패 격리) → 성공 전사문 순서대로 join
     요약: summarizeChunkTranscript(join) [Server Action] 1회 → 전체 맥락 요약
     진행률: chunkProgress(done/total) "n/m 구간 전사 중". 실패 구간은 본문에 표시.
@@ -437,7 +442,13 @@ handleStopRecording()
   ※ 공유 타입·상수: lib/transcribe/engines.ts (LAB_ENGINE_OPTIONS, CHUNK_* 상수) — "use server" 파일은
     async 함수만 export 가능하므로 런타임 상수는 일반 모듈에 분리.
 
-handleSave()
+handleStopAndSave() — "상담 종료 및 저장"(spec 016, 자동저장)
+  → autoSaveRef=true → handleStop → 전사 완료 콜백(transcribeBlob/finishChunkTexts)이 doAutoSave 호출
+  → doAutoSave: editor.getHTML() 동기 캡처 → saveChairRecord → 음성 업로드 → 정리 → closeOverlay
+  → 보드는 레이아웃 상시 마운트라 닫고 이동해도 백그라운드 완료. 비교 모드면 첫 결과 자동 확정.
+  → 실패(전사/저장/내용없음/체어없음): IndexedDB 임시본 보존 + 안내 + reportAutoSaveFailure(서버 로그, PII無)
+
+handleSave()  — "상담 종료"(전사만) 후 수동 저장
   → saveChairRecord({ chairId, content, prescriptions, transcriptionEngine }) [Server Action]
       → consultation INSERT (patient_id: null, status: 'draft', chair_id, transcription_engine)
       → chair_audit_logs INSERT (record_created)

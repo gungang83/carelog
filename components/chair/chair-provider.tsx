@@ -134,6 +134,8 @@ type MediaRefs = {
   chunked: boolean; // 이번 녹음이 청크 모드인가
   userStopping: boolean; // 사용자 종료 중(다음 구간 재시작 금지)
   onSegmentsReady: ((segs: Blob[]) => void) | null; // 종료 시 구간 배열 resolve
+  // spec 016 점진 전사 — 구간이 잘릴 때마다(녹음 중 포함) 즉시 호출(보드가 백그라운드 전사).
+  onSegmentReady: ((seg: Blob, index: number) => void) | null;
 };
 
 // Wake Lock API 타입 (tsconfig lib에 없을 수 있어 최소 정의)
@@ -159,6 +161,8 @@ type ChairContextValue = {
   stopRecording: (chairId: string) => Blob | null;
   /** 청크(긴 상담) 종료 — 분할 구간 blob 배열 반환(spec 010) */
   stopRecordingChunked: (chairId: string) => Promise<Blob[]>;
+  /** spec 016 — 점진 전사: 구간 완료 콜백 등록(녹음 시작 직후 보드가 등록). null로 해제. */
+  registerSegmentHandler: (chairId: string, cb: ((seg: Blob, index: number) => void) | null) => void;
   setTranscriptionResult: (chairId: string, text: string) => void;
   setSavedConsultationId: (chairId: string, consultationId: string) => void;
   resetChair: (chairId: string) => void;
@@ -233,6 +237,7 @@ export function ChairProvider({
         chunked: false,
         userStopping: false,
         onSegmentsReady: null,
+        onSegmentReady: null,
       };
     }
     return mediaRefsMap.current[chairId];
@@ -320,6 +325,7 @@ export function ChairProvider({
         refs.segments = [];
         refs.userStopping = false;
         refs.onSegmentsReady = null;
+        refs.onSegmentReady = null;
         if (refs.segmentTimer) {
           clearInterval(refs.segmentTimer);
           refs.segmentTimer = null;
@@ -342,7 +348,11 @@ export function ChairProvider({
           if (chunked) {
             recorder.onstop = () => {
               const blob = new Blob(refs.chunks, { type: mimeType });
-              if (blob.size > 0) refs.segments.push(blob);
+              if (blob.size > 0) {
+                refs.segments.push(blob);
+                // spec 016 — 구간 완료 즉시 통지(녹음 중 구간·마지막 구간 모두). 보드가 백그라운드 전사.
+                refs.onSegmentReady?.(blob, refs.segments.length - 1);
+              }
               refs.chunks = [];
               if (!refs.userStopping) {
                 newRecorder(); // 다음 구간 시작
@@ -430,6 +440,13 @@ export function ChairProvider({
     [releaseWakeLock],
   );
 
+  const registerSegmentHandler = useCallback(
+    (chairId: string, cb: ((seg: Blob, index: number) => void) | null) => {
+      getMediaRefs(chairId).onSegmentReady = cb;
+    },
+    [],
+  );
+
   const setTranscriptionResult = useCallback(
     (chairId: string, text: string) => {
       dispatch({ type: "SET_TRANSCRIPTION", chairId, text });
@@ -488,6 +505,7 @@ export function ChairProvider({
     startRecording,
     stopRecording,
     stopRecordingChunked,
+    registerSegmentHandler,
     setTranscriptionResult,
     setSavedConsultationId,
     resetChair,

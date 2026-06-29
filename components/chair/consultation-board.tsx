@@ -16,6 +16,7 @@ import {
   saveChairRecord,
   getOrCreateChairByName,
   getRecentParticipants,
+  reportAutoSaveFailure,
 } from "@/app/actions/chairs";
 import {
   transcribeSegment,
@@ -79,6 +80,7 @@ function BoardContent({
     startRecording,
     stopRecording,
     stopRecordingChunked,
+    registerSegmentHandler,
     setTranscriptionResult,
     resetChair,
     refreshUnlinkedCount,
@@ -105,6 +107,9 @@ function BoardContent({
   const [recoverable, setRecoverable] = useState<BoardDraft | null>(null);
   // 청크(긴 상담) 전사 진행률 — "n/m 구간 전사 중" 표시(spec 010 US4).
   const [chunkProgress, setChunkProgress] = useState<{ done: number; total: number } | null>(null);
+  // spec 016 — 녹음 중 점진 전사 완료 구간 수(라이브 표시) + 자동저장 진행 표시.
+  const [liveDone, setLiveDone] = useState(0);
+  const [autoSaving, setAutoSaving] = useState(false);
   const [isPending, startTransition] = useTransition();
   const [isCreatingChair, startCreateChair] = useTransition();
 
@@ -115,6 +120,11 @@ function BoardContent({
   // 청크(긴 상담) 모드 분할 녹음 구간 blob 배열 — 복구 재전사용(spec 010).
   const audioSegmentsRef = useRef<Blob[]>([]);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  // spec 016 점진 전사 — 구간별 전사 결과(index→text|null)와 진행 중 작업 promise.
+  const liveTextsRef = useRef<(string | null)[]>([]);
+  const liveTasksRef = useRef<Promise<void>[]>([]);
+  // spec 016 — 이번 종료가 '종료 및 저장'(자동저장)인지.
+  const autoSaveRef = useRef(false);
 
   const status = getChairStatus(DRAFT_CHAIR_KEY);
 
@@ -261,12 +271,40 @@ function BoardContent({
   const fmtTime = (s: number) =>
     `${String(Math.floor(s / 60)).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`;
 
+  // 구간 1개 전사(1회 재시도). 무음/빈 구간은 빈 문자열 성공. 실패는 null.
+  const transcribeSegmentWithRetry = async (blob: Blob, i: number): Promise<string | null> => {
+    const attempt = async () => {
+      const fd = new FormData();
+      fd.append("audio", blob, `segment_${i}.webm`);
+      fd.append("index", String(i));
+      return transcribeSegment(fd).catch(() => ({ ok: false as const, message: "네트워크 오류" }));
+    };
+    let r = await attempt();
+    for (let k = 0; !r.ok && k < CHUNK_SEGMENT_RETRY; k++) r = await attempt();
+    return r.ok ? r.text : null;
+  };
+
   const handleStart = async () => {
     setMicError("");
+    // spec 016 — 점진 전사 리셋. 청크 모드면 구간 완료 즉시 백그라운드 전사(녹음 중에).
+    liveTextsRef.current = [];
+    liveTasksRef.current = [];
+    setLiveDone(0);
+    if (engine === "chunk") {
+      registerSegmentHandler(DRAFT_CHAIR_KEY, (seg, index) => {
+        // 미설정(undefined)=전사 진행 중, string=성공, null=실패. 구간 완료 즉시 백그라운드 전사.
+        const task = transcribeSegmentWithRetry(seg, index).then((text) => {
+          liveTextsRef.current[index] = text;
+          setLiveDone((d) => d + 1);
+        });
+        liveTasksRef.current.push(task);
+      });
+    }
     const result = await startRecording(DRAFT_CHAIR_KEY);
     if (!result.ok) setMicError(result.error ?? "녹음 시작 실패");
   };
 
+  // 상담 종료(전사) — 기존 동작. autoSave=true면 종료 후 자동 저장까지(handleStopAndSave 경유).
   const handleStop = () => {
     // 청크(긴 상담) 모드는 분할 녹음 → 별도 오케스트레이션.
     if (engine === "chunk") {
@@ -283,6 +321,11 @@ function BoardContent({
       setMicError(
         `녹음이 비어 있어요 (녹음 ${secs}초 · ${sizeKB}KB). 화면이 잠기거나 다른 앱으로 전환되면 녹음이 끊깁니다. 화면을 켠 채로 다시 녹음해 주세요.`,
       );
+      if (autoSaveRef.current) {
+        autoSaveRef.current = false;
+        setAutoSaving(false);
+        void reportAutoSaveFailure({ reason: "empty", chairId: selectedChair?.id ?? null });
+      }
       return;
     }
 
@@ -304,6 +347,79 @@ function BoardContent({
     transcribeBlob(blob, secs);
   };
 
+  // 상담 종료 및 저장(spec 016) — 종료 후 전사 완료되면 자동 저장. 사용자는 기다리지 않아도 됨.
+  // 점진 청크 전사면 종료 시점에 대부분 전사돼 있어 거의 즉시 저장된다.
+  const handleStopAndSave = () => {
+    setSaveMsg("");
+    autoSaveRef.current = true;
+    setAutoSaving(true);
+    handleStop();
+  };
+
+  // 자동 저장 — 전사 완료 직후 호출. 실패는 비차단으로 로그 + 임시본 보존(복구 가능).
+  const doAutoSave = async (engineUsed: string | null) => {
+    const html = editorRef.current?.getHTML() ?? editText;
+    const plain = html.replace(/<[^>]*>/g, "").trim();
+    if (!plain) {
+      autoSaveRef.current = false;
+      setAutoSaving(false);
+      setSaveMsg("저장할 내용이 없어요. 다시 시도해 주세요.");
+      void reportAutoSaveFailure({ reason: "empty", chairId: selectedChair?.id ?? null });
+      return;
+    }
+    if (!selectedChair) {
+      autoSaveRef.current = false;
+      setAutoSaving(false);
+      setSaveMsg("체어를 선택하면 자동 저장돼요 — 작성한 내용은 보관됐어요.");
+      void reportAutoSaveFailure({ reason: "no_chair", contentLength: plain.length });
+      return; // 내용·음성 유지 → 체어 선택 후 수동 '저장' 가능
+    }
+    const chair = selectedChair;
+    const result = await saveChairRecord({
+      chairId: chair.id,
+      content: html,
+      prescriptions,
+      participants,
+      transcriptionEngine: engineUsed,
+    });
+    autoSaveRef.current = false;
+    if (result.ok) {
+      markLocalSave(result.consultationId);
+      const audio = audioBlobRef.current;
+      if (audio) {
+        const fd = new FormData();
+        fd.append("audio", audio, "recording.webm");
+        void uploadConsultationAudio(result.consultationId, fd);
+      }
+      audioBlobRef.current = null;
+      audioSegmentsRef.current = [];
+      liveTextsRef.current = [];
+      liveTasksRef.current = [];
+      void clearDraft();
+      setLastChairId(chair.id);
+      resetChair(DRAFT_CHAIR_KEY);
+      setEditText("");
+      editorRef.current?.clear();
+      setPrescriptions([]);
+      setMicError("");
+      setSaveMsg("");
+      setUsedEngine(null);
+      setComparison(null);
+      setEngine("basic");
+      setAutoSaving(false);
+      resetDefaults();
+      await refreshUnlinkedCount(chair.id);
+      closeOverlay();
+      router.refresh();
+    } else {
+      setAutoSaving(false);
+      setSaveMsg(`자동 저장 실패: ${result.message} — 작성 내용·녹음은 보관됐어요. 다시 저장해 주세요.`);
+      console.error("[autosave] saveChairRecord 실패:", result.message);
+      void reportAutoSaveFailure({ reason: "save", message: result.message, chairId: chair.id, contentLength: plain.length });
+      // 임시본은 이미 영속 — 사용자가 수동 '저장' 재시도 가능.
+    }
+  };
+
   // 음성 blob 전사(녹음 종료·복구 공용). secs/sizeKB는 실패 메시지에만 쓰인다.
   const transcribeBlob = (blob: Blob, secs: number) => {
     const sizeKB = Math.round((blob.size / 1024) * 10) / 10;
@@ -312,7 +428,8 @@ function BoardContent({
       formData.append("audio", blob, "recording.webm");
       const result = await transcribeChairAudio(formData, engine);
       if (result.ok) {
-        if (result.runs.length > 1) {
+        // 자동저장(종료 및 저장) 시 비교 모드면 첫 결과(basic)로 자동 확정 — 사람 선택 불가.
+        if (result.runs.length > 1 && !autoSaveRef.current) {
           // 비교 모드 — 본문 삽입은 사용자가 한쪽을 고를 때까지 보류.
           setTranscriptionResult(DRAFT_CHAIR_KEY, ""); // 녹음바 processing 해제
           setComparison(result.runs);
@@ -323,22 +440,35 @@ function BoardContent({
           setTranscriptionResult(DRAFT_CHAIR_KEY, run.summary);
           editorRef.current?.insertText(run.insertText);
           setUsedEngine(run.engine);
+          if (autoSaveRef.current) await doAutoSave(run.engine);
         }
       } else {
         setMicError(`전사 실패 (녹음 ${secs}초 · ${sizeKB}KB): ${result.message}`);
         setTranscriptionResult(DRAFT_CHAIR_KEY, "");
+        if (autoSaveRef.current) {
+          autoSaveRef.current = false;
+          setAutoSaving(false);
+          void reportAutoSaveFailure({ reason: "transcribe", message: result.message, chairId: selectedChair?.id ?? null });
+        }
       }
     });
   };
 
-  // ── 청크(긴 상담) 모드 — 분할 녹음 종료 → 구간별 전사 → 전체 요약 (spec 010) ──
+  // ── 청크(긴 상담) 종료 — 점진 전사(녹음 중 누적) 마무리 → 전체 요약 (spec 010/016) ──
+  // 녹음 중 구간마다 백그라운드 전사가 돌았으므로, 종료 시엔 남은 작업만 기다리면 된다.
   const handleStopChunked = async () => {
     const segments = await stopRecordingChunked(DRAFT_CHAIR_KEY);
+    registerSegmentHandler(DRAFT_CHAIR_KEY, null); // 라이브 핸들러 해제
     if (segments.length === 0) {
       resetChair(DRAFT_CHAIR_KEY);
       setMicError(
         "녹음이 비어 있어요. 화면이 잠기거나 다른 앱으로 전환되면 녹음이 끊깁니다. 화면을 켠 채로 다시 녹음해 주세요.",
       );
+      if (autoSaveRef.current) {
+        autoSaveRef.current = false;
+        setAutoSaving(false);
+        void reportAutoSaveFailure({ reason: "empty", chairId: selectedChair?.id ?? null });
+      }
       return;
     }
     audioSegmentsRef.current = segments;
@@ -347,7 +477,7 @@ function BoardContent({
       type: segments[0]?.type || "audio/webm",
     });
 
-    // 전사 시작 전 즉시 영속화(복구 안전망) — 구간 배열도 함께 저장.
+    // 전사 마무리 전 즉시 영속화(복구 안전망) — 구간 배열도 함께 저장.
     void saveDraft({
       content: editText,
       prescriptions,
@@ -358,75 +488,87 @@ function BoardContent({
       savedAt: Date.now(),
     });
 
-    transcribeSegments(segments);
+    finalizeChunked(segments.length);
   };
 
-  // 구간 배열을 동시성 제한으로 전사(실패 격리·1회 재시도) → 순서대로 이어붙여 전체 요약.
-  // 녹음 종료·복구 공용. 일부 실패해도 성공 구간은 보존(전손 0), 전 구간 실패 시에만 전체 실패.
+  // 점진 전사 마무리 — 진행 중 구간 작업 대기 + 누락 구간 안전망 전사 → 전체 요약.
+  const finalizeChunked = (total: number) => {
+    startTransition(async () => {
+      setChunkProgress({
+        done: liveTextsRef.current.slice(0, total).filter((t) => t !== undefined).length,
+        total,
+      });
+      await Promise.allSettled(liveTasksRef.current);
+      // 안전망: 라이브에서 누락된 구간(undefined)을 직접 전사(실무상 거의 없음).
+      const segs = audioSegmentsRef.current;
+      for (let i = 0; i < total; i++) {
+        if (liveTextsRef.current[i] === undefined && segs[i]) {
+          liveTextsRef.current[i] = await transcribeSegmentWithRetry(segs[i], i);
+          setChunkProgress({ done: i + 1, total });
+        }
+      }
+      setChunkProgress(null);
+      await finishChunkTexts(liveTextsRef.current.slice(0, total), total);
+    });
+  };
+
+  // 복구(applyRecover) 전용 — 저장된 구간 배열을 처음부터 동시성 전사(점진 데이터 없음).
   const transcribeSegments = (segments: Blob[]) => {
     startTransition(async () => {
       const total = segments.length;
       setChunkProgress({ done: 0, total });
-      const texts: (string | null)[] = new Array(total).fill(null); // null = 전사 실패
+      const texts: (string | null)[] = new Array(total).fill(null);
       let done = 0;
       let cursor = 0;
-
-      const transcribeOne = async (i: number) => {
-        const attempt = async () => {
-          const fd = new FormData();
-          fd.append("audio", segments[i], `segment_${i}.webm`);
-          fd.append("index", String(i));
-          return transcribeSegment(fd).catch(
-            () => ({ ok: false as const, message: "네트워크 오류" }),
-          );
-        };
-        let r = await attempt();
-        for (let k = 0; !r.ok && k < CHUNK_SEGMENT_RETRY; k++) {
-          r = await attempt(); // 실패 구간 재시도
-        }
-        texts[i] = r.ok ? r.text : null;
-        done++;
-        setChunkProgress({ done, total });
-      };
-
       const worker = async () => {
         while (cursor < total) {
-          await transcribeOne(cursor++);
+          const i = cursor++;
+          texts[i] = await transcribeSegmentWithRetry(segments[i], i);
+          done++;
+          setChunkProgress({ done, total });
         }
       };
-      await Promise.all(
-        Array.from({ length: Math.min(CHUNK_CONCURRENCY, total) }, worker),
-      );
+      await Promise.all(Array.from({ length: Math.min(CHUNK_CONCURRENCY, total) }, worker));
       setChunkProgress(null);
-
-      const failed = texts.flatMap((t, i) => (t === null ? [i] : []));
-      const succeeded = texts.filter((t): t is string => !!t && t.trim() !== "");
-
-      if (succeeded.length === 0) {
-        // 전 구간 실패 → 전체 실패. 녹음물(구간)은 IndexedDB에 보존돼 복구·재시도 가능.
-        setMicError(
-          "전사에 실패했어요. 녹음은 보관돼 있으니 잠시 후 다시 시도해 주세요.",
-        );
-        setTranscriptionResult(DRAFT_CHAIR_KEY, "");
-        return;
-      }
-
-      const sum = await summarizeChunkTranscript(succeeded.join("\n"));
-      // 요약 실패 시 성공 구간 원문(실패 구간 자리표시 포함)으로 폴백.
-      const fallback = texts
-        .map((t, i) => (t !== null ? t : `[⚠️ ${i + 1}번째 구간 전사 실패]`))
-        .join("\n")
-        .trim();
-      let summary = sum.ok ? sum.summary : fallback;
-      if (failed.length > 0) {
-        summary += `\n\n> ⚠️ ${total}개 구간 중 ${failed.length}개 전사 실패(${failed
-          .map((i) => i + 1)
-          .join(", ")}번). 해당 부분이 누락됐을 수 있어요. 음성은 보관됩니다.`;
-      }
-      setTranscriptionResult(DRAFT_CHAIR_KEY, summary);
-      editorRef.current?.insertText(summary);
-      setUsedEngine("chunk");
+      await finishChunkTexts(texts, total);
     });
+  };
+
+  // 구간 텍스트 배열(index→text|null|undefined) → 요약·삽입·(자동저장). 라이브/복구 공용.
+  // string=성공(빈문자열=무음 구간, 누락 아님), null/undefined=전사 실패.
+  const finishChunkTexts = async (texts: (string | null | undefined)[], total: number) => {
+    const failed: number[] = [];
+    for (let i = 0; i < total; i++) {
+      if (typeof texts[i] !== "string") failed.push(i);
+    }
+    const succeeded = texts.filter((t): t is string => typeof t === "string" && t.trim() !== "");
+
+    if (succeeded.length === 0) {
+      setMicError("전사에 실패했어요. 녹음은 보관돼 있으니 잠시 후 다시 시도해 주세요.");
+      setTranscriptionResult(DRAFT_CHAIR_KEY, "");
+      if (autoSaveRef.current) {
+        autoSaveRef.current = false;
+        setAutoSaving(false);
+        void reportAutoSaveFailure({ reason: "transcribe", chairId: selectedChair?.id ?? null, segmentsTotal: total, segmentsFailed: failed.length });
+      }
+      return;
+    }
+
+    const sum = await summarizeChunkTranscript(succeeded.join("\n"));
+    const fallback = texts
+      .map((t, i) => (typeof t === "string" ? t : `[⚠️ ${i + 1}번째 구간 전사 실패]`))
+      .join("\n")
+      .trim();
+    let summary = sum.ok ? sum.summary : fallback;
+    if (failed.length > 0) {
+      summary += `\n\n> ⚠️ ${total}개 구간 중 ${failed.length}개 전사 실패(${failed
+        .map((i) => i + 1)
+        .join(", ")}번). 해당 부분이 누락됐을 수 있어요. 음성은 보관됩니다.`;
+    }
+    setTranscriptionResult(DRAFT_CHAIR_KEY, summary);
+    editorRef.current?.insertText(summary);
+    setUsedEngine("chunk");
+    if (autoSaveRef.current) await doAutoSave("chunk");
   };
 
   const handlePickCustomChair = () => {
@@ -459,6 +601,13 @@ function BoardContent({
     }
     audioBlobRef.current = null;
     audioSegmentsRef.current = [];
+    // spec 016 — 점진 전사·자동저장 상태 초기화
+    liveTextsRef.current = [];
+    liveTasksRef.current = [];
+    autoSaveRef.current = false;
+    setLiveDone(0);
+    setAutoSaving(false);
+    registerSegmentHandler(DRAFT_CHAIR_KEY, null);
     resetChair(DRAFT_CHAIR_KEY);
     setEditText("");
     editorRef.current?.clear();
@@ -535,7 +684,10 @@ function BoardContent({
           void uploadConsultationAudio(result.consultationId, fd);
         }
         audioBlobRef.current = null;
-    audioSegmentsRef.current = [];
+        audioSegmentsRef.current = [];
+        liveTextsRef.current = [];
+        liveTasksRef.current = [];
+        setLiveDone(0);
         void clearDraft();
         setLastChairId(chair.id);
         resetChair(DRAFT_CHAIR_KEY);
@@ -592,13 +744,27 @@ function BoardContent({
                 <span className="text-sm font-semibold text-red-700">
                   녹음 중 {fmtTime(elapsed)}
                 </span>
-                <button
-                  type="button"
-                  onClick={handleStop}
-                  className="ml-auto rounded-lg bg-red-500 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-red-600"
-                >
-                  중지 및 변환
-                </button>
+                {engine === "chunk" && liveDone > 0 && (
+                  <span className="text-xs text-slate-400">· {liveDone}구간 전사됨</span>
+                )}
+                <div className="ml-auto flex items-center gap-1.5">
+                  <button
+                    type="button"
+                    onClick={handleStop}
+                    className="rounded-lg bg-red-500 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-red-600"
+                  >
+                    상담 종료
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleStopAndSave}
+                    disabled={!selectedChair}
+                    title={!selectedChair ? "체어를 먼저 선택하면 종료와 동시에 저장돼요" : undefined}
+                    className="rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    상담 종료 및 저장
+                  </button>
+                </div>
               </>
             ) : processing ? (
               <>
@@ -607,6 +773,7 @@ function BoardContent({
                   {chunkProgress
                     ? `음성 인식 중… (${chunkProgress.done}/${chunkProgress.total} 구간)`
                     : "음성 인식 중…"}
+                  {autoSaving && " · 저장 예정 (이 창은 닫아도 됩니다)"}
                 </span>
               </>
             ) : (
