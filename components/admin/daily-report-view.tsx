@@ -1,4 +1,4 @@
-import Link from "next/link";
+import { ReportDateNav } from "@/components/admin/report-date-nav";
 import type { DailyReport } from "@/lib/usage/daily-report";
 
 // spec 014 — 일일 사용 리포트 표시(서버 렌더, 읽기 전용). cron 발행분/즉석 집계 공용.
@@ -25,24 +25,18 @@ export function DailyReportView({
   stored: boolean;
 }) {
   const s = report.summary;
-  const prevDate = shift(report.date, -1);
-  const nextDate = shift(report.date, 1);
 
   return (
     <div className="space-y-6">
       {/* 날짜 내비 */}
-      <div className="flex items-center justify-between gap-3">
+      <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold text-slate-900">일일 사용 리포트</h1>
           <p className="mt-1 text-sm text-slate-500">
             {report.date} (KST 0~24시) · 전체 워크스페이스 · {stored ? "발행본" : "즉석 집계"}
           </p>
         </div>
-        <div className="flex shrink-0 items-center gap-1 text-sm">
-          <Link href={`/admin/usage/report/${prevDate}`} className="rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-slate-600 hover:bg-slate-50">← 전일</Link>
-          <Link href={`/admin/usage/report/${nextDate}`} className="rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-slate-600 hover:bg-slate-50">익일 →</Link>
-          <Link href="/admin/usage" className="ml-1 rounded-lg border border-sky-200 bg-sky-50 px-2.5 py-1.5 font-medium text-sky-700 hover:bg-sky-100">대시보드</Link>
-        </div>
+        <ReportDateNav date={report.date} />
       </div>
 
       {/* 요약 카드 */}
@@ -104,12 +98,6 @@ export function DailyReportView({
       </Card>
     </div>
   );
-}
-
-function shift(date: string, n: number): string {
-  const d = new Date(`${date}T00:00:00+09:00`);
-  d.setTime(d.getTime() + n * 86400000);
-  return d.toLocaleDateString("en-CA", { timeZone: "Asia/Seoul" });
 }
 
 function Stat({ label, value, accent, extra }: { label: string; value: string; accent?: "sky"; extra?: React.ReactNode }) {
