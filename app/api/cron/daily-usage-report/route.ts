@@ -24,10 +24,14 @@ const stripBom = (s: string) => (s.charCodeAt(0) === 0xfeff ? s.slice(1) : s);
 
 async function authorize(req: NextRequest): Promise<boolean> {
   const cronSecret = stripBom(process.env.CRON_SECRET ?? "");
-  if (cronSecret && req.headers.get("authorization") === `Bearer ${cronSecret}`) return true;
-  // 수동 트리거: 슈퍼어드민 세션 허용
-  const user = await getSessionUser().catch(() => null);
-  return isSuperAdmin(user?.email);
+  if (cronSecret) {
+    // 시크릿 설정 시: Vercel cron(Bearer) 또는 수동 트리거(슈퍼어드민 세션)만 허용.
+    if (req.headers.get("authorization") === `Bearer ${cronSecret}`) return true;
+    const user = await getSessionUser().catch(() => null);
+    return isSuperAdmin(user?.email);
+  }
+  // 시크릿 미설정: 기존 cron(sync-master·prune-audio)과 동일하게 통과(권장: CRON_SECRET 설정).
+  return true;
 }
 
 /** 슈퍼어드민 user_id 조회(auth users 페이지네이션). 소규모라 일1회 cron엔 충분. */
