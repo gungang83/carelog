@@ -80,6 +80,54 @@ export async function unsubscribePush(endpoint: string): Promise<PushResult> {
   return { ok: true };
 }
 
+/**
+ * 특정 사용자(모든 기기) 푸시 — 기관 무관(spec 014 일일 리포트가 슈퍼어드민 본인에게 발송).
+ * push_subscriptions를 user_id로 필터. 중복 endpoint는 dedupe.
+ */
+export async function sendPushToUser(userId: string, payload: PushPayload): Promise<void> {
+  if (!ensureVapidConfigured()) return;
+  const adminClient = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!
+  );
+
+  const { data: subs } = await adminClient
+    .from("push_subscriptions")
+    .select("endpoint, p256dh, auth")
+    .eq("user_id", userId);
+
+  if (!subs?.length) return;
+
+  const seen = new Set<string>();
+  const unique = subs.filter((s) => (seen.has(s.endpoint) ? false : (seen.add(s.endpoint), true)));
+
+  const pushPayload = JSON.stringify({
+    title: payload.title,
+    body: payload.body,
+    url: payload.url,
+    icon: payload.icon ?? "/icons/icon-192.png",
+    kind: payload.kind,
+  });
+
+  const stale: string[] = [];
+  await Promise.allSettled(
+    unique.map(async (sub) => {
+      try {
+        await webpush.sendNotification(
+          { endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } },
+          pushPayload
+        );
+      } catch (err: unknown) {
+        const sc = (err as { statusCode?: number }).statusCode;
+        if (sc === 410 || sc === 404) stale.push(sub.endpoint);
+      }
+    })
+  );
+  if (stale.length > 0) {
+    await adminClient.from("push_subscriptions").delete().in("endpoint", stale);
+  }
+}
+
 export async function sendPushToInstitution(
   institutionId: string,
   payload: PushPayload

@@ -13,11 +13,18 @@ import type {
 
 // spec 013 — AI 전사 사용량(크레딧) 기록. ★비차단: 잔액과 무관하게 흐름을 막지 않는다.
 //   institution·user를 세션에서 확인해 deductCredit(로그 적재)만 수행. 실패는 무시.
-async function recordUsage(feature: CreditFeature, refId?: string | null): Promise<void> {
+async function recordUsage(
+  feature: CreditFeature,
+  opts?: { refId?: string | null; tokensIn?: number; tokensOut?: number },
+): Promise<void> {
   try {
     const [institutionId, user] = await Promise.all([getMyInstitutionId(), getSessionUser()]);
     if (!institutionId || !user?.email) return;
-    await deductCredit(institutionId, feature, user.email, refId ?? null);
+    await deductCredit(institutionId, feature, user.email, {
+      refId: opts?.refId ?? null,
+      tokensIn: opts?.tokensIn,
+      tokensOut: opts?.tokensOut,
+    });
   } catch {
     /* 사용량 기록 실패는 무시 */
   }
@@ -172,6 +179,8 @@ async function runBasic(
   }
 
   let summary = transcription;
+  let tokensIn = 0;
+  let tokensOut = 0;
   try {
     const message = await anthropic.messages.create({
       model: "claude-sonnet-4-6",
@@ -180,6 +189,8 @@ async function runBasic(
     });
     const block = message.content[0];
     summary = block.type === "text" ? block.text : transcription;
+    tokensIn = message.usage?.input_tokens ?? 0;
+    tokensOut = message.usage?.output_tokens ?? 0;
   } catch {
     summary = transcription;
   }
@@ -192,6 +203,8 @@ async function runBasic(
       transcription,
       summary,
       insertText: summary,
+      tokensIn,
+      tokensOut,
     },
   };
 }
@@ -224,6 +237,8 @@ async function runDetailed(
   const t = await transcribeKo(audioFile, openai);
   if (!t.ok) return t;
   let summary = t.text;
+  let tokensIn = 0;
+  let tokensOut = 0;
   try {
     const message = await anthropic.messages.create({
       model: "claude-sonnet-4-6",
@@ -232,6 +247,8 @@ async function runDetailed(
     });
     const block = message.content[0];
     summary = block.type === "text" ? block.text : t.text;
+    tokensIn = message.usage?.input_tokens ?? 0;
+    tokensOut = message.usage?.output_tokens ?? 0;
   } catch {
     summary = t.text;
   }
@@ -243,6 +260,8 @@ async function runDetailed(
       transcription: t.text,
       summary,
       insertText: summary,
+      tokensIn,
+      tokensOut,
     },
   };
 }
@@ -256,6 +275,8 @@ async function runDental(
   const t = await transcribeKo(audioFile, openai);
   if (!t.ok) return t;
   let summary = t.text;
+  let tokensIn = 0;
+  let tokensOut = 0;
   try {
     const message = await anthropic.messages.create({
       model: "claude-sonnet-4-6",
@@ -266,6 +287,8 @@ async function runDental(
     const text = block.type === "text" ? block.text : "";
     const sMatch = text.match(/\[요약\]\s*([\s\S]*)$/);
     summary = sMatch?.[1]?.trim() || text.trim() || t.text;
+    tokensIn = message.usage?.input_tokens ?? 0;
+    tokensOut = message.usage?.output_tokens ?? 0;
   } catch {
     summary = t.text;
   }
@@ -277,6 +300,8 @@ async function runDental(
       transcription: t.text,
       summary,
       insertText: summary,
+      tokensIn,
+      tokensOut,
     },
   };
 }
@@ -316,6 +341,8 @@ async function runMultilingual(
   // Claude 한 번 호출로 번역 + 한국어 요약을 함께 받는다(마커 파싱)
   let translation = "";
   let summary = transcription;
+  let tokensIn = 0;
+  let tokensOut = 0;
   try {
     const message = await anthropic.messages.create({
       model: "claude-sonnet-4-6",
@@ -343,6 +370,8 @@ ${transcription}`,
     const sMatch = text.match(/\[요약\]\s*([\s\S]*)$/);
     translation = tMatch?.[1]?.trim() ?? "";
     summary = sMatch?.[1]?.trim() || transcription;
+    tokensIn = message.usage?.input_tokens ?? 0;
+    tokensOut = message.usage?.output_tokens ?? 0;
   } catch {
     // 번역/요약 실패 시 전사만이라도 보존
     summary = transcription;
@@ -364,6 +393,8 @@ ${transcription}`,
       translation: translation || undefined,
       detectedLang,
       insertText,
+      tokensIn,
+      tokensOut,
     },
   };
 }
@@ -413,7 +444,9 @@ export async function transcribeEngine(
     if (runs.length === 0) {
       return { ok: false, message: basic.ok ? "" : basic.message };
     }
-    await recordUsage("transcribe_comparison");
+    const tIn = runs.reduce((s, r) => s + (r.tokensIn ?? 0), 0);
+    const tOut = runs.reduce((s, r) => s + (r.tokensOut ?? 0), 0);
+    await recordUsage("transcribe_comparison", { tokensIn: tIn, tokensOut: tOut });
     return { ok: true, runs };
   }
 
@@ -423,14 +456,20 @@ export async function transcribeEngine(
     if (mode === "multilingual") {
       const fallback = await runBasic(audioFile, openai, anthropic);
       if (fallback.ok) {
-        await recordUsage("transcribe_basic");
+        await recordUsage("transcribe_basic", {
+          tokensIn: fallback.run.tokensIn,
+          tokensOut: fallback.run.tokensOut,
+        });
         return { ok: true, runs: [fallback.run] };
       }
     }
     return { ok: false, message: result.message };
   }
   // 실제 사용 엔진 기준으로 기록(폴백 포함 정확)
-  await recordUsage(ENGINE_FEATURE[result.run.engine] ?? "transcribe_basic");
+  await recordUsage(ENGINE_FEATURE[result.run.engine] ?? "transcribe_basic", {
+    tokensIn: result.run.tokensIn,
+    tokensOut: result.run.tokensOut,
+  });
   return { ok: true, runs: [result.run] };
 }
 
@@ -446,7 +485,10 @@ export async function transcribeAndSummarize(
   if (!clients.ok) return { ok: false, message: clients.message };
   const result = await runBasic(audioFile, clients.openai, clients.anthropic);
   if (!result.ok) return { ok: false, message: result.message };
-  await recordUsage("transcribe_basic");
+  await recordUsage("transcribe_basic", {
+    tokensIn: result.run.tokensIn,
+    tokensOut: result.run.tokensOut,
+  });
   return { ok: true, transcription: result.run.transcription, summary: result.run.summary };
 }
 
@@ -496,7 +538,10 @@ export async function summarizeChunkTranscript(
     });
     const block = message.content[0];
     const summary = block.type === "text" ? block.text : fullText;
-    await recordUsage("summarize_chunk");
+    await recordUsage("summarize_chunk", {
+      tokensIn: message.usage?.input_tokens ?? 0,
+      tokensOut: message.usage?.output_tokens ?? 0,
+    });
     return { ok: true, summary };
   } catch (e) {
     return {

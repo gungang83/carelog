@@ -22,12 +22,20 @@ export default async function AdminUsagePage() {
             메뉴 사용량과 AI 크레딧 사용을 기관·직원·기능별로 확인합니다. (최고 관리자 전용)
           </p>
         </div>
-        <Link
-          href="/admin"
-          className="shrink-0 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-600 transition hover:bg-slate-50"
-        >
-          ← 슈퍼어드민
-        </Link>
+        <div className="flex shrink-0 items-center gap-1">
+          <Link
+            href="/admin/usage/report/today"
+            className="rounded-xl border border-sky-200 bg-sky-50 px-3 py-2 text-sm font-medium text-sky-700 transition hover:bg-sky-100"
+          >
+            📊 오늘 리포트
+          </Link>
+          <Link
+            href="/admin"
+            className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-600 transition hover:bg-slate-50"
+          >
+            ← 슈퍼어드민
+          </Link>
+        </div>
       </div>
       <UsageDashboard />
     </div>

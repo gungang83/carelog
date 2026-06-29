@@ -578,3 +578,17 @@ alter table public.patient_push_subscriptions enable row level security;
 -- 배선: app/actions/transcribe.ts recordUsage(비차단) → deduct_credit. 메뉴는 RouteTracker→/api/menu-usage/track.
 -- 단가(lib/credits.ts): quick1/basic2/detailed3/dental3/multilingual3/comparison5/chunk_segment1/summarize_chunk2.
 -- ───────────────────────────────────────────────────────────────────────────
+
+-- ───────────────────────────────────────────────────────────────────────────
+-- 일일 사용 리포트 (spec 014-daily-usage-report) — migration: 20260628000003_daily_report.sql
+-- credit_log 확장: tokens_in·tokens_out integer default 0 (Claude 응답 usage 실토큰).
+-- deduct_credit: 6-arg → 8-arg(p_tokens_in/out default 0) 재생성. 여전히 비차단(음수 허용).
+-- usage_reports — 일별 리포트 스냅샷(jsonb), 멱등 발행:
+--   create table public.usage_reports(
+--     id uuid pk, report_date date not null, scope text default 'all',  -- 'all' | institution_id
+--     payload jsonb not null, created_at, unique(report_date, scope));
+-- RLS: usage_reports enable + 정책 0개(service_role만). 사용량 테이블과 동일.
+-- 발행: /api/cron/daily-usage-report (매일 08:00 KST = 0 23 * * * UTC, CRON_SECRET/슈퍼어드민).
+--   lib/usage/daily-report.ts buildDailyReport(KST 0~24시: menu_usage_daily day + credit_log 경계).
+--   전달: 알림함(recipients=슈퍼어드민 email) + sendPushToUser(본인 기기). 열람: /admin/usage/report/[date].
+-- ───────────────────────────────────────────────────────────────────────────

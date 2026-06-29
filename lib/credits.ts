@@ -48,13 +48,13 @@ export async function getCreditBalance(institutionId: string): Promise<number> {
 /**
  * 사용량 차감 기록. ★비차단·비throw — 전사 hot path에서 호출되므로
  * 어떤 실패도 상담 흐름을 막지 않는다(잔액 음수 허용, 관측/과금 목적).
+ * tokensIn/Out: Claude 응답 usage 실토큰(있으면 기록, 없으면 0).
  */
 export async function deductCredit(
   institutionId: string,
   feature: CreditFeature,
   byEmail: string,
-  refId?: string | null,
-  memo?: string,
+  opts?: { refId?: string | null; memo?: string; tokensIn?: number; tokensOut?: number },
 ): Promise<void> {
   try {
     const admin = createAdminSupabaseClient();
@@ -63,9 +63,11 @@ export async function deductCredit(
       p_institution_id: institutionId,
       p_amount: price,
       p_feature: feature,
-      p_ref_id: refId ?? null,
+      p_ref_id: opts?.refId ?? null,
       p_by: byEmail,
-      p_memo: memo ?? null,
+      p_memo: opts?.memo ?? null,
+      p_tokens_in: Math.max(0, Math.round(opts?.tokensIn ?? 0)),
+      p_tokens_out: Math.max(0, Math.round(opts?.tokensOut ?? 0)),
     });
   } catch {
     /* 통계/과금 실패는 무시(노이즈 방지) — 상담 데이터·전사 흐름 불변 */

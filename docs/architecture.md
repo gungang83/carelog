@@ -604,3 +604,20 @@ AI 전사 성공(app/actions/transcribe.ts: transcribeEngine·transcribeAndSumma
 데이터: menu_usage_daily · institution_credits · credit_log. RLS enable+정책0(service_role만), 기관격리=쿼리필터.
 ```
 - EO `/superadmin/menu-usage`(spec-075)·크레딧(spec-011) 벤치마크. 차이: RLS 정책0(더 강한 격리) + 크레딧 비차단(임상 안정성). 메뉴 정의는 `lib/usage/menu-config.ts`.
+
+## 일일 사용 리포트 (spec 014-daily-usage-report)
+
+```
+[발행] 매일 08:00 KST (vercel.json cron 0 23 * * * UTC)
+  → /api/cron/daily-usage-report (CRON_SECRET Bearer 또는 슈퍼어드민 세션)
+  → lib/usage/daily-report.buildDailyReport({date:어제, scope:'all'})
+       KST 0~24시 집계: menu_usage_daily(day) + credit_log(created_at 경계, 토큰 포함)
+  → persistDailyReport → usage_reports upsert(멱등 스냅샷)
+  → 전달: 슈퍼어드민 소속 기관마다 sendNotification(recipients=email, type:daily_report)
+          + sendPushToUser(슈퍼어드민 uid) 웹푸시
+[열람] 알림 클릭 → /admin/usage/report/[date] (RSC, 발행본 우선·없으면 즉석 집계)
+  → components/admin/daily-report-view.tsx (요약·워크스페이스별·기능별(토큰)·메뉴별·사용자별·경고)
+[토큰] app/actions/transcribe.ts: Claude usage(input/output) → EngineRun → recordUsage → credit_log.tokens_in/out
+```
+- 범용성: `buildDailyReport({scope})`가 institution_id도 받음 → 운영자(기관별) 리포트는 cron 루프 + recipients:'admins' 배선만 추가하면 재사용. 현재는 scope='all'(슈퍼어드민)만 발송.
+- 슈퍼어드민은 크로스-기관이라 기관 푸시(sendPushToInstitution) 대신 user 단위 `sendPushToUser` 신규.

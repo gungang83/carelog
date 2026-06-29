@@ -37,6 +37,8 @@ export type EngineRun = {
   detectedLang?: string; // 감지된 원문 언어 코드
   insertText: string; // 에디터 삽입용 정형 텍스트
   failedSegments?: number[]; // 청크 모드: 전사 실패한 구간 인덱스(있으면 표시)
+  tokensIn?: number; // Claude 응답 usage 입력 토큰(요약/번역 단계, 있으면)
+  tokensOut?: number; // Claude 응답 usage 출력 토큰
 };
 
 export type EngineTranscribeResult =
