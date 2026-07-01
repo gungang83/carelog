@@ -4,6 +4,13 @@ import type { DailyReport } from "@/lib/usage/daily-report";
 // spec 014 — 일일 사용 리포트 표시(서버 렌더, 읽기 전용). cron 발행분/즉석 집계 공용.
 
 const f = (n: number) => n.toLocaleString("ko-KR");
+function fmtBytes(n: number): string {
+  const abs = Math.abs(n);
+  if (abs >= 1024 ** 3) return `${(n / 1024 ** 3).toFixed(2)} GB`;
+  if (abs >= 1024 ** 2) return `${(n / 1024 ** 2).toFixed(1)} MB`;
+  if (abs >= 1024) return `${(n / 1024).toFixed(0)} KB`;
+  return `${n} B`;
+}
 
 function Delta({ now, prev }: { now: number; prev: number | null }) {
   if (prev == null) return null;
@@ -48,6 +55,33 @@ export function DailyReportView({
         <Stat label="전사 건수" value={f(s.transcribeCount)} />
         <Stat label="토큰(입력+출력)" value={f(s.tokensIn + s.tokensOut)} />
       </div>
+
+      {/* 인프라(서버) 상태 */}
+      {report.infra && (
+        <Card title="서버(인프라) 상태">
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+            <Stat label="총 스토리지" value={fmtBytes(report.infra.storageTotal)} accent="sky"
+              extra={report.infra.prevStorageTotal != null
+                ? <span className="text-xs text-slate-400"> {report.infra.storageTotal - report.infra.prevStorageTotal >= 0 ? "+" : ""}{fmtBytes(report.infra.storageTotal - report.infra.prevStorageTotal)}</span>
+                : null} />
+            <Stat label="DB 크기" value={fmtBytes(report.infra.dbBytes)} />
+            <Stat label="오늘 신규 상담" value={f(report.infra.todayConsultations)} />
+            <Stat label="오늘 신규 이미지·음성" value={`${f(report.infra.todayImages)} · ${f(report.infra.todayAudio)}`} />
+          </div>
+          {report.infra.storage.length > 0 && (
+            <div className="mt-3">
+              <Table
+                head={["버킷(Storage)", "용량", "객체 수"]}
+                rows={report.infra.storage.map((b) => [b.bucket, fmtBytes(b.bytes), f(b.objects)])}
+                empty="스토리지 없음"
+              />
+            </div>
+          )}
+          <p className="mt-2 text-xs text-slate-400">
+            ※ 이그레스(전송량)는 플랫폼 지표라 여기 없음 — 정확한 값은 Supabase → Usage 확인. 위 스토리지 증가량이 이그레스 조기경보 지표.
+          </p>
+        </Card>
+      )}
 
       {/* 경고 신호 */}
       {report.alerts.length > 0 && (
