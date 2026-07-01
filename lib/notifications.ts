@@ -27,6 +27,8 @@ export async function sendNotification(opts: {
   recipients?: Recipients;
   institutionId: string;
   createdBy?: string | null;
+  /** 웹푸시 발송 여부(기본 true). 관리자 전용 알림이 전 직원에게 푸시되는 걸 막을 때 false. */
+  push?: boolean;
 }): Promise<void> {
   const {
     title,
@@ -36,6 +38,7 @@ export async function sendNotification(opts: {
     recipients = "all",
     institutionId,
     createdBy = null,
+    push = true,
   } = opts;
 
   try {
@@ -54,8 +57,8 @@ export async function sendNotification(opts: {
     console.warn("[notifications] insert 예외(비차단):", e);
   }
 
-  // broadcast(all/admins)만 웹푸시 — 특정 이메일 대상은 인앱 알림함만.
-  if (recipients === "all" || recipients === "admins") {
+  // broadcast(all/admins)만 웹푸시 — 특정 이메일 대상은 인앱 알림함만. push:false면 억제.
+  if (push && (recipients === "all" || recipients === "admins")) {
     await sendPushToInstitution(institutionId, {
       title,
       body,

@@ -10,19 +10,31 @@ function shift(date: string, n: number): string {
   return d.toLocaleDateString("en-CA", { timeZone: "Asia/Seoul" });
 }
 
-export function ReportDateNav({ date }: { date: string }) {
+export function ReportDateNav({
+  date,
+  basePath = "/admin/usage/report",
+  dashboardHref = "/admin/usage",
+  dashboardLabel = "대시보드",
+}: {
+  date: string;
+  basePath?: string;
+  dashboardHref?: string | null;
+  dashboardLabel?: string;
+}) {
   const router = useRouter();
   return (
     <div className="flex shrink-0 flex-wrap items-center gap-1 text-sm">
-      <Link href={`/admin/usage/report/${shift(date, -1)}`} className="rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-slate-600 hover:bg-slate-50">← 전일</Link>
+      <Link href={`${basePath}/${shift(date, -1)}`} className="rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-slate-600 hover:bg-slate-50">← 전일</Link>
       <input
         type="date"
         value={date}
-        onChange={(e) => { if (e.target.value) router.push(`/admin/usage/report/${e.target.value}`); }}
+        onChange={(e) => { if (e.target.value) router.push(`${basePath}/${e.target.value}`); }}
         className="rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-slate-700"
       />
-      <Link href={`/admin/usage/report/${shift(date, 1)}`} className="rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-slate-600 hover:bg-slate-50">익일 →</Link>
-      <Link href="/admin/usage" className="ml-1 rounded-lg border border-sky-200 bg-sky-50 px-2.5 py-1.5 font-medium text-sky-700 hover:bg-sky-100">대시보드</Link>
+      <Link href={`${basePath}/${shift(date, 1)}`} className="rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-slate-600 hover:bg-slate-50">익일 →</Link>
+      {dashboardHref && (
+        <Link href={dashboardHref} className="ml-1 rounded-lg border border-sky-200 bg-sky-50 px-2.5 py-1.5 font-medium text-sky-700 hover:bg-sky-100">{dashboardLabel}</Link>
+      )}
     </div>
   );
 }
