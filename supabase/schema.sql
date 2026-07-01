@@ -75,7 +75,7 @@ create unique index if not exists patient_resident_no_hash_uidx
 -- 상담 기록
 -- ============================================================
 create table if not exists public.consultation (
-  id              uuid primary key default gen_random_uuid(),
+  id              bigint primary key generated always as identity,  -- ★실제 DB는 bigint(문서 드리프트 정정 2026-06-29)
   institution_id  uuid not null references public.institutions(id),
   patient_id      bigint references public.patient(id) on delete cascade,  -- nullable: 체어 임시 기록
   content         text not null default '',
