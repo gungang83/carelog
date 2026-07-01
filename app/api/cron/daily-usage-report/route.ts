@@ -88,6 +88,32 @@ async function deliverToSuperAdmin(report: DailyReport): Promise<{ inApp: number
   return { inApp: institutionIds.length, pushed };
 }
 
+/** 운영자(기관 관리자)별 리포트 발행 + 관리자 알림함(푸시 억제 — 전 직원 스팸 방지). */
+async function deliverToOperators(date: string, institutionIds: string[]): Promise<{ count: number }> {
+  const link = `/reports/daily/${date}`;
+  let count = 0;
+  for (const institutionId of [...new Set(institutionIds)]) {
+    try {
+      const report = await buildDailyReport({ date, scope: institutionId });
+      await persistDailyReport(report);
+      await sendNotification({
+        title: `📊 우리 워크스페이스 일일 리포트 (${date})`,
+        body: reportHeadline(report),
+        type: "daily_report",
+        link,
+        recipients: "admins",
+        institutionId,
+        push: false,
+        createdBy: null,
+      });
+      count++;
+    } catch (e) {
+      console.warn("[daily-usage-report] 운영자 리포트 실패(비차단):", institutionId, e);
+    }
+  }
+  return { count };
+}
+
 export async function GET(req: NextRequest) {
   if (!(await authorize(req))) {
     return NextResponse.json({ ok: false, error: "unauthorized" }, { status: 401 });
@@ -101,11 +127,14 @@ export async function GET(req: NextRequest) {
     const report = await buildDailyReport({ date, scope: "all" });
     await persistDailyReport(report);
     const delivery = await deliverToSuperAdmin(report);
+    // 운영자(기관 관리자)별 리포트 — 당일 활동 있는 기관마다 자기 워크스페이스 리포트 발행 + 관리자 알림
+    const operators = await deliverToOperators(date, report.byWorkspace.map((w) => w.id));
     return NextResponse.json({
       ok: true,
       date,
       summary: report.summary,
       delivery,
+      operators,
     });
   } catch (e) {
     console.error("[daily-usage-report] 실패:", e);

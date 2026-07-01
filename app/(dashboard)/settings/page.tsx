@@ -45,6 +45,22 @@ export default async function SettingsPage() {
         <p className="mt-1 text-sm text-slate-500">{institution.name}</p>
       </div>
 
+      {isOwnerOrAdmin && (
+        <section className="space-y-3">
+          <h2 className="text-base font-semibold text-slate-800">일일 리포트</h2>
+          <a
+            href="/reports/daily/today"
+            className="flex items-center justify-between gap-3 rounded-2xl border border-sky-200 bg-sky-50 px-5 py-4 transition hover:bg-sky-100"
+          >
+            <div>
+              <p className="text-sm font-semibold text-sky-800">📊 우리 워크스페이스 일일 사용 리포트</p>
+              <p className="mt-0.5 text-xs text-sky-600">화면 사용·AI 사용량을 직원·기능별로. 매일 아침 알림으로도 받아요.</p>
+            </div>
+            <span className="shrink-0 text-sky-600">→</span>
+          </a>
+        </section>
+      )}
+
       <section className="space-y-4">
         <h2 className="text-base font-semibold text-slate-800">요금제</h2>
         <PlanSection currentPlan={plan} />

@@ -27,9 +27,17 @@ function Delta({ now, prev }: { now: number; prev: number | null }) {
 export function DailyReportView({
   report,
   stored,
+  scopeLabel = "전체 워크스페이스",
+  basePath = "/admin/usage/report",
+  dashboardHref = "/admin/usage",
+  dashboardLabel = "대시보드",
 }: {
   report: DailyReport;
   stored: boolean;
+  scopeLabel?: string;
+  basePath?: string;
+  dashboardHref?: string | null;
+  dashboardLabel?: string;
 }) {
   const s = report.summary;
 
@@ -40,10 +48,10 @@ export function DailyReportView({
         <div>
           <h1 className="text-2xl font-bold text-slate-900">일일 사용 리포트</h1>
           <p className="mt-1 text-sm text-slate-500">
-            {report.date} (KST 0~24시) · 전체 워크스페이스 · {stored ? "발행본" : "즉석 집계"}
+            {report.date} (KST 0~24시) · {scopeLabel} · {stored ? "발행본" : "즉석 집계"}
           </p>
         </div>
-        <ReportDateNav date={report.date} />
+        <ReportDateNav date={report.date} basePath={basePath} dashboardHref={dashboardHref} dashboardLabel={dashboardLabel} />
       </div>
 
       {/* 요약 카드 */}
