@@ -18,6 +18,10 @@
     {
       "path": "/api/cron/daily-usage-report",
       "schedule": "0 23 * * *"
+    },
+    {
+      "path": "/api/cron/process-transcriptions",
+      "schedule": "* * * * *"
     }
   ]
 }

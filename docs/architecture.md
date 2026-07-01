@@ -442,11 +442,15 @@ handleStopRecording()
   ※ 공유 타입·상수: lib/transcribe/engines.ts (LAB_ENGINE_OPTIONS, CHUNK_* 상수) — "use server" 파일은
     async 함수만 export 가능하므로 런타임 상수는 일반 모듈에 분리.
 
-handleStopAndSave() — "상담 종료 및 저장"(spec 016, 자동저장)
-  → autoSaveRef=true → handleStop → 전사 완료 콜백(transcribeBlob/finishChunkTexts)이 doAutoSave 호출
-  → doAutoSave: editor.getHTML() 동기 캡처 → saveChairRecord → 음성 업로드 → 정리 → closeOverlay
-  → 보드는 레이아웃 상시 마운트라 닫고 이동해도 백그라운드 완료. 비교 모드면 첫 결과 자동 확정.
-  → 실패(전사/저장/내용없음/체어없음): IndexedDB 임시본 보존 + 안내 + reportAutoSaveFailure(서버 로그, PII無)
+handleStopAndSave() — "상담 종료 및 저장"(spec 020 서버 비동기 전사)
+  → 음성(청크면 이어붙임)만 서버로: enqueueServerTranscription(FormData{audio,chairId,engine,prescriptions,participants,prefixHtml})
+      → 플레이스홀더 상담 '🎙️ 전사 중' 즉시 생성 + uploadConsultationAudio(audio_path) + transcription_jobs(pending) 등록
+      → 보드 즉시 종료·정리. 탭 닫기·폰 잠금 무관(서버가 처리).
+  → 워커 cron /api/cron/process-transcriptions(매 분): pending 원자 클레임 → 음성 다운로드 →
+      runServerTranscription(세션 없이, transcribe.ts) → consultation.content 갱신 → job done →
+      deductCredit(institution·created_by 기준 토큰) → 완료 알림(sendNotification recipients:'all'). 3회 재시도 후 error.
+  → 등록 실패: IndexedDB 임시본 보존 + 안내 + reportAutoSaveFailure(서버 로그). '상담 종료'로 재시도 가능.
+  ※ 클라 자동저장(spec 016 doAutoSave/autoSaveRef) 코드는 잔존하나 이 버튼은 서버 위임으로 대체됨.
 
 handleSave()  — "상담 종료"(전사만) 후 수동 저장
   → saveChairRecord({ chairId, content, prescriptions, transcriptionEngine }) [Server Action]
