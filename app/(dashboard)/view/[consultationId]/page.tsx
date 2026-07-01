@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { getConsultationById } from "@/app/actions/consultations";
+import { optimizeStorageUrl } from "@/lib/image/optimize";
 
 type PageProps = { params: Promise<{ consultationId: string }> };
 
@@ -113,7 +114,8 @@ export default async function ConsultationViewPage({
                 // eslint-disable-next-line @next/next/no-img-element
                 <img
                   key={`${c.id}-${idx}`}
-                  src={url}
+                  src={optimizeStorageUrl(url, { width: 400 })}
+                  loading="lazy"
                   alt={`consultation-view-${idx}`}
                   className="h-24 w-full rounded-xl border border-sky-100 object-cover shadow-sm"
                 />

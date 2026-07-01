@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useChairContext } from "@/components/chair/chair-provider";
 import { CopyAllButton } from "@/components/copy-all-button";
+import { optimizeContentHtml } from "@/lib/image/optimize";
 import {
   getAllUnlinkedRecords,
   getRecentParticipants,
@@ -377,7 +378,7 @@ export function HomeFeed({
               {isViewing ? (
                 <div
                   className="rich-content text-sm leading-6 text-slate-800"
-                  dangerouslySetInnerHTML={{ __html: rec.content || "<p>내용 없음</p>" }}
+                  dangerouslySetInnerHTML={{ __html: optimizeContentHtml(rec.content || "<p>내용 없음</p>") }}
                 />
               ) : (
                 <p className="text-sm leading-relaxed text-slate-700">
@@ -516,7 +517,7 @@ export function HomeFeed({
           {isViewing ? (
             <div
               className="rich-content text-sm leading-6 text-slate-800"
-              dangerouslySetInnerHTML={{ __html: rec.content || "<p>내용 없음</p>" }}
+              dangerouslySetInnerHTML={{ __html: optimizeContentHtml(rec.content || "<p>내용 없음</p>") }}
             />
           ) : (
             <p className="text-sm leading-relaxed text-slate-700">

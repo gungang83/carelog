@@ -8,6 +8,7 @@ import {
   type SearchConsultationsFilters,
 } from "@/app/actions/consultations";
 import { CopyAllButton } from "@/components/copy-all-button";
+import { optimizeContentHtml } from "@/lib/image/optimize";
 
 /**
  * 상담 기록 전체 열람·검색·필터 (spec 011 US1·US3).
@@ -200,7 +201,7 @@ export function RecordsBrowser({
                       <div className="border-t border-slate-100 px-4 py-3">
                         <div
                           className="prose prose-sm max-w-none text-slate-800 [&_img]:rounded-lg"
-                          dangerouslySetInnerHTML={{ __html: r.content }}
+                          dangerouslySetInnerHTML={{ __html: optimizeContentHtml(r.content) }}
                         />
                         {r.prescriptions && r.prescriptions.length > 0 && (
                           <div className="mt-2 flex flex-wrap gap-1.5">

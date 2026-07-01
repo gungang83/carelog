@@ -13,15 +13,21 @@ import Placeholder from "@tiptap/extension-placeholder";
 import Image from "@tiptap/extension-image";
 import { ImageAnnotator } from "@/components/image-annotator";
 import { createBrowserSupabaseClient } from "@/lib/supabase/client";
+import { compressImageFile } from "@/lib/image/optimize";
 
 // ── Supabase image upload ─────────────────────────────────────
+// spec 017 — 업로드 전 압축(다운스케일+webp)으로 저장·이그레스 절감.
 async function uploadImage(file: File): Promise<string> {
   const supabase = createBrowserSupabaseClient();
   const bucket =
     process.env.NEXT_PUBLIC_SUPABASE_CONSULTATION_BUCKET ?? "consultation-images";
-  const ext = file.name.split(".").pop()?.toLowerCase() ?? "png";
+  const optimized = await compressImageFile(file);
+  const ext =
+    optimized.type === "image/webp" ? "webp" : (optimized.name.split(".").pop()?.toLowerCase() ?? "png");
   const path = `inline/${crypto.randomUUID()}.${ext}`;
-  const { error } = await supabase.storage.from(bucket).upload(path, file);
+  const { error } = await supabase.storage
+    .from(bucket)
+    .upload(path, optimized, { contentType: optimized.type || undefined });
   if (error) throw new Error(error.message);
   return supabase.storage.from(bucket).getPublicUrl(path).data.publicUrl;
 }

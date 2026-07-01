@@ -10,6 +10,7 @@ import {
   updateConsultationContent,
 } from "@/app/actions/consultations";
 import { CopyAllButton } from "@/components/copy-all-button";
+import { optimizeContentHtml, optimizeStorageUrl } from "@/lib/image/optimize";
 import {
   searchPatientsForChair,
   unlinkChairRecord,
@@ -555,7 +556,7 @@ export function ConsultationHistory({ consultations, patientId }: Props) {
               {/* 본문 */}
               <div
                 className="rich-content mt-3 text-sm leading-6 text-slate-800"
-                dangerouslySetInnerHTML={{ __html: c.content }}
+                dangerouslySetInnerHTML={{ __html: optimizeContentHtml(c.content) }}
               />
 
               {/* 전체 복사 — 덴트웹 등 외부 EMR 붙여넣기용 */}
@@ -582,7 +583,7 @@ export function ConsultationHistory({ consultations, patientId }: Props) {
                         className="group relative overflow-hidden rounded-xl border border-sky-100 bg-sky-50/30 text-left shadow-sm transition hover:border-sky-300 hover:shadow-md"
                       >
                         {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img src={url} alt="" className="h-28 w-full object-cover transition group-hover:scale-[1.02]" />
+                        <img src={optimizeStorageUrl(url, { width: 400 })} loading="lazy" alt="" className="h-28 w-full object-cover transition group-hover:scale-[1.02]" />
                         <span className="absolute bottom-2 right-2 rounded-lg bg-white/90 px-2 py-1 text-[10px] font-semibold text-sky-800 shadow">
                           확대
                         </span>
