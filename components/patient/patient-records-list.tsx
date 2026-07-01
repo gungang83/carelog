@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import type { PatientRecordItem } from "@/app/actions/patient-portal";
+import { optimizeContentHtml, optimizeStorageUrl } from "@/lib/image/optimize";
 
 type Props = {
   records: PatientRecordItem[];
@@ -71,7 +72,7 @@ export function PatientRecordsList({ records }: Props) {
               <div className="border-t border-slate-100 px-5 py-4 bg-slate-50 space-y-4">
                 <div
                   className="text-sm text-slate-700 leading-relaxed [&_p]:mb-2 [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5 [&_strong]:font-semibold [&_img]:max-w-full [&_img]:rounded-lg [&_img]:mt-2"
-                  dangerouslySetInnerHTML={{ __html: record.content }}
+                  dangerouslySetInnerHTML={{ __html: optimizeContentHtml(record.content) }}
                 />
 
                 {record.prescriptions.length > 0 && (
@@ -103,7 +104,8 @@ export function PatientRecordsList({ records }: Props) {
                           rel="noopener noreferrer"
                         >
                           <img
-                            src={url}
+                            src={optimizeStorageUrl(url, { width: 300 })}
+                            loading="lazy"
                             alt={`사진 ${i + 1}`}
                             className="h-24 w-24 rounded-lg object-cover border border-slate-200"
                           />
