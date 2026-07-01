@@ -46,7 +46,7 @@ function engineFeature(engine: string): CreditFeature {
 type Job = {
   id: string;
   institution_id: string;
-  consultation_id: string;
+  consultation_id: number; // consultation.id는 bigint
   engine: string;
   prefix_html: string | null;
   attempts: number;
@@ -105,7 +105,7 @@ export async function GET(req: NextRequest) {
 
       // 사용량(크레딧·토큰) 기록 — 세션 없이 job 기준
       await deductCredit(job.institution_id, engineFeature(job.engine), job.created_by ?? "server", {
-        refId: job.consultation_id,
+        refId: String(job.consultation_id), // credit_log.ref_id는 text — bigint를 문자열로
         tokensIn: r.tokensIn,
         tokensOut: r.tokensOut,
       });
