@@ -6,7 +6,7 @@
 create table if not exists public.transcription_jobs (
   id              uuid primary key default gen_random_uuid(),
   institution_id  uuid not null references public.institutions(id) on delete cascade,
-  consultation_id uuid not null references public.consultation(id) on delete cascade, -- 채울 대상(플레이스홀더)
+  consultation_id bigint not null references public.consultation(id) on delete cascade, -- 채울 대상(플레이스홀더). consultation.id는 bigint.
   engine          text not null default 'basic',
   prefix_html     text,                       -- 사용자가 직접 입력해둔 본문(전사 앞에 보존)
   status          text not null default 'pending',  -- pending | processing | done | error
