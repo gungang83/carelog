@@ -22,6 +22,7 @@ import {
   transcribeSegment,
   summarizeChunkTranscript,
 } from "@/app/actions/transcribe";
+import { enqueueServerTranscription } from "@/app/actions/transcription-jobs";
 import {
   CHUNK_CONCURRENCY,
   CHUNK_SEGMENT_RETRY,
@@ -347,13 +348,77 @@ function BoardContent({
     transcribeBlob(blob, secs);
   };
 
-  // 상담 종료 및 저장(spec 016) — 종료 후 전사 완료되면 자동 저장. 사용자는 기다리지 않아도 됨.
-  // 점진 청크 전사면 종료 시점에 대부분 전사돼 있어 거의 즉시 저장된다.
+  // 상담 종료 및 저장(spec 020 서버 비동기 전사) — 음성만 서버에 올리고 즉시 종료.
+  // 전사·요약은 서버 백그라운드 워커가 처리 → 탭 닫거나 폰 잠가도 완료되면 알림이 온다.
   const handleStopAndSave = () => {
     setSaveMsg("");
-    autoSaveRef.current = true;
+    if (!selectedChair) {
+      setSaveMsg("체어를 먼저 선택하면 저장돼요.");
+      return;
+    }
+    const chair = selectedChair;
+    const prefixHtml = editorRef.current?.getHTML() ?? ""; // 직접 입력해둔 본문 보존
     setAutoSaving(true);
-    handleStop();
+
+    const finish = async () => {
+      let blob: Blob | null = null;
+      if (engine === "chunk") {
+        const segs = await stopRecordingChunked(DRAFT_CHAIR_KEY);
+        registerSegmentHandler(DRAFT_CHAIR_KEY, null);
+        if (segs.length) blob = new Blob(segs, { type: segs[0]?.type || "audio/webm" });
+      } else {
+        blob = stopRecording(DRAFT_CHAIR_KEY);
+      }
+      if (!blob || blob.size < 1024) {
+        resetChair(DRAFT_CHAIR_KEY);
+        setAutoSaving(false);
+        setMicError("녹음이 비어 있어요. 화면을 켠 채로 다시 녹음해 주세요.");
+        return;
+      }
+      audioBlobRef.current = blob;
+      // 등록 실패 대비 복구 안전망(음성+작성물 즉시 영속)
+      void saveDraft({ content: prefixHtml, prescriptions, participants, selectedChair: chair, audioBlob: blob, savedAt: Date.now() });
+
+      const fd = new FormData();
+      fd.append("audio", blob, "recording.webm");
+      fd.append("chairId", chair.id);
+      fd.append("engine", engine);
+      fd.append("prescriptions", JSON.stringify(prescriptions));
+      fd.append("participants", JSON.stringify(participants));
+      fd.append("prefixHtml", prefixHtml);
+
+      startTransition(async () => {
+        const r = await enqueueServerTranscription(fd);
+        if (r.ok) {
+          markLocalSave(r.consultationId);
+          audioBlobRef.current = null;
+          audioSegmentsRef.current = [];
+          liveTextsRef.current = [];
+          liveTasksRef.current = [];
+          void clearDraft();
+          setLastChairId(chair.id);
+          resetChair(DRAFT_CHAIR_KEY);
+          setEditText("");
+          editorRef.current?.clear();
+          setPrescriptions([]);
+          setMicError("");
+          setSaveMsg("");
+          setUsedEngine(null);
+          setComparison(null);
+          setEngine("basic");
+          setAutoSaving(false);
+          resetDefaults();
+          await refreshUnlinkedCount(chair.id);
+          closeOverlay();
+          router.refresh();
+        } else {
+          setAutoSaving(false);
+          setMicError(`백그라운드 전사 등록 실패: ${r.message} — 녹음은 보관됐어요. '상담 종료'로 다시 시도해 주세요.`);
+          void reportAutoSaveFailure({ reason: "enqueue", message: r.message, chairId: chair.id });
+        }
+      });
+    };
+    void finish();
   };
 
   // 자동 저장 — 전사 완료 직후 호출. 실패는 비차단으로 로그 + 임시본 보존(복구 가능).

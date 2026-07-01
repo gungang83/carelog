@@ -550,3 +550,46 @@ export async function summarizeChunkTranscript(
     };
   }
 }
+
+// ─── 서버 비동기 전사(spec 020) — 세션 없이 워커가 호출 ───────────────────────
+// cron 워커가 Storage 음성을 내려받아 전사·요약. 세션 게이트 없음(엔진은 job 등록 시 확정).
+// 크레딧/토큰 기록은 워커가 job.institution_id·created_by로 직접 deductCredit(세션 불필요).
+export async function runServerTranscription(
+  audioFile: File,
+  engine: string,
+): Promise<
+  | { ok: true; insertText: string; summary: string; engine: EngineId; tokensIn: number; tokensOut: number }
+  | { ok: false; message: string }
+> {
+  const clients = getClients();
+  if (!clients.ok) return { ok: false, message: clients.message };
+  const { openai, anthropic } = clients;
+  let result;
+  switch (engine) {
+    case "quick":
+      result = await runQuick(audioFile, openai);
+      break;
+    case "detailed":
+      result = await runDetailed(audioFile, openai, anthropic);
+      break;
+    case "dental":
+      result = await runDental(audioFile, openai, anthropic);
+      break;
+    case "multilingual":
+      result = await runMultilingual(audioFile, openai, anthropic);
+      break;
+    default:
+      // basic·chunk·comparison → 서버는 통짜 basic으로 전사(구간 처리 없이)
+      result = await runBasic(audioFile, openai, anthropic);
+  }
+  if (!result.ok) return { ok: false, message: result.message };
+  const run = result.run;
+  return {
+    ok: true,
+    insertText: run.insertText,
+    summary: run.summary,
+    engine: run.engine,
+    tokensIn: run.tokensIn ?? 0,
+    tokensOut: run.tokensOut ?? 0,
+  };
+}
