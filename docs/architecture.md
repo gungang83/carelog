@@ -647,3 +647,4 @@ AI 전사 성공(app/actions/transcribe.ts: transcribeEngine·transcribeAndSumma
 ```
 - 범용성: `buildDailyReport({scope})`가 institution_id도 받음 → 운영자(기관별) 리포트는 cron 루프 + recipients:'admins' 배선만 추가하면 재사용. 현재는 scope='all'(슈퍼어드민)만 발송.
 - 슈퍼어드민은 크로스-기관이라 기관 푸시(sendPushToInstitution) 대신 user 단위 `sendPushToUser` 신규.
+- **인프라 섹션(spec 018)**: `buildDailyReport`(scope='all')가 `get_infra_usage()` RPC(스토리지 버킷별 용량·객체수 + DB 크기, SECURITY DEFINER)로 인프라 스냅샷 포함 + 당일 신규 상담/이미지/음성 수. 스토리지 전일比 +500MB↑면 경고. 이그레스 실값은 플랫폼 지표(DB 밖) → Supabase Usage 참조(후속: SUPABASE_ACCESS_TOKEN Management API).

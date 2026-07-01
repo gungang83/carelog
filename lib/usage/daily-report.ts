@@ -26,6 +26,16 @@ export interface DailyReport {
   byMenu: { id: string; label: string; total: number; byRole: Record<string, number> }[];
   topUsers: { user: string; credit: number; count: number; tokensIn: number; tokensOut: number }[];
   alerts: { level: "warn" | "info"; text: string }[];
+  // spec 018 인프라(서버) 스냅샷 — scope='all'에서만. 이그레스는 플랫폼 지표라 DB에 없음(스토리지 증가량 proxy).
+  infra?: {
+    dbBytes: number;
+    storageTotal: number;
+    storage: { bucket: string; bytes: number; objects: number }[];
+    todayConsultations: number;
+    todayImages: number;
+    todayAudio: number;
+    prevStorageTotal: number | null;
+  };
 }
 
 /** KST 일자(YYYY-MM-DD) → 해당 하루의 UTC 경계 [start, end). */
@@ -174,9 +184,53 @@ export async function buildDailyReport(opts: { date: string; scope?: string }): 
     alerts.push({ level: "info", text: `크레딧 사용 급증: 전일 ${prevCredit} → 당일 ${creditTotal}` });
   }
 
+  // ── 인프라(서버) 스냅샷 — 전체 리포트에서만 ──
+  let infra: DailyReport["infra"] | undefined;
+  if (!instFilter) {
+    try {
+      const { data: infraData } = await admin.rpc("get_infra_usage");
+      const storage = (infraData?.storage ?? []) as { bucket: string; bytes: number; objects: number }[];
+      const storageTotal = storage.reduce((s, b) => s + Number(b.bytes ?? 0), 0);
+
+      // 당일(KST) 신규 생성량
+      const { data: created } = await admin
+        .from("consultation")
+        .select("image_urls, audio_path")
+        .gte("created_at", startIso)
+        .lt("created_at", endIso);
+      const rows = (created ?? []) as { image_urls: string[] | null; audio_path: string | null }[];
+      const todayImages = rows.reduce((s, r) => s + (r.image_urls?.length ?? 0), 0);
+      const todayAudio = rows.filter((r) => r.audio_path).length;
+
+      const prevReport = await getStoredReport(prevDate, "all");
+      const prevStorageTotal = prevReport?.infra?.storageTotal ?? null;
+
+      infra = {
+        dbBytes: Number(infraData?.db_bytes ?? 0),
+        storageTotal,
+        storage: storage.map((b) => ({ bucket: b.bucket, bytes: Number(b.bytes ?? 0), objects: Number(b.objects ?? 0) })),
+        todayConsultations: rows.length,
+        todayImages,
+        todayAudio,
+        prevStorageTotal,
+      };
+
+      // 스토리지 급증 경고(이그레스 조기경보 proxy) — 전일 대비 +500MB↑
+      if (prevStorageTotal != null && storageTotal - prevStorageTotal > 500 * 1024 * 1024) {
+        alerts.push({
+          level: "warn",
+          text: `스토리지 급증: 전일 대비 +${Math.round((storageTotal - prevStorageTotal) / 1024 / 1024)}MB (이그레스 주의 — Supabase Usage 확인)`,
+        });
+      }
+    } catch {
+      /* 인프라 집계 실패는 비차단(리포트 나머지는 정상) */
+    }
+  }
+
   return {
     date,
     scope,
+    infra,
     summary: {
       workspaces: byWorkspace.length,
       menuTotal,
