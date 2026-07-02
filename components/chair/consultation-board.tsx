@@ -42,6 +42,9 @@ import {
 } from "@/lib/chair/draft-store";
 import type { Participant } from "@/lib/types/database";
 
+// spec 020 — 이 시간(초)을 넘는 녹음은 '상담 종료'도 서버 비동기 전사로 자동 우회(크래시 방지).
+const LONG_RECORDING_SECS = 180; // 3분
+
 /**
  * 상담보드 (spec 008) — record-first 통합 상담 기록 캔버스.
  * 체어를 고르기 전에 1탭으로 녹음을 시작(DRAFT 세션)하고, 녹음이 도는 동안/끝난 뒤
@@ -305,14 +308,30 @@ function BoardContent({
     if (!result.ok) setMicError(result.error ?? "녹음 시작 실패");
   };
 
-  // 상담 종료(전사) — 기존 동작. autoSave=true면 종료 후 자동 저장까지(handleStopAndSave 경유).
+  // 상담 종료(전사). 긴 녹음은 클라 전사 대신 서버 비동기로 자동 우회(spec 020) — 크래시 방지.
   const handleStop = () => {
+    const secs = elapsed;
+
+    // ★긴 녹음(기본 3분↑)은 브라우저 전사 대기 중 크래시("This page couldn't load") 위험이 큼.
+    //   전 워크스페이스(비-lab 포함) 보호 — 서버 비동기 전사로 우회한다.
+    if (secs >= LONG_RECORDING_SECS) {
+      if (!selectedChair) {
+        // 서버 위임은 상담 레코드 생성에 체어가 필요 → 녹음 유지한 채 체어 선택 요청(전사 미실행).
+        setMicError(
+          "긴 상담이에요 — 체어를 먼저 선택한 뒤 종료해 주세요. 긴 녹음은 백그라운드로 안전하게 저장됩니다.",
+        );
+        return;
+      }
+      handleStopAndSave(); // 음성만 서버로 → 즉시 종료, 완료 시 알림(탭 닫아도 OK)
+      return;
+    }
+
+    // 짧은 녹음 → 기존 클라 경로(즉시 검토 후 저장)
     // 청크(긴 상담) 모드는 분할 녹음 → 별도 오케스트레이션.
     if (engine === "chunk") {
       void handleStopChunked();
       return;
     }
-    const secs = elapsed;
     const blob = stopRecording(DRAFT_CHAIR_KEY);
     const sizeKB = blob ? Math.round((blob.size / 1024) * 10) / 10 : 0;
 

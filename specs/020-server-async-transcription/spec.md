@@ -23,6 +23,7 @@
 - **FR-005** 체어 미선택·빈 녹음은 등록 안 함(안내). 등록 실패 시 IndexedDB 임시본 보존 + 안내 + 로그.
 - **FR-006** 인증: 워커는 CRON_SECRET Bearer(자동) 또는 슈퍼어드민 세션(수동 `?`). service_role만 job 접근(RLS 정책0).
 - **FR-007** 서버 워커는 통짜 전사(Whisper 1회, ≤25MB). 엔진별 요약 프롬프트(detailed/dental 등)는 존중.
+- **FR-008** **긴 녹음 자동 우회**: "상담 종료"(클라 경로)도 녹음이 `LONG_RECORDING_SECS`(기본 180초=3분)를 넘으면 서버 비동기로 자동 전환(전 워크스페이스·비-lab 포함) → 긴 녹음의 "This page couldn't load" 크래시 방지. 체어 미선택 시 녹음 유지한 채 체어 선택 요청(전사 미실행).
 
 ## Success Criteria
 
