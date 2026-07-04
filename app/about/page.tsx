@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { getSessionUser } from "@/lib/auth/institution";
+import { FounderLetter } from "@/components/about/founder-letter";
 
 export const metadata = {
   title: "Carelog — 치과 상담 기록 플랫폼",
@@ -275,6 +276,9 @@ export default async function AboutPage() {
           </div>
         </div>
       </section>
+
+      {/* 창업자 편지 (카드 #745) */}
+      <FounderLetter />
 
       {/* CTA */}
       <section className="py-24">
