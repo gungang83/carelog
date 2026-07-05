@@ -30,6 +30,8 @@ function OverlayContent() {
     getTranscribedText,
     getSavedConsultationId,
     startRecording,
+    pauseRecording,
+    resumeRecording,
     stopRecording,
     setTranscriptionResult,
     setSavedConsultationId,
@@ -81,10 +83,15 @@ function OverlayContent() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [openChairId, rawStatus]);
 
-  // Timer for recording
+  // Timer for recording — 일시정지(paused)는 멈추되 경과시간은 유지.
   useEffect(() => {
     if (status === "recording") {
       timerRef.current = setInterval(() => setElapsed((s) => s + 1), 1000);
+    } else if (status === "paused") {
+      if (timerRef.current) {
+        clearInterval(timerRef.current);
+        timerRef.current = null;
+      }
     } else {
       if (timerRef.current) {
         clearInterval(timerRef.current);
@@ -293,25 +300,56 @@ function OverlayContent() {
               </div>
             )}
 
-            {/* ── recording 상태 ── */}
-            {status === "recording" && (
+            {/* ── recording / paused 상태 ── */}
+            {(status === "recording" || status === "paused") && (
               <div className="flex flex-col gap-3">
-                <div className="flex items-center gap-3 rounded-xl border border-red-200 bg-red-50 px-4 py-3">
-                  <span className="inline-block size-2.5 animate-pulse rounded-full bg-red-500" />
-                  <span className="text-sm font-semibold text-red-700">
-                    녹음 중 {fmtTime(elapsed)}
+                <div
+                  className={`flex items-center gap-3 rounded-xl border px-4 py-3 ${
+                    status === "paused"
+                      ? "border-amber-200 bg-amber-50"
+                      : "border-red-200 bg-red-50"
+                  }`}
+                >
+                  <span
+                    className={`inline-block size-2.5 rounded-full ${
+                      status === "paused" ? "bg-amber-400" : "animate-pulse bg-red-500"
+                    }`}
+                  />
+                  <span
+                    className={`text-sm font-semibold ${
+                      status === "paused" ? "text-amber-700" : "text-red-700"
+                    }`}
+                  >
+                    {status === "paused" ? "일시정지" : "녹음 중"} {fmtTime(elapsed)}
                   </span>
                 </div>
                 <p className="text-xs text-slate-500">
                   오버레이를 닫아도 녹음은 계속됩니다.
                 </p>
-                <button
-                  type="button"
-                  onClick={handleStopRecording}
-                  className="flex w-full items-center justify-center gap-2 rounded-xl bg-red-500 px-4 py-3 text-sm font-semibold text-white transition hover:bg-red-600"
-                >
-                  중지 및 변환
-                </button>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() =>
+                      status === "paused"
+                        ? resumeRecording(openChairId)
+                        : pauseRecording(openChairId)
+                    }
+                    className={`flex flex-1 items-center justify-center gap-2 rounded-xl px-4 py-3 text-sm font-semibold transition ${
+                      status === "paused"
+                        ? "bg-sky-600 text-white hover:bg-sky-700"
+                        : "border border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
+                    }`}
+                  >
+                    {status === "paused" ? "이어서 녹음" : "일시정지"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleStopRecording}
+                    className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-red-500 px-4 py-3 text-sm font-semibold text-white transition hover:bg-red-600"
+                  >
+                    중지 및 변환
+                  </button>
+                </div>
               </div>
             )}
 
@@ -393,6 +431,7 @@ function statusHeading(status: string): string {
   switch (status) {
     case "idle":       return "녹음 시작";
     case "recording":  return "녹음 중";
+    case "paused":     return "일시정지";
     case "processing": return "변환 중";
     case "has_records": return "기록 편집";
     default:           return "체어 기록";

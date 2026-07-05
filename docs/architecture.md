@@ -410,6 +410,10 @@ app/(dashboard)/layout.tsx
 ```
 
 **체어 기록 저장 흐름**
+일시정지(세션 63): `pauseRecording(chairId)`/`resumeRecording(chairId)` — `MediaRecorder.pause()/resume()`로
+  스트림·누적 chunks 유지한 채 수집만 멈춤. status `"paused"`. 청크 모드는 segmentTimer 함께 정지/복원.
+  UI는 consultation-board·chair-overlay 녹음 바 토글. 타이머 freeze, paused도 미저장 진행 중 취급.
+
 ```
 handleStopRecording()
   → stopRecording(chairId) → Blob (MediaRecorder chunks)

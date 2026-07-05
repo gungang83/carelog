@@ -14,7 +14,7 @@ import type { ChairRow, ClinicMemberRow, Participant } from "@/lib/types/databas
 import { CHUNK_SEGMENT_MS, type EngineMode } from "@/lib/transcribe/engines";
 import { getUnlinkedChairRecords } from "@/app/actions/chairs";
 
-export type ChairStatus = "idle" | "recording" | "processing" | "has_records";
+export type ChairStatus = "idle" | "recording" | "paused" | "processing" | "has_records";
 
 /**
  * record-first 보드용 예약 세션 키.
@@ -158,6 +158,10 @@ type ChairContextValue = {
   getTranscribedText: (chairId: string) => string;
   getSavedConsultationId: (chairId: string) => string | null;
   startRecording: (chairId: string) => Promise<{ ok: boolean; error?: string }>;
+  /** 녹음 일시정지 — 청크 구간 회전도 함께 멈춘다(spec 021 후속). */
+  pauseRecording: (chairId: string) => void;
+  /** 일시정지 재개 — 청크 구간 회전 타이머 복원. */
+  resumeRecording: (chairId: string) => void;
   stopRecording: (chairId: string) => Blob | null;
   /** 청크(긴 상담) 종료 — 분할 구간 blob 배열 반환(spec 010) */
   stopRecordingChunked: (chairId: string) => Promise<Blob[]>;
@@ -440,6 +444,42 @@ export function ChairProvider({
     [releaseWakeLock],
   );
 
+  // 일시정지 — MediaRecorder.pause()로 스트림 유지한 채 데이터 수집만 멈춘다.
+  // 청크 모드는 구간 회전 타이머를 함께 꺼야 일시정지 중 구간이 잘리지 않는다.
+  const pauseRecording = useCallback((chairId: string) => {
+    const refs = mediaRefsMap.current[chairId];
+    if (!refs?.mediaRecorder || refs.mediaRecorder.state !== "recording") return;
+    if (refs.segmentTimer) {
+      clearInterval(refs.segmentTimer);
+      refs.segmentTimer = null;
+    }
+    try {
+      refs.mediaRecorder.pause();
+    } catch {
+      return; // pause 미지원/실패 — 상태 전환하지 않음(계속 녹음)
+    }
+    dispatch({ type: "SET_STATUS", chairId, status: "paused" });
+  }, []);
+
+  // 재개 — resume() 후 청크 구간 회전 타이머 복원. 누적 chunks는 그대로 이어진다.
+  const resumeRecording = useCallback((chairId: string) => {
+    const refs = mediaRefsMap.current[chairId];
+    if (!refs?.mediaRecorder || refs.mediaRecorder.state !== "paused") return;
+    try {
+      refs.mediaRecorder.resume();
+    } catch {
+      return;
+    }
+    if (refs.chunked && !refs.segmentTimer) {
+      refs.segmentTimer = setInterval(() => {
+        if (refs.mediaRecorder && refs.mediaRecorder.state === "recording") {
+          refs.mediaRecorder.stop();
+        }
+      }, CHUNK_SEGMENT_MS);
+    }
+    dispatch({ type: "SET_STATUS", chairId, status: "recording" });
+  }, []);
+
   const registerSegmentHandler = useCallback(
     (chairId: string, cb: ((seg: Blob, index: number) => void) | null) => {
       getMediaRefs(chairId).onSegmentReady = cb;
@@ -503,6 +543,8 @@ export function ChairProvider({
     getTranscribedText,
     getSavedConsultationId,
     startRecording,
+    pauseRecording,
+    resumeRecording,
     stopRecording,
     stopRecordingChunked,
     registerSegmentHandler,

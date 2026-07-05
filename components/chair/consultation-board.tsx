@@ -82,6 +82,8 @@ function BoardContent({
     closeOverlay,
     getChairStatus,
     startRecording,
+    pauseRecording,
+    resumeRecording,
     stopRecording,
     stopRecordingChunked,
     registerSegmentHandler,
@@ -150,10 +152,13 @@ function BoardContent({
     setSelectedChair(last ? { id: last.id, name: last.name } : null);
   }
 
-  // 녹음 타이머
+  // 녹음 타이머 — 일시정지(paused)는 타이머만 멈추고 경과시간은 유지(0으로 리셋하지 않음).
   useEffect(() => {
     if (status === "recording") {
       timerRef.current = setInterval(() => setElapsed((s) => s + 1), 1000);
+    } else if (status === "paused") {
+      if (timerRef.current) clearInterval(timerRef.current);
+      timerRef.current = null;
     } else {
       if (timerRef.current) clearInterval(timerRef.current);
       timerRef.current = null;
@@ -170,6 +175,7 @@ function BoardContent({
   useEffect(() => {
     const hasUnsaved =
       status === "recording" ||
+      status === "paused" ||
       status === "processing" ||
       editText.trim() !== "" ||
       audioBlobRef.current !== null;
@@ -187,6 +193,7 @@ function BoardContent({
   useEffect(() => {
     const hasUnsaved =
       status === "recording" ||
+      status === "paused" ||
       status === "processing" ||
       editText.trim() !== "" ||
       audioBlobRef.current !== null;
@@ -234,6 +241,7 @@ function BoardContent({
     if (!pub) return;
     const active =
       status === "recording" ||
+      status === "paused" ||
       status === "processing" ||
       editText.trim() !== "" ||
       audioBlobRef.current !== null;
@@ -678,6 +686,7 @@ function BoardContent({
     // 녹음/작성물이 있을 때만 확인 — 실수로 '버리기'를 눌러 날리는 사고 방지.
     const hasContent =
       status === "recording" ||
+      status === "paused" ||
       editText.trim() !== "" ||
       audioBlobRef.current !== null;
     if (hasContent && !window.confirm("작성 중인 내용과 녹음을 버릴까요? 되돌릴 수 없어요.")) {
@@ -736,7 +745,7 @@ function BoardContent({
 
   const handleSave = () => {
     setSaveMsg("");
-    if (status === "recording") {
+    if (status === "recording" || status === "paused") {
       setSaveMsg("녹음을 먼저 중지해 주세요.");
       return;
     }
@@ -803,6 +812,7 @@ function BoardContent({
   };
 
   const recording = status === "recording";
+  const paused = status === "paused";
   const processing = status === "processing" || isPending;
 
   return (
@@ -822,16 +832,37 @@ function BoardContent({
         <div className="flex max-h-[90vh] w-full max-w-lg flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
           {/* 녹음 바 (상단, 항상) */}
           <div className="flex items-center gap-3 border-b border-slate-100 px-5 py-3">
-            {recording ? (
+            {recording || paused ? (
               <>
-                <span className="inline-block size-2.5 animate-pulse rounded-full bg-red-500" />
-                <span className="text-sm font-semibold text-red-700">
-                  녹음 중 {fmtTime(elapsed)}
+                <span
+                  className={`inline-block size-2.5 rounded-full ${
+                    paused ? "bg-amber-400" : "animate-pulse bg-red-500"
+                  }`}
+                />
+                <span
+                  className={`text-sm font-semibold ${paused ? "text-amber-700" : "text-red-700"}`}
+                >
+                  {paused ? "일시정지" : "녹음 중"} {fmtTime(elapsed)}
                 </span>
                 {engine === "chunk" && liveDone > 0 && (
                   <span className="text-xs text-slate-400">· {liveDone}구간 전사됨</span>
                 )}
                 <div className="ml-auto flex items-center gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() =>
+                      paused
+                        ? resumeRecording(DRAFT_CHAIR_KEY)
+                        : pauseRecording(DRAFT_CHAIR_KEY)
+                    }
+                    className={`inline-flex items-center gap-1 rounded-lg px-3 py-1.5 text-xs font-semibold transition ${
+                      paused
+                        ? "bg-sky-600 text-white hover:bg-sky-700"
+                        : "border border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
+                    }`}
+                  >
+                    {paused ? "이어서 녹음" : "일시정지"}
+                  </button>
                   <button
                     type="button"
                     onClick={handleStop}

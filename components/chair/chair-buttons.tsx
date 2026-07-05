@@ -66,6 +66,7 @@ function statusLabel(status: ChairStatus): string {
   switch (status) {
     case "idle":       return "대기";
     case "recording":  return "녹음 중";
+    case "paused":     return "일시정지";
     case "processing": return "변환 중";
     case "has_records": return "미연결 기록";
   }
@@ -79,6 +80,8 @@ function buttonClass(status: ChairStatus): string {
       return `${base} border-slate-200 bg-white text-slate-600 hover:bg-slate-50`;
     case "recording":
       return `${base} border-red-200 bg-red-50 text-red-700 hover:bg-red-100`;
+    case "paused":
+      return `${base} border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-100`;
     case "processing":
       return `${base} border-sky-200 bg-sky-50 text-sky-700 hover:bg-sky-100`;
     case "has_records":
