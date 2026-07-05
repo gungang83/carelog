@@ -624,3 +624,17 @@ alter table public.patient_push_subscriptions enable row level security;
 -- 배선: app/actions/announcements.ts(getActiveAnnouncements + CRUD). UI announcement-ticker.tsx,
 --   /announcements(전체보기), /admin/announcements(발행). 타입 lib/announcements.ts.
 -- ───────────────────────────────────────────────────────────────────────────
+
+-- ───────────────────────────────────────────────────────────────────────────
+-- 업데이트 피드 (spec 023-update-feed) — migration: 20260705000003_update_feed.sql
+-- 슈퍼어드민(대표)만 보는 업데이트 내역함. 피드 자체는 레포 코드(lib/update-feed.ts)에
+--   세션 마무리마다 append → 배포와 함께 쌓임. DB에는 각 엔트리의 결정 상태만 기록.
+--   create table public.update_feed_decisions(
+--     entry_id text pk,              -- lib/update-feed.ts 엔트리 id
+--     status text not null,          -- published | dismissed
+--     announcement_id uuid→announcements set null,  -- 발행 시 연결된 공지
+--     decided_at timestamptz default now());
+-- RLS: enable + 정책 0개(authenticated deny-all) — 서버액션(service_role + isSuperAdmin)만.
+-- 배선: app/actions/update-feed.ts(getUpdateFeed·publishUpdateAnnouncement·dismiss·clear).
+--   UI /admin/updates + components/admin/update-feed-manager.tsx(선택→문구 조합→발행/보류).
+-- ───────────────────────────────────────────────────────────────────────────

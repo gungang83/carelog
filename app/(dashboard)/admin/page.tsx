@@ -30,6 +30,12 @@ export default async function AdminPage() {
         </div>
         <div className="flex shrink-0 gap-2">
           <Link
+            href="/admin/updates"
+            className="rounded-xl border border-violet-200 bg-violet-50 px-3 py-2 text-sm font-medium text-violet-700 transition hover:bg-violet-100"
+          >
+            업데이트 피드 →
+          </Link>
+          <Link
             href="/admin/announcements"
             className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm font-medium text-amber-700 transition hover:bg-amber-100"
           >

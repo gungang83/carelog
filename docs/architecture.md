@@ -693,3 +693,17 @@ AI 전사 성공(app/actions/transcribe.ts: transcribeEngine·transcribeAndSumma
 ```
 - 알림함(notifications, 기관별 RLS)과 분리: 공지는 전역·중앙 발행이라 별도 테이블. 알림함은 상담 저장/연결/리포트 등 기관 내 이벤트.
 - EO 참조: EO 레포 접근 범위 밖 → Carelog에 포팅된 알림함(spec 012)을 벤치마크. 후속으로 EO→Carelog 공지 동기화는 게이트웨이 연동 시.
+
+## 업데이트 피드 (spec 023-update-feed)
+
+```
+[적재] 다온 세션 마무리 → lib/update-feed.ts UPDATE_FEED에 엔트리 append (배포 = 적재)
+[결정] /admin/updates (슈퍼어드민 전용) → components/admin/update-feed-manager.tsx
+  → app/actions/update-feed.ts (requireSuperAdmin + admin 클라 service_role)
+      · getUpdateFeed: 피드(코드) + update_feed_decisions(DB) 병합, 최신순
+      · 선택 → composeAnnouncementDraft(제목·본문 자동 조합) → 초안 수정 → publishUpdateAnnouncement
+        (announcements insert + 엔트리 published 기록) → spec 022 티커에 즉시 노출
+      · dismissUpdateEntries(보류) / clearUpdateDecision(대기로 되돌리기)
+```
+- 피드는 대표에게만: 페이지 가드(isSuperAdmin redirect) + 결정 테이블 RLS deny-all(service_role만).
+- 에이전트가 DB에 못 쓰는 제약을 뒤집어 **배포 파이프라인을 적재 경로**로 사용 — 피드 소스는 git 이력에 남는 코드.

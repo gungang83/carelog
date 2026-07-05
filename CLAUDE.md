@@ -40,6 +40,7 @@ specs/012-notification-inbox/plan.md
 1. **문서 현행화**
    - `project_status.md`: 이번 세션에서 완료한 기능, 수정한 이슈, 새로 발견한 이슈 반영
    - 변경된 기능에 해당하는 `docs/` 파일 업데이트
+   - **사용자에게 보이는 변경**이 있으면 `lib/update-feed.ts` `UPDATE_FEED`에 엔트리 추가(spec 023 업데이트 피드 — 대표가 /admin/updates에서 보고 공지 발행 여부를 결정). 문구는 사용자 톤 + 용어 규칙("상담 기록") 준수.
 
 2. **빌드 검증**
    ```
