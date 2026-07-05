@@ -12,6 +12,7 @@ import { sanitizeRichHtml } from "@/lib/sanitize-html";
 import { sendNotification } from "@/lib/notifications";
 import { sendPushToPatient } from "@/app/actions/patient-portal";
 import { createAdminSupabaseClient } from "@/lib/supabase/admin";
+import type { Participant } from "@/lib/types/database";
 import { sendSms } from "@/lib/sms/solapi";
 
 // ─── 내부 헬퍼: SMS 초대 발송 + sms_sent_at 기록 ─────────────────────────────
@@ -495,6 +496,7 @@ export type SearchedConsultation = {
   chart_no: string | null;
   status: string;
   prescriptions: string[] | null;
+  participants: Participant[];
   has_audio: boolean;
   sms_sent_at: string | null;
 };
@@ -530,7 +532,7 @@ export async function searchConsultations(
     let query = supabase
       .from(consultationTable)
       .select(
-        "id, content, created_at, linked_at, chair_id, patient_id, status, prescriptions, audio_path, sms_sent_at",
+        "id, content, created_at, linked_at, chair_id, patient_id, status, prescriptions, participants, audio_path, sms_sent_at",
       )
       .eq("institution_id", institutionId);
 
@@ -560,6 +562,7 @@ export async function searchConsultations(
       patient_id: string | null;
       status: string;
       prescriptions: string[] | null;
+      participants: Participant[] | null;
       audio_path: string | null;
       sms_sent_at: string | null;
     }>;
@@ -593,6 +596,7 @@ export async function searchConsultations(
       chart_no: r.patient_id ? pmap.get(String(r.patient_id))?.chart_no ?? null : null,
       status: r.status,
       prescriptions: r.prescriptions,
+      participants: r.participants ?? [],
       has_audio: !!r.audio_path,
       sms_sent_at: r.sms_sent_at,
     }));

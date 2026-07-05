@@ -22,6 +22,24 @@ html {
   scrollbar-gutter: stable;
 }
 
+/* spec 022 공지 티커 — 헤더 아래 한 줄이 은은히 흐른다(seamless: 트랙 2벌 → -50% 이동).
+   hover/focus 시 정지해 읽을 수 있게. 모션 최소화 선호 사용자는 정지. */
+@keyframes carelog-marquee {
+  from { transform: translateX(0); }
+  to   { transform: translateX(-50%); }
+}
+.carelog-marquee {
+  animation: carelog-marquee linear infinite;
+  will-change: transform;
+}
+.carelog-ticker:hover .carelog-marquee,
+.carelog-ticker:focus-within .carelog-marquee {
+  animation-play-state: paused;
+}
+@media (prefers-reduced-motion: reduce) {
+  .carelog-marquee { animation: none; transform: none; }
+}
+
 /* Tiptap placeholder */
 .tiptap p.is-editor-empty:first-child::before {
   content: attr(data-placeholder);
