@@ -28,12 +28,20 @@ export default async function AdminPage() {
             모든 기관·직원·실험실을 통합 관리합니다. (최고 관리자 전용)
           </p>
         </div>
-        <Link
-          href="/admin/usage"
-          className="shrink-0 rounded-xl border border-sky-200 bg-sky-50 px-3 py-2 text-sm font-medium text-sky-700 transition hover:bg-sky-100"
-        >
-          사용량 · 크레딧 →
-        </Link>
+        <div className="flex shrink-0 gap-2">
+          <Link
+            href="/admin/announcements"
+            className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm font-medium text-amber-700 transition hover:bg-amber-100"
+          >
+            공지 발행 →
+          </Link>
+          <Link
+            href="/admin/usage"
+            className="rounded-xl border border-sky-200 bg-sky-50 px-3 py-2 text-sm font-medium text-sky-700 transition hover:bg-sky-100"
+          >
+            사용량 · 크레딧 →
+          </Link>
+        </div>
       </div>
 
       <div className="grid grid-cols-3 gap-4">

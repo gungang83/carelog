@@ -677,3 +677,19 @@ AI 전사 성공(app/actions/transcribe.ts: transcribeEngine·transcribeAndSumma
 ```
 - 통일 효과: 홈에서 하던 카드 처리(편집·삭제·연결·복사·음성)를 /records에서도 100% 동일하게. 코드도 단일 소스.
 - 꼬리표는 담당(김도은 선생 등)이 정리 내용을 차트에 옮기기 전 '확인 필요' 항목을 남기고, 확인되면 완료/삭제하는 워크플로. type은 코드 config라 항목 추가 시 `REVIEW_FLAG_TYPES`에 한 줄.
+
+## 공지·업데이트 티커 (spec 022-announcements)
+
+```
+[발행] /admin/announcements (슈퍼어드민 전용) → components/admin/announcement-manager.tsx
+  → app/actions/announcements.ts createAnnouncement/setActive/setPinned/delete
+      (requireSuperAdmin: getUser+isSuperAdmin → admin(service_role) 클라로 RLS 우회 write)
+  → announcements 테이블(전역, institution_id 없음)
+[표시] app/(dashboard)/page.tsx (RSC) getActiveAnnouncements() [세션 클라, RLS: 활성·기간 내]
+  → <AnnouncementTicker items> — 헤더 아래 전체폭 한 줄, seamless 마퀴(globals.css carelog-marquee)
+      · hover/focus 정지, prefers-reduced-motion 정지, 공지 0건이면 렌더 안 함
+      · '새 공지' 점 = localStorage last-seen(carelog.announce.seen) 비교(DB 읽음테이블 없이)
+  → '전체보기' /announcements (RSC 목록, 고정 우선·최신순)
+```
+- 알림함(notifications, 기관별 RLS)과 분리: 공지는 전역·중앙 발행이라 별도 테이블. 알림함은 상담 저장/연결/리포트 등 기관 내 이벤트.
+- EO 참조: EO 레포 접근 범위 밖 → Carelog에 포팅된 알림함(spec 012)을 벤치마크. 후속으로 EO→Carelog 공지 동기화는 게이트웨이 연동 시.

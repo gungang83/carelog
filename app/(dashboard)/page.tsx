@@ -9,23 +9,31 @@ import { HomeFeed } from "@/components/home/home-feed";
 import { PatientShield } from "@/components/home/patient-shield";
 import { WorkspaceHelpBanner } from "@/components/help/workspace-help-banner";
 import { LiveSessionsBanner } from "@/components/notifications/live-sessions-banner";
+import { AnnouncementTicker } from "@/components/announcements/announcement-ticker";
 import { searchConsultations } from "@/app/actions/consultations";
 import { getAllUnlinkedRecords } from "@/app/actions/chairs";
+import { getActiveAnnouncements } from "@/app/actions/announcements";
 import { getMyInstitutions, getMyInstitutionId } from "@/lib/auth/institution";
 
 export default async function Home() {
-  const [linkedResult, initialUnlinked, institutions, institutionId] = await Promise.all([
-    searchConsultations({ status: "linked", limit: 50 }),
-    getAllUnlinkedRecords(),
-    getMyInstitutions(),
-    getMyInstitutionId(),
-  ]);
+  const [linkedResult, initialUnlinked, institutions, institutionId, announcements] =
+    await Promise.all([
+      searchConsultations({ status: "linked", limit: 50 }),
+      getAllUnlinkedRecords(),
+      getMyInstitutions(),
+      getMyInstitutionId(),
+      getActiveAnnouncements(),
+    ]);
   const linked = linkedResult.ok ? linkedResult.rows : [];
 
   return (
-    <div className="mx-auto flex w-full max-w-3xl flex-col gap-8 px-4 py-10 sm:px-6">
-      {/* 최상단 히어로 — 상담 기록 진입점 */}
-      <ConsultHero />
+    <>
+      {/* 헤더 바로 아래 — 중앙 발행 공지·업데이트 티커(spec 022, 은은하게 한 줄) */}
+      <AnnouncementTicker items={announcements} />
+
+      <div className="mx-auto flex w-full max-w-3xl flex-col gap-8 px-4 py-10 sm:px-6">
+        {/* 최상단 히어로 — 상담 기록 진입점 */}
+        <ConsultHero />
 
       {/* 아래로 펼쳐지는 대시보드 요소들 */}
       <PushNotificationBanner />
@@ -43,6 +51,7 @@ export default async function Home() {
 
         <PatientHome />
       </PatientShield>
-    </div>
+      </div>
+    </>
   );
 }
