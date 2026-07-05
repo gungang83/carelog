@@ -592,3 +592,18 @@ alter table public.patient_push_subscriptions enable row level security;
 --   lib/usage/daily-report.ts buildDailyReport(KST 0~24시: menu_usage_daily day + credit_log 경계).
 --   전달: 알림함(recipients=슈퍼어드민 email) + sendPushToUser(본인 기기). 열람: /admin/usage/report/[date].
 -- ───────────────────────────────────────────────────────────────────────────
+
+-- ───────────────────────────────────────────────────────────────────────────
+-- 확인 꼬리표 (spec 021-review-flags) — migration: 20260705000001_review_flags.sql
+-- 상담 카드에 '확인 필요' 태그. 담당이 차트 이관 전 확인할 항목(환자·참여자·장소·내용) 추적.
+--   create table public.consultation_review_flags(
+--     id uuid pk, institution_id uuid→institutions cascade,
+--     consultation_id bigint→consultation cascade,   -- consultation.id는 bigint
+--     type text not null,        -- patient|participants|location|content|other (코드 config 확장)
+--     note text, status text default 'open',          -- open | resolved
+--     created_by text, created_at, resolved_by text, resolved_at);
+--   index: (consultation_id), (institution_id, status).
+-- RLS: 멤버십 기반 — institution_id in (select public.my_institution_ids()) using/with check.
+-- 배선: app/actions/review-flags.ts(조회 일괄·추가·완료·삭제). UI components/consultation/review-flags.tsx.
+--   타입 lib/review-flags.ts REVIEW_FLAG_TYPES. 공용 카드 components/consultation/consultation-card.tsx 하단.
+-- ───────────────────────────────────────────────────────────────────────────

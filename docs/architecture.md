@@ -652,3 +652,24 @@ AI 전사 성공(app/actions/transcribe.ts: transcribeEngine·transcribeAndSumma
 - 범용성: `buildDailyReport({scope})`가 institution_id도 받음 → 운영자(기관별) 리포트는 cron 루프 + recipients:'admins' 배선만 추가하면 재사용. 현재는 scope='all'(슈퍼어드민)만 발송.
 - 슈퍼어드민은 크로스-기관이라 기관 푸시(sendPushToInstitution) 대신 user 단위 `sendPushToUser` 신규.
 - **인프라 섹션(spec 018)**: `buildDailyReport`(scope='all')가 `get_infra_usage()` RPC(스토리지 버킷별 용량·객체수 + DB 크기, SECURITY DEFINER)로 인프라 스냅샷 포함 + 당일 신규 상담/이미지/음성 수. 스토리지 전일比 +500MB↑면 경고. 이그레스 실값은 플랫폼 지표(DB 밖) → Supabase Usage 참조(후속: SUPABASE_ACCESS_TOKEN Management API).
+
+## 상담 카드 공용화 + 확인 꼬리표 (spec 021-review-flags)
+
+```
+[공용 카드] components/consultation/consultation-card.tsx (ConsultationCard / CardRecord)
+  - 홈 home-feed의 연결/미연결 카드 로직을 단일 컴포넌트로 추출. useChairContext()로
+    체어·멤버·오버레이·refreshUnlinkedCount 접근 → 홈·/records 어디서든 동일 동작.
+  - 액션: 전체복사(CopyAllButton) · 음성듣기(AudioReplayButton, has_audio) ·
+    미연결={환자연결(ChairPatientSearch)·인라인 편집(ConsultationEditor)·새 녹음(openOverlay)·삭제(deleteChairRecord)}
+    연결={편집→/patients/[id] 링크·삭제(deleteConsultation)}. 하단에 <ReviewFlags/>.
+  - onMutated(): 소비자가 목록 재조회(홈=reloadAll, records=reloadRows). onFlagsChanged(): 꼬리표 재조회.
+[소비자] components/home/home-feed.tsx · components/records/records-browser.tsx
+  - 각자 데이터 로딩·정렬/그룹·토글만 담당하고 카드 렌더는 공용 카드에 위임(중복 제거).
+  - SearchedConsultation·AllUnlinkedRecord → CardRecord 매핑. 꼬리표는 getReviewFlagsFor(ids) 일괄 로드.
+  - records: '확인 필요만' 필터(열린 꼬리표 달린 행만 클라 필터) + searchConsultations participants 추가.
+[확인 꼬리표] lib/review-flags.ts(REVIEW_FLAG_TYPES 확장형) · app/actions/review-flags.ts ·
+             components/consultation/review-flags.tsx (amber 칩 + '+ 확인 필요' 피커, ✓완료/✕삭제)
+  → consultation_review_flags 테이블(멤버십 RLS). migration 20260705000001.
+```
+- 통일 효과: 홈에서 하던 카드 처리(편집·삭제·연결·복사·음성)를 /records에서도 100% 동일하게. 코드도 단일 소스.
+- 꼬리표는 담당(김도은 선생 등)이 정리 내용을 차트에 옮기기 전 '확인 필요' 항목을 남기고, 확인되면 완료/삭제하는 워크플로. type은 코드 config라 항목 추가 시 `REVIEW_FLAG_TYPES`에 한 줄.

@@ -1,33 +1,29 @@
 "use client";
 
-import { useEffect, useRef, useState, useTransition } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useChairContext } from "@/components/chair/chair-provider";
-import { CopyAllButton } from "@/components/copy-all-button";
-import { optimizeContentHtml } from "@/lib/image/optimize";
 import {
   getAllUnlinkedRecords,
   getRecentParticipants,
-  deleteChairRecord,
-  updateChairRecordContent,
   type AllUnlinkedRecord,
 } from "@/app/actions/chairs";
 import {
   searchConsultations,
-  deleteConsultation,
   type SearchedConsultation,
 } from "@/app/actions/consultations";
 import type { Participant } from "@/lib/types/database";
-import { ChairPatientSearch } from "@/components/chair/chair-patient-search";
-import { AudioReplayButton } from "@/components/chair/audio-replay-button";
-import { ConsultationEditor } from "@/components/chair/consultation-editor";
-import { type RichTextEditorHandle } from "@/components/rich-text-editor";
+import { ConsultationCard, type CardRecord } from "@/components/consultation/consultation-card";
+import { getReviewFlagsFor } from "@/app/actions/review-flags";
+import type { ReviewFlag } from "@/lib/review-flags";
 
 /**
  * 홈 통합 피드 — '미연결 기록'(연결 대기, 액션 카드)과 '최근 활동'(연결 완료 로그)을
  * 하나의 시간순 스트림으로 합친다. 두 데이터는 서로 겹치지 않는다(같은 상담이
  * 미연결→연결 단계로 이동). 상단 토글로 둘 다(시간순)·하나씩 볼 수 있다.
+ *
+ * spec 021 — 카드 렌더는 /records와 공용 `ConsultationCard`로 통일(연결/미연결
+ * 구분해 동일 액션 + 확인 꼬리표). 홈은 데이터 로딩·정렬·토글만 담당.
  */
 export function HomeFeed({
   initialRecords,
@@ -36,7 +32,6 @@ export function HomeFeed({
   initialRecords: AllUnlinkedRecord[];
   linked: SearchedConsultation[];
 }) {
-  const { chairs, members, me, openOverlay, refreshUnlinkedCount } = useChairContext();
   const router = useRouter();
 
   const [records, setRecords] = useState<AllUnlinkedRecord[]>(initialRecords);
@@ -44,20 +39,8 @@ export function HomeFeed({
   const [showUnlinked, setShowUnlinked] = useState(true);
   const [showActivity, setShowActivity] = useState(true);
   const [expanded, setExpanded] = useState(false);
-
-  // 카드 편집/연결/삭제 상태(한 번에 하나만)
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [linkingId, setLinkingId] = useState<string | null>(null);
-  const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
-  const [viewingId, setViewingId] = useState<string | null>(null);
-  const [editContent, setEditContent] = useState("");
-  const [editPrescriptions, setEditPrescriptions] = useState<string[]>([]);
-  const [editChairId, setEditChairId] = useState<string>("");
-  const [editParticipants, setEditParticipants] = useState<Participant[]>([]);
   const [recent, setRecent] = useState<Participant[]>([]);
-  const [msg, setMsg] = useState("");
-  const [isPending, startTransition] = useTransition();
-  const editorRef = useRef<RichTextEditorHandle>(null);
+  const [flags, setFlags] = useState<Record<string, ReviewFlag[]>>({});
 
   // router.refresh()(저장·연결·실시간 알림 후)로 서버가 새 목록을 내려주면 반영.
   useEffect(() => {
@@ -72,95 +55,31 @@ export function HomeFeed({
     getRecentParticipants().then(setRecent).catch(() => {});
   }, []);
 
-  const reload = async () => {
+  // 확인 꼬리표 — 현재 목록의 상담 id 전체를 한 번에 조회.
+  const reloadFlags = async (ids: string[]) => {
+    if (ids.length === 0) {
+      setFlags({});
+      return;
+    }
+    const map = await getReviewFlagsFor(ids);
+    setFlags(map);
+  };
+  useEffect(() => {
+    const ids = [
+      ...records.map((r) => r.id),
+      ...linkedRecords.map((r) => r.id),
+    ];
+    reloadFlags(ids).catch(() => {});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [records, linkedRecords]);
+
+  // 연결/삭제/편집처럼 목록에 영향을 주는 변경은 양쪽 목록을 다시 받아 동기화.
+  const reloadAll = async () => {
     const data = await getAllUnlinkedRecords();
     setRecords(data);
-  };
-
-  // 연결/삭제처럼 연결완료 쪽에도 영향을 주는 변경은 양쪽 목록을 다시 받아 동기화.
-  const reloadAll = async () => {
-    await reload();
     const res = await searchConsultations({ status: "linked", limit: 50 });
     if (res.ok) setLinkedRecords(res.rows);
     router.refresh();
-  };
-
-  // 연결완료 상담 삭제(연결 포함 삭제 — deleteChairRecord는 미연결만 가능).
-  const handleDeleteLinked = (id: string) => {
-    setDeleteConfirmId(null);
-    startTransition(async () => {
-      await deleteConsultation({ consultationId: id });
-      await reloadAll();
-    });
-  };
-
-  const chairName = (chairId: string) =>
-    chairs.find((c) => c.id === chairId)?.name ?? "알 수 없음";
-
-  const startEdit = (rec: AllUnlinkedRecord) => {
-    setEditingId(rec.id);
-    setEditContent(rec.content);
-    setEditPrescriptions(rec.prescriptions ?? []);
-    setEditChairId(rec.chair_id);
-    setEditParticipants(rec.participants ?? []);
-    setMsg("");
-    setLinkingId(null);
-    setDeleteConfirmId(null);
-  };
-
-  const handleSaveEdit = (rec: AllUnlinkedRecord) => {
-    setMsg("");
-    startTransition(async () => {
-      const result = await updateChairRecordContent({
-        consultationId: rec.id,
-        content: editContent,
-        prescriptions: editPrescriptions,
-        chairId: editChairId || undefined,
-        participants: editParticipants,
-      });
-      if (result.ok) {
-        await reload();
-        setEditingId(null);
-      } else {
-        setMsg(result.message);
-      }
-    });
-  };
-
-  const handleSaveAndLink = (rec: AllUnlinkedRecord) => {
-    setMsg("");
-    startTransition(async () => {
-      const result = await updateChairRecordContent({
-        consultationId: rec.id,
-        content: editContent,
-        prescriptions: editPrescriptions,
-        chairId: editChairId || undefined,
-        participants: editParticipants,
-      });
-      if (result.ok) {
-        await reload();
-        setEditingId(null);
-        setLinkingId(rec.id);
-      } else {
-        setMsg(result.message);
-      }
-    });
-  };
-
-  const handleDelete = (id: string, chairId: string) => {
-    setDeleteConfirmId(null);
-    startTransition(async () => {
-      await deleteChairRecord({ consultationId: id });
-      await refreshUnlinkedCount(chairId);
-      await reload();
-    });
-  };
-
-  const handleLinked = async (chairId: string) => {
-    await refreshUnlinkedCount(chairId);
-    setLinkingId(null);
-    // 연결되면 미연결 목록에서 빠지고 '활동'에 나타나므로 양쪽 동기화.
-    await reloadAll();
   };
 
   // ── 시간순 병합 ────────────────────────────────────────────────────────────
@@ -194,6 +113,31 @@ export function HomeFeed({
   const items = expanded ? allItems : allItems.slice(0, COLLAPSED);
 
   if (records.length === 0 && linkedRecords.length === 0) return null;
+
+  const toCard = (item: FeedItem): CardRecord =>
+    item.kind === "unlinked"
+      ? {
+          id: item.rec.id,
+          linked: false,
+          content: item.rec.content,
+          created_at: item.rec.created_at,
+          chair_id: item.rec.chair_id,
+          prescriptions: item.rec.prescriptions ?? null,
+          participants: item.rec.participants ?? [],
+          has_audio: item.rec.has_audio,
+        }
+      : {
+          id: item.rec.id,
+          linked: true,
+          content: item.rec.content,
+          created_at: item.rec.created_at,
+          chair_id: item.rec.chair_id,
+          prescriptions: item.rec.prescriptions ?? null,
+          participants: item.rec.participants ?? [],
+          has_audio: item.rec.has_audio,
+          patient_id: item.rec.patient_id,
+          patient_name: item.rec.patient_name,
+        };
 
   return (
     <section className="flex flex-col gap-3">
@@ -236,23 +180,23 @@ export function HomeFeed({
         </p>
       ) : (
         <ul className="flex flex-col gap-3">
-          {items.map((item) =>
-            item.kind === "linked" ? (
-              <li
-                key={`l-${item.rec.id}`}
-                className="rounded-2xl border border-slate-100 border-l-4 border-l-emerald-400 bg-emerald-50/20 p-4 shadow-sm"
-              >
-                {renderLinkedCard(item.rec)}
-              </li>
-            ) : (
-              <li
-                key={`u-${item.rec.id}`}
-                className="rounded-2xl border border-slate-100 border-l-4 border-l-amber-400 bg-amber-50/30 p-4 shadow-sm"
-              >
-                {renderUnlinkedCard(item.rec)}
-              </li>
-            ),
-          )}
+          {items.map((item) => (
+            <li key={`${item.kind[0]}-${item.rec.id}`}>
+              <ConsultationCard
+                record={toCard(item)}
+                flags={flags[item.rec.id] ?? []}
+                recent={recent}
+                onMutated={reloadAll}
+                onFlagsChanged={() => {
+                  const ids = [
+                    ...records.map((r) => r.id),
+                    ...linkedRecords.map((r) => r.id),
+                  ];
+                  reloadFlags(ids).catch(() => {});
+                }}
+              />
+            </li>
+          ))}
         </ul>
       )}
 
@@ -266,331 +210,6 @@ export function HomeFeed({
       )}
     </section>
   );
-
-  // ── 미연결 카드 렌더 ───────────────────────────────────────────────────────
-  function renderUnlinkedCard(rec: AllUnlinkedRecord) {
-    const isEditing = editingId === rec.id;
-    const isLinking = linkingId === rec.id;
-    const isDeleteConfirm = deleteConfirmId === rec.id;
-    const isViewing = viewingId === rec.id;
-    const preview = stripHtml(rec.content).slice(0, 120);
-    const charCount = stripHtml(rec.content).length;
-
-    return (
-      <>
-        <div className="mb-2 flex flex-wrap items-center gap-2 text-xs text-slate-500">
-          <StatusPill tone="amber">미연결</StatusPill>
-          <span className="inline-flex items-center gap-1.5 font-medium text-slate-700">
-            <span className="flex size-5 items-center justify-center rounded-lg bg-sky-600 text-[9px] font-bold text-white">
-              {chairName(rec.chair_id).slice(0, 2)}
-            </span>
-            {chairName(rec.chair_id)}
-          </span>
-          {rec.participants.length > 0 && (
-            <span className="inline-flex items-center gap-1 text-slate-400">
-              <PersonIcon className="size-3.5" />
-              {rec.participants.map((p) => p.name).join(", ")}
-            </span>
-          )}
-          <span className="ml-auto flex items-center gap-1.5 text-slate-400">
-            <span>{formatDate(rec.created_at)}</span>
-            <span className="text-slate-300">·</span>
-            <span>{charCount}자</span>
-          </span>
-        </div>
-
-        {isEditing ? (
-          <div className="flex flex-col gap-3">
-            <ConsultationEditor
-              ref={editorRef}
-              content={editContent}
-              onContentChange={setEditContent}
-              placeholder="상담 내용을 수정하세요…"
-              prescriptions={editPrescriptions}
-              onPrescriptionsChange={setEditPrescriptions}
-              chairs={chairs}
-              chairId={editChairId}
-              onChairChange={setEditChairId}
-              members={members}
-              recent={recent}
-              me={me}
-              participants={editParticipants}
-              onParticipantsChange={setEditParticipants}
-            />
-            <div className="flex flex-wrap gap-2">
-              <button
-                type="button"
-                onClick={() => handleSaveEdit(rec)}
-                disabled={isPending}
-                className="inline-flex min-h-9 items-center justify-center rounded-xl bg-sky-600 px-4 text-sm font-semibold text-white hover:bg-sky-700 disabled:opacity-50"
-              >
-                {isPending ? "저장 중…" : "저장"}
-              </button>
-              <button
-                type="button"
-                onClick={() => handleSaveAndLink(rec)}
-                disabled={isPending}
-                className="inline-flex min-h-9 items-center justify-center rounded-xl border border-sky-200 bg-sky-50 px-4 text-sm font-semibold text-sky-700 hover:bg-sky-100 disabled:opacity-50"
-              >
-                저장 후 환자 연결
-              </button>
-              <CopyAllButton
-                html={editContent}
-                label="전체 복사"
-                className="inline-flex min-h-9 items-center justify-center gap-1.5 rounded-xl bg-slate-800 px-4 text-sm font-semibold text-white transition hover:bg-slate-900"
-              />
-              <button
-                type="button"
-                onClick={() => {
-                  setEditingId(null);
-                  setMsg("");
-                }}
-                disabled={isPending}
-                className="inline-flex min-h-9 items-center justify-center rounded-xl border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-600 hover:bg-slate-50 disabled:opacity-50"
-              >
-                취소
-              </button>
-            </div>
-            {msg && <p className="text-xs text-red-500">{msg}</p>}
-          </div>
-        ) : isLinking ? (
-          <ChairPatientSearch
-            consultationId={rec.id}
-            onLinked={() => handleLinked(rec.chair_id)}
-            onCancel={() => setLinkingId(null)}
-          />
-        ) : (
-          <>
-            {/* 카드 본문 — 클릭하면 전체 내용(서식 포함) 펼침/접힘. 편집은 명시적으로 유지. */}
-            <div
-              role="button"
-              tabIndex={0}
-              aria-expanded={isViewing}
-              onClick={() => setViewingId(isViewing ? null : rec.id)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" || e.key === " ") {
-                  e.preventDefault();
-                  setViewingId(isViewing ? null : rec.id);
-                }
-              }}
-              className="mb-3 cursor-pointer rounded-xl px-2 py-1.5 -mx-2 transition hover:bg-amber-50/60"
-            >
-              {isViewing ? (
-                <div
-                  className="rich-content text-sm leading-6 text-slate-800"
-                  dangerouslySetInnerHTML={{ __html: optimizeContentHtml(rec.content || "<p>내용 없음</p>") }}
-                />
-              ) : (
-                <p className="text-sm leading-relaxed text-slate-700">
-                  {preview || "내용 없음"}
-                  {charCount > 120 && <span className="text-slate-400">…</span>}
-                </p>
-              )}
-              <span className="mt-1.5 inline-flex items-center gap-0.5 text-xs font-medium text-sky-600">
-                {isViewing ? "접기 ▲" : "눌러서 전체 보기 ▼"}
-              </span>
-            </div>
-
-            {(rec.prescriptions ?? []).length > 0 && (
-              <div className="mb-3 flex flex-wrap gap-1.5">
-                {(rec.prescriptions ?? []).map((name) => (
-                  <span
-                    key={name}
-                    className="rounded-full border border-sky-100 bg-sky-50 px-2.5 py-0.5 text-xs font-medium text-sky-700"
-                  >
-                    {name}
-                  </span>
-                ))}
-              </div>
-            )}
-
-            {isDeleteConfirm ? (
-              <div className="flex items-center gap-2">
-                <span className="text-xs text-red-600">삭제하시겠습니까?</span>
-                <button
-                  type="button"
-                  onClick={() => handleDelete(rec.id, rec.chair_id)}
-                  disabled={isPending}
-                  className="rounded-lg bg-red-500 px-2.5 py-1 text-xs font-semibold text-white hover:bg-red-600 disabled:opacity-50"
-                >
-                  삭제
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setDeleteConfirmId(null)}
-                  className="rounded-lg border border-slate-200 px-2.5 py-1 text-xs text-slate-600 hover:bg-slate-50"
-                >
-                  취소
-                </button>
-              </div>
-            ) : (
-              <div className="flex flex-wrap gap-2">
-                <CopyAllButton
-                  html={rec.content}
-                  label="전체 복사"
-                  className="inline-flex min-h-8 items-center justify-center gap-1.5 rounded-xl bg-slate-800 px-3 text-xs font-semibold text-white transition hover:bg-slate-900"
-                />
-                {rec.has_audio && <AudioReplayButton consultationId={rec.id} />}
-                <button
-                  type="button"
-                  onClick={() => setLinkingId(rec.id)}
-                  className="inline-flex min-h-8 items-center justify-center rounded-xl border border-sky-200 bg-sky-50 px-3 text-xs font-semibold text-sky-700 transition hover:bg-sky-100"
-                >
-                  환자 연결
-                </button>
-                <button
-                  type="button"
-                  onClick={() => startEdit(rec)}
-                  className="inline-flex min-h-8 items-center justify-center rounded-xl border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-600 transition hover:bg-slate-50"
-                >
-                  편집
-                </button>
-                <button
-                  type="button"
-                  onClick={() => openOverlay(rec.chair_id)}
-                  className="inline-flex min-h-8 items-center justify-center rounded-xl border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-600 transition hover:bg-slate-50"
-                >
-                  새 녹음
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setDeleteConfirmId(rec.id)}
-                  disabled={isPending}
-                  className="inline-flex min-h-8 items-center justify-center rounded-xl border border-red-100 bg-white px-3 text-xs font-semibold text-red-500 transition hover:bg-red-50 disabled:opacity-40"
-                >
-                  삭제
-                </button>
-              </div>
-            )}
-          </>
-        )}
-      </>
-    );
-  }
-
-  // ── 연결완료 카드 렌더 (미연결과 통일된 디자인·인터페이스 — spec 011) ─────────
-  // 미연결 카드와 동일 chrome(배지·체어·미리보기·눌러서 전체보기·처방) + 동일 액션
-  // (전체복사·음성듣기·삭제). 차이는 배지(연결 완료)·환자명 표시·편집은 환자 상세로.
-  function renderLinkedCard(rec: SearchedConsultation) {
-    const isDeleteConfirm = deleteConfirmId === rec.id;
-    const isViewing = viewingId === rec.id;
-    const preview = stripHtml(rec.content).slice(0, 120);
-    const charCount = stripHtml(rec.content).length;
-
-    return (
-      <>
-        <div className="mb-2 flex flex-wrap items-center gap-2 text-xs text-slate-500">
-          <StatusPill tone="emerald">연결 완료</StatusPill>
-          {rec.chair_id && (
-            <span className="inline-flex items-center gap-1.5 font-medium text-slate-700">
-              <span className="flex size-5 items-center justify-center rounded-lg bg-emerald-600 text-[9px] font-bold text-white">
-                {chairName(rec.chair_id).slice(0, 2)}
-              </span>
-              {chairName(rec.chair_id)}
-            </span>
-          )}
-          <span className="inline-flex items-center gap-1 font-medium text-slate-700">
-            <PersonIcon className="size-3.5 text-slate-400" />
-            {rec.patient_name ?? "환자"}
-          </span>
-          <span className="ml-auto flex items-center gap-1.5 text-slate-400">
-            <span>{formatDate(rec.created_at)}</span>
-            <span className="text-slate-300">·</span>
-            <span>{charCount}자</span>
-          </span>
-        </div>
-
-        {/* 카드 본문 — 클릭하면 전체 내용 펼침/접힘(미연결과 동일) */}
-        <div
-          role="button"
-          tabIndex={0}
-          aria-expanded={isViewing}
-          onClick={() => setViewingId(isViewing ? null : rec.id)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" || e.key === " ") {
-              e.preventDefault();
-              setViewingId(isViewing ? null : rec.id);
-            }
-          }}
-          className="mb-3 cursor-pointer rounded-xl px-2 py-1.5 -mx-2 transition hover:bg-emerald-50/60"
-        >
-          {isViewing ? (
-            <div
-              className="rich-content text-sm leading-6 text-slate-800"
-              dangerouslySetInnerHTML={{ __html: optimizeContentHtml(rec.content || "<p>내용 없음</p>") }}
-            />
-          ) : (
-            <p className="text-sm leading-relaxed text-slate-700">
-              {preview || "내용 없음"}
-              {charCount > 120 && <span className="text-slate-400">…</span>}
-            </p>
-          )}
-          <span className="mt-1.5 inline-flex items-center gap-0.5 text-xs font-medium text-emerald-600">
-            {isViewing ? "접기 ▲" : "눌러서 전체 보기 ▼"}
-          </span>
-        </div>
-
-        {(rec.prescriptions ?? []).length > 0 && (
-          <div className="mb-3 flex flex-wrap gap-1.5">
-            {(rec.prescriptions ?? []).map((name) => (
-              <span
-                key={name}
-                className="rounded-full border border-emerald-100 bg-emerald-50 px-2.5 py-0.5 text-xs font-medium text-emerald-700"
-              >
-                {name}
-              </span>
-            ))}
-          </div>
-        )}
-
-        {isDeleteConfirm ? (
-          <div className="flex items-center gap-2">
-            <span className="text-xs text-red-600">삭제하시겠습니까?</span>
-            <button
-              type="button"
-              onClick={() => handleDeleteLinked(rec.id)}
-              disabled={isPending}
-              className="rounded-lg bg-red-500 px-2.5 py-1 text-xs font-semibold text-white hover:bg-red-600 disabled:opacity-50"
-            >
-              삭제
-            </button>
-            <button
-              type="button"
-              onClick={() => setDeleteConfirmId(null)}
-              className="rounded-lg border border-slate-200 px-2.5 py-1 text-xs text-slate-600 hover:bg-slate-50"
-            >
-              취소
-            </button>
-          </div>
-        ) : (
-          <div className="flex flex-wrap gap-2">
-            <CopyAllButton
-              html={rec.content}
-              label="전체 복사"
-              className="inline-flex min-h-8 items-center justify-center gap-1.5 rounded-xl bg-slate-800 px-3 text-xs font-semibold text-white transition hover:bg-slate-900"
-            />
-            {rec.has_audio && <AudioReplayButton consultationId={rec.id} />}
-            {rec.patient_id && (
-              <Link
-                href={`/patients/${rec.patient_id}`}
-                className="inline-flex min-h-8 items-center justify-center rounded-xl border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-600 transition hover:bg-slate-50"
-              >
-                편집
-              </Link>
-            )}
-            <button
-              type="button"
-              onClick={() => setDeleteConfirmId(rec.id)}
-              disabled={isPending}
-              className="inline-flex min-h-8 items-center justify-center rounded-xl border border-red-100 bg-white px-3 text-xs font-semibold text-red-500 transition hover:bg-red-50 disabled:opacity-40"
-            >
-              삭제
-            </button>
-          </div>
-        )}
-      </>
-    );
-  }
 }
 
 // ── 토글 칩 ──────────────────────────────────────────────────────────────────
@@ -632,65 +251,3 @@ function FilterChip({
     </button>
   );
 }
-
-// ── 상태 배지(통일 디자인) — 미연결(amber) / 연결 완료(emerald) ───────────────
-function StatusPill({
-  tone,
-  children,
-}: {
-  tone: "amber" | "emerald";
-  children: React.ReactNode;
-}) {
-  const cls =
-    tone === "amber"
-      ? "border-amber-200 bg-amber-100 text-amber-800"
-      : "border-emerald-200 bg-emerald-100 text-emerald-800";
-  return (
-    <span
-      className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-bold ${cls}`}
-    >
-      {tone === "emerald" ? (
-        <CheckIcon className="size-3" />
-      ) : (
-        <span className="size-1.5 rounded-full bg-amber-500" />
-      )}
-      {children}
-    </span>
-  );
-}
-
-function CheckIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
-      <path
-        fillRule="evenodd"
-        d="M16.704 4.153a.75.75 0 0 1 .143 1.052l-8 10.5a.75.75 0 0 1-1.127.075l-4.5-4.5a.75.75 0 0 1 1.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 0 1 1.05-.143Z"
-        clipRule="evenodd"
-      />
-    </svg>
-  );
-}
-
-function PersonIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
-      <path d="M10 8a3 3 0 1 0 0-6 3 3 0 0 0 0 6ZM3.465 14.493a1.23 1.23 0 0 0 .41 1.412A9.957 9.957 0 0 0 10 18c2.31 0 4.438-.784 6.131-2.1.43-.333.604-.903.408-1.41a7.002 7.002 0 0 0-13.074.003Z" />
-    </svg>
-  );
-}
-
-// ── 헬퍼 ─────────────────────────────────────────────────────────────────────
-function stripHtml(html: string): string {
-  return html.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim();
-}
-
-function formatDate(iso: string): string {
-  const d = new Date(iso);
-  return d.toLocaleString("ko-KR", {
-    month: "short",
-    day: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-}
-

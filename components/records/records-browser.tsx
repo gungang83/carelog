@@ -1,19 +1,23 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import Link from "next/link";
 import {
   searchConsultations,
   type SearchedConsultation,
   type SearchConsultationsFilters,
 } from "@/app/actions/consultations";
-import { CopyAllButton } from "@/components/copy-all-button";
-import { optimizeContentHtml } from "@/lib/image/optimize";
+import { getRecentParticipants } from "@/app/actions/chairs";
+import { getReviewFlagsFor } from "@/app/actions/review-flags";
+import type { ReviewFlag } from "@/lib/review-flags";
+import type { Participant } from "@/lib/types/database";
+import { ConsultationCard, type CardRecord } from "@/components/consultation/consultation-card";
 
 /**
- * 상담 기록 전체 열람·검색·필터 (spec 011 US1·US3).
- * 연결·미연결 상담을 함께 검색하고, 날짜별 그룹 + 접이식 카드로 본다.
- * 펼친 카드는 전체복사(덴트웹용), 연결완료는 환자 상세에서 편집 접근.
+ * 상담 기록 전체 열람·검색·필터 (spec 011 US1·US3 + spec 021).
+ * 연결·미연결 상담을 함께 검색하고, 날짜별 그룹으로 본다.
+ * 카드 처리(전체복사·음성듣기·편집·삭제·환자연결·확인 꼬리표)는 홈과 동일한
+ * 공용 `ConsultationCard`로 통일 — 연결/미연결에 따라 액션이 갈린다.
+ * '확인 필요만' 필터로 열린 꼬리표가 달린 기록만 추릴 수 있다.
  */
 type StatusFilter = "all" | "linked" | "unlinked";
 const PAGE = 30;
@@ -31,13 +35,12 @@ export function RecordsBrowser({
   const [status, setStatus] = useState<StatusFilter>("all");
   const [chairId, setChairId] = useState<string>("");
   const [sort, setSort] = useState<"newest" | "oldest">("newest");
+  const [flaggedOnly, setFlaggedOnly] = useState(false);
   const [rows, setRows] = useState<SearchedConsultation[]>(initialRows);
   const [hasMore, setHasMore] = useState(initialHasMore);
   const [loading, setLoading] = useState(false);
-  const [expandedId, setExpandedId] = useState<string | null>(null);
-
-  const chairName = (id: string | null) =>
-    (id && chairs.find((c) => c.id === id)?.name) || (id ? "체어" : "");
+  const [recent, setRecent] = useState<Participant[]>([]);
+  const [flags, setFlags] = useState<Record<string, ReviewFlag[]>>({});
 
   const baseFilters = useCallback(
     (offset: number): SearchConsultationsFilters => ({
@@ -50,6 +53,24 @@ export function RecordsBrowser({
     }),
     [q, status, chairId, sort],
   );
+
+  // 참여자 피커 "최근 함께한 사람" 후보 — 읽기 전용·비차단.
+  useEffect(() => {
+    getRecentParticipants().then(setRecent).catch(() => {});
+  }, []);
+
+  // 확인 꼬리표 — 현재 목록의 상담 id 전체를 한 번에 조회.
+  const reloadFlags = useCallback(async (ids: string[]) => {
+    if (ids.length === 0) {
+      setFlags({});
+      return;
+    }
+    const map = await getReviewFlagsFor(ids);
+    setFlags(map);
+  }, []);
+  useEffect(() => {
+    reloadFlags(rows.map((r) => r.id)).catch(() => {});
+  }, [rows, reloadFlags]);
 
   // 필터/검색 변경 시 재조회(디바운스). 첫 마운트는 초기 데이터 사용.
   const firstRun = useRef(true);
@@ -80,9 +101,39 @@ export function RecordsBrowser({
     setLoading(false);
   };
 
+  // 변경(편집·삭제·연결·꼬리표) 후 현재 필터로 목록 재조회.
+  const reloadRows = async () => {
+    const res = await searchConsultations(baseFilters(0));
+    if (res.ok) {
+      setRows(res.rows);
+      setHasMore(res.hasMore);
+    }
+  };
+
+  const hasOpenFlag = (id: string) => (flags[id] ?? []).some((f) => f.status === "open");
+
+  // '확인 필요만' 토글 시 열린 꼬리표가 달린 기록만.
+  const visibleRows = flaggedOnly ? rows.filter((r) => hasOpenFlag(r.id)) : rows;
+
+  const toCard = (r: SearchedConsultation): CardRecord => {
+    const linked = !!r.patient_id;
+    return {
+      id: r.id,
+      linked,
+      content: r.content,
+      created_at: r.created_at,
+      chair_id: r.chair_id,
+      prescriptions: r.prescriptions ?? null,
+      participants: r.participants ?? [],
+      has_audio: r.has_audio,
+      patient_id: r.patient_id,
+      patient_name: r.patient_name,
+    };
+  };
+
   // 날짜별 그룹
   const groups: { date: string; items: SearchedConsultation[] }[] = [];
-  for (const r of rows) {
+  for (const r of visibleRows) {
     const d = formatDate(r.created_at);
     const last = groups[groups.length - 1];
     if (last && last.date === d) last.items.push(r);
@@ -121,6 +172,18 @@ export function RecordsBrowser({
               {label}
             </button>
           ))}
+          <button
+            type="button"
+            onClick={() => setFlaggedOnly((v) => !v)}
+            aria-pressed={flaggedOnly}
+            className={`rounded-lg border px-3 py-1.5 text-sm font-medium transition ${
+              flaggedOnly
+                ? "border-amber-400 bg-amber-50 text-amber-700"
+                : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
+            }`}
+          >
+            🏷️ 확인 필요만
+          </button>
           <select
             value={chairId}
             onChange={(e) => setChairId(e.target.value)}
@@ -145,102 +208,34 @@ export function RecordsBrowser({
 
       {loading && rows.length === 0 ? (
         <p className="py-8 text-center text-sm text-slate-400">불러오는 중…</p>
-      ) : rows.length === 0 ? (
+      ) : visibleRows.length === 0 ? (
         <p className="py-8 text-center text-sm text-slate-400">
-          해당 조건의 상담 기록이 없어요.
+          {flaggedOnly
+            ? "확인 필요 꼬리표가 달린 기록이 없어요."
+            : "해당 조건의 상담 기록이 없어요."}
         </p>
       ) : (
         groups.map((g) => (
           <div key={g.date} className="space-y-2">
             <h3 className="px-1 text-xs font-semibold text-slate-400">{g.date}</h3>
-            <ul className="space-y-2">
-              {g.items.map((r) => {
-                const open = expandedId === r.id;
-                const linked = !!r.patient_id;
-                return (
-                  <li
-                    key={r.id}
-                    className="overflow-hidden rounded-xl border border-slate-200 bg-white"
-                  >
-                    <button
-                      type="button"
-                      onClick={() => setExpandedId(open ? null : r.id)}
-                      className="flex w-full items-start gap-3 px-4 py-3 text-left hover:bg-slate-50"
-                    >
-                      <span
-                        className={`mt-0.5 shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold ${
-                          linked
-                            ? "bg-emerald-100 text-emerald-700"
-                            : "bg-amber-100 text-amber-700"
-                        }`}
-                      >
-                        {linked ? "연결" : "미연결"}
-                      </span>
-                      <span className="min-w-0 flex-1">
-                        <span className="flex flex-wrap items-center gap-x-2 text-xs text-slate-500">
-                          {linked && (
-                            <span className="font-semibold text-slate-700">
-                              {r.patient_name ?? "환자"}
-                            </span>
-                          )}
-                          {chairName(r.chair_id) && <span>{chairName(r.chair_id)}</span>}
-                          <span>{formatTime(r.created_at)}</span>
-                        </span>
-                        {!open && (
-                          <span className="mt-0.5 block truncate text-sm text-slate-600">
-                            {stripHtml(r.content) || "(내용 없음)"}
-                          </span>
-                        )}
-                      </span>
-                      <span className="mt-0.5 shrink-0 text-xs text-slate-400">
-                        {open ? "▲" : "▼"}
-                      </span>
-                    </button>
-
-                    {open && (
-                      <div className="border-t border-slate-100 px-4 py-3">
-                        <div
-                          className="prose prose-sm max-w-none text-slate-800 [&_img]:rounded-lg"
-                          dangerouslySetInnerHTML={{ __html: optimizeContentHtml(r.content) }}
-                        />
-                        {r.prescriptions && r.prescriptions.length > 0 && (
-                          <div className="mt-2 flex flex-wrap gap-1.5">
-                            {r.prescriptions.map((p) => (
-                              <span
-                                key={p}
-                                className="rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-600"
-                              >
-                                {p}
-                              </span>
-                            ))}
-                          </div>
-                        )}
-                        <div className="mt-3 flex flex-wrap items-center gap-2">
-                          <CopyAllButton
-                            html={r.content}
-                            label="전체 복사"
-                            className="inline-flex min-h-8 items-center gap-1.5 rounded-lg bg-slate-800 px-3 text-xs font-semibold text-white hover:bg-slate-900"
-                          />
-                          {linked && (
-                            <Link
-                              href={`/patients/${r.patient_id}`}
-                              className="inline-flex min-h-8 items-center rounded-lg border border-slate-200 px-3 text-xs font-medium text-slate-600 hover:bg-slate-50"
-                            >
-                              환자 상세에서 편집
-                            </Link>
-                          )}
-                        </div>
-                      </div>
-                    )}
-                  </li>
-                );
-              })}
+            <ul className="space-y-3">
+              {g.items.map((r) => (
+                <li key={r.id}>
+                  <ConsultationCard
+                    record={toCard(r)}
+                    flags={flags[r.id] ?? []}
+                    recent={recent}
+                    onMutated={reloadRows}
+                    onFlagsChanged={() => reloadFlags(rows.map((x) => x.id)).catch(() => {})}
+                  />
+                </li>
+              ))}
             </ul>
           </div>
         ))
       )}
 
-      {hasMore && (
+      {hasMore && !flaggedOnly && (
         <button
           type="button"
           onClick={loadMore}
@@ -254,26 +249,9 @@ export function RecordsBrowser({
   );
 }
 
-function stripHtml(html: string): string {
-  return html
-    .replace(/<[^>]*>/g, " ")
-    .replace(/&nbsp;/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
-}
-
 function formatDate(iso: string): string {
   const d = new Date(iso);
   return `${d.getFullYear()}. ${String(d.getMonth() + 1).padStart(2, "0")}. ${String(
     d.getDate(),
   ).padStart(2, "0")}.`;
-}
-
-function formatTime(iso: string): string {
-  const d = new Date(iso);
-  const h = d.getHours();
-  const m = String(d.getMinutes()).padStart(2, "0");
-  const ampm = h < 12 ? "오전" : "오후";
-  const h12 = h % 12 === 0 ? 12 : h % 12;
-  return `${ampm} ${h12}:${m}`;
 }
