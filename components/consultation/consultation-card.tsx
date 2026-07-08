@@ -10,6 +10,7 @@ import { type RichTextEditorHandle } from "@/components/rich-text-editor";
 import { ChairPatientSearch } from "@/components/chair/chair-patient-search";
 import { ReviewFlags } from "@/components/consultation/review-flags";
 import { optimizeContentHtml } from "@/lib/image/optimize";
+import { stripMarkdownMarkers } from "@/lib/summary-format";
 import { updateChairRecordContent, deleteChairRecord } from "@/app/actions/chairs";
 import { deleteConsultation } from "@/app/actions/consultations";
 import type { Participant } from "@/lib/types/database";
@@ -66,8 +67,9 @@ export function ConsultationCard({
   const editorRef = useRef<RichTextEditorHandle | null>(null);
 
   const chairName = (id: string | null) => (id ? chairs.find((c) => c.id === id)?.name ?? "체어" : "체어");
-  const preview = stripHtml(record.content).slice(0, 120);
-  const charCount = stripHtml(record.content).length;
+  const plainContent = stripMarkdownMarkers(stripHtml(record.content));
+  const preview = plainContent.slice(0, 120);
+  const charCount = plainContent.length;
   const linked = record.linked;
 
   const startEdit = () => {
@@ -194,7 +196,7 @@ export function ConsultationCard({
             className={`mb-3 cursor-pointer rounded-xl px-2 py-1.5 -mx-2 transition ${linked ? "hover:bg-emerald-50/60" : "hover:bg-amber-50/60"}`}>
             {isViewing ? (
               <div className="rich-content text-sm leading-6 text-slate-800"
-                dangerouslySetInnerHTML={{ __html: optimizeContentHtml(record.content || "<p>내용 없음</p>") }} />
+                dangerouslySetInnerHTML={{ __html: optimizeContentHtml(stripMarkdownMarkers(record.content) || "<p>내용 없음</p>") }} />
             ) : (
               <p className="text-sm leading-relaxed text-slate-700">
                 {preview || "내용 없음"}{charCount > 120 && <span className="text-slate-400">…</span>}

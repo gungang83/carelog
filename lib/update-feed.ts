@@ -48,6 +48,17 @@ export const UPDATE_FEED: UpdateFeedEntry[] = [
     internal: "세션 63",
   },
   {
+    id: "2026-07-08-plain-summary",
+    date: "2026-07-08",
+    emoji: "📝",
+    title: "상담 기록 요약이 차트에 깔끔하게",
+    items: [
+      "요약에 섞여 있던 별표(**)·샵(#) 기호가 사라졌습니다 — 전자차트에 붙여넣어도 깔끔합니다.",
+      "새 요약은 [진찰 소견]처럼 대괄호 라벨로 구조화되고, 이미 저장된 기록도 화면·복사에서 기호가 자동으로 걷힙니다.",
+    ],
+    internal: "세션 66",
+  },
+  {
     id: "2026-07-05-announce-ticker",
     date: "2026-07-05",
     emoji: "📢",

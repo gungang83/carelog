@@ -1,6 +1,9 @@
+import { stripMarkdownMarkers } from "@/lib/summary-format";
+
 /**
  * 리치 텍스트(HTML) → 평문 변환. 줄바꿈을 보존해 외부 EMR(덴트웹 등) 텍스트 칸에
  * 붙여넣기 좋은 형태로 만든다. ('전체 복사' 기능용)
+ * 과거 AI 요약의 마크다운 마커(**·#)도 함께 걷어낸다(세션 66 — 차트는 평문).
  */
 export function htmlToPlainText(html: string): string {
   if (!html) return "";
@@ -21,8 +24,8 @@ export function htmlToPlainText(html: string): string {
     .replace(/&quot;/g, '"')
     .replace(/&#39;/g, "'");
 
-  // 과도한 빈 줄·행끝 공백 정리
-  return text
+  // 과도한 빈 줄·행끝 공백 정리 + 마크다운 마커 제거
+  return stripMarkdownMarkers(text)
     .replace(/[ \t]+\n/g, "\n")
     .replace(/\n{3,}/g, "\n\n")
     .trim();
