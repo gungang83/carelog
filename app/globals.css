@@ -62,3 +62,11 @@ html {
 .tiptap blockquote, .rich-content blockquote { border-left: 3px solid #bae6fd; padding-left: 1rem; margin: 0.5rem 0; color: #475569; font-style: italic; }
 .tiptap hr, .rich-content hr { border: none; border-top: 1px solid #e2e8f0; margin: 0.75rem 0; }
 .tiptap p, .rich-content p { margin: 0; }
+
+/* spec 025 상담 캔버스 — 글감싸기(float) 이미지가 컨테이너를 넘지 않게 clearfix */
+.tiptap::after,
+.rich-content::after {
+  content: "";
+  display: block;
+  clear: both;
+}

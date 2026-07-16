@@ -707,3 +707,17 @@ AI 전사 성공(app/actions/transcribe.ts: transcribeEngine·transcribeAndSumma
 ```
 - 피드는 대표에게만: 페이지 가드(isSuperAdmin redirect) + 결정 테이블 RLS deny-all(service_role만).
 - 에이전트가 DB에 못 쓰는 제약을 뒤집어 **배포 파이프라인을 적재 경로**로 사용 — 피드 소스는 git 이력에 남는 코드.
+
+## 상담 이미지 라이브러리 + 상담 캔버스 (spec 025-consult-assets)
+
+```
+[등록] /settings '상담 자료'(owner/admin) → components/settings/consult-assets-manager.tsx
+  → 클라 compressImageFile(webp) → app/actions/consult-assets.ts createConsultAsset(FormData)
+      (requireOwnerAdmin → admin 클라 service_role: 스토리지 업로드 + consult_assets insert)
+[사용] rich-text-editor 툴바 '📚 자료' → components/consult-assets/asset-picker.tsx
+      (getConsultAssets: 기관+전역 활성, 카테고리 칩·검색·확대 미리보기·즉석 업로드)
+  → 선택 삽입: setImage + caption 문단. 저장 HTML에 인라인 → 카드·환자 포털·복사 추가작업 0.
+[캔버스] 에디터 전체화면 토글(⛶ 크게) + 이미지 정렬(선택 시 글감싸기 좌/우·가운데, data-align + float 인라인 style)
+      왼쪽 글감싸기 2장 연속 = 나란히 배치. globals.css .tiptap/.rich-content clearfix.
+```
+- 전역(Carelog 제공) 자산은 스키마만 준비(institution_id null) — 발행 UI(/admin/assets)는 후속.

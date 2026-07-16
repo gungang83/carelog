@@ -13,6 +13,8 @@ import { NotificationSettings } from "@/components/settings/notification-setting
 import { PatientAccountLink } from "@/components/settings/patient-account-link";
 import { ChairSettings } from "@/components/settings/chair-settings";
 import { ClinicMemberSettings } from "@/components/settings/clinic-member-settings";
+import { ConsultAssetsManager } from "@/components/settings/consult-assets-manager";
+import { listConsultAssetsForManage } from "@/app/actions/consult-assets";
 
 export default async function SettingsPage() {
   const supabase = await createServerSupabaseClient();
@@ -28,13 +30,14 @@ export default async function SettingsPage() {
 
   const isOwnerOrAdmin = role === "owner" || role === "admin";
 
-  const [staffResult, patientLinkStatus, chairs, clinicMembers, plan] =
+  const [staffResult, patientLinkStatus, chairs, clinicMembers, plan, consultAssets] =
     await Promise.all([
       isOwnerOrAdmin ? getStaffList() : Promise.resolve(null),
       getMyPatientLinkStatus(),
       isOwnerOrAdmin ? getChairs() : Promise.resolve([]),
       isOwnerOrAdmin ? getClinicMembers() : Promise.resolve([]),
       getMyInstitutionPlan(),
+      isOwnerOrAdmin ? listConsultAssetsForManage() : Promise.resolve([]),
     ]);
   const members = staffResult?.ok ? staffResult.members : [];
 
@@ -84,6 +87,18 @@ export default async function SettingsPage() {
         <section className="space-y-4">
           <h2 className="text-base font-semibold text-slate-800">멤버 관리</h2>
           <ClinicMemberSettings initialMembers={clinicMembers} />
+        </section>
+      )}
+
+      {isOwnerOrAdmin && (
+        <section className="space-y-4">
+          <div>
+            <h2 className="text-base font-semibold text-slate-800">상담 자료</h2>
+            <p className="mt-0.5 text-xs text-slate-500">
+              자주 쓰는 설명 이미지를 등록해 두면 상담 편집기의 &apos;📚 자료&apos;에서 바로 삽입할 수 있어요.
+            </p>
+          </div>
+          <ConsultAssetsManager initialAssets={consultAssets} />
         </section>
       )}
 

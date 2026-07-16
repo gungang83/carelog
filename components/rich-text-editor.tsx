@@ -12,6 +12,7 @@ import StarterKit from "@tiptap/starter-kit";
 import Placeholder from "@tiptap/extension-placeholder";
 import Image from "@tiptap/extension-image";
 import { ImageAnnotator } from "@/components/image-annotator";
+import { AssetPicker } from "@/components/consult-assets/asset-picker";
 import { createBrowserSupabaseClient } from "@/lib/supabase/client";
 import { compressImageFile } from "@/lib/image/optimize";
 
@@ -32,13 +33,24 @@ async function uploadImage(file: File): Promise<string> {
   return supabase.storage.from(bucket).getPublicUrl(path).data.publicUrl;
 }
 
+// ── 이미지 정렬(spec 025 상담 캔버스) — HTML 플로우 내 자유 배치 ──
+//    left/right = 글 감싸기(float). 왼쪽 정렬 이미지 2장을 붙이면 나란히 배치가 된다.
+type ImgAlign = "left" | "right" | "center" | null;
+function alignStyle(align: ImgAlign): string {
+  if (align === "left") return "float:left;margin:0.25rem 1rem 0.5rem 0;";
+  if (align === "right") return "float:right;margin:0.25rem 0 0.5rem 1rem;";
+  if (align === "center") return "display:block;margin:0.75rem auto;";
+  return "";
+}
+
 // ── Resizable image node view (React component) ───────────────
-function ResizableImageView({ node, updateAttributes }: NodeViewProps) {
+function ResizableImageView({ node, updateAttributes, selected }: NodeViewProps) {
   const imgRef = useRef<HTMLImageElement>(null);
-  const { src, alt, width } = node.attrs as {
+  const { src, alt, width, align } = node.attrs as {
     src: string;
     alt: string;
     width: number | null;
+    align: ImgAlign;
   };
 
   function onResizeStart(e: React.MouseEvent) {
@@ -60,11 +72,40 @@ function ResizableImageView({ node, updateAttributes }: NodeViewProps) {
     document.addEventListener("mouseup", onUp);
   }
 
-  return (
-    <NodeViewWrapper
-      as="div"
-      style={{ display: "inline-block", position: "relative", maxWidth: "100%", margin: "0.75rem 0" }}
+  const wrapperStyle: React.CSSProperties = {
+    position: "relative",
+    maxWidth: "100%",
+  };
+  if (align === "left") Object.assign(wrapperStyle, { float: "left", margin: "0.25rem 1rem 0.5rem 0" });
+  else if (align === "right") Object.assign(wrapperStyle, { float: "right", margin: "0.25rem 0 0.5rem 1rem" });
+  else if (align === "center") Object.assign(wrapperStyle, { display: "block", margin: "0.75rem auto", width: "fit-content" });
+  else Object.assign(wrapperStyle, { display: "inline-block", margin: "0.75rem 0" });
+
+  const alignBtn = (a: ImgAlign, label: string, title: string) => (
+    <button
+      type="button"
+      title={title}
+      onMouseDown={(e) => {
+        e.preventDefault();
+        updateAttributes({ align: align === a ? null : a });
+      }}
+      style={{
+        padding: "2px 6px",
+        fontSize: "11px",
+        fontWeight: 600,
+        borderRadius: "4px",
+        border: "none",
+        cursor: "pointer",
+        background: align === a ? "#0ea5e9" : "rgba(15,23,42,0.75)",
+        color: "#fff",
+      }}
     >
+      {label}
+    </button>
+  );
+
+  return (
+    <NodeViewWrapper as="div" style={wrapperStyle}>
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
         ref={imgRef}
@@ -80,6 +121,23 @@ function ResizableImageView({ node, updateAttributes }: NodeViewProps) {
           boxShadow: "0 1px 6px rgba(0,0,0,0.12)",
         }}
       />
+      {/* 정렬 컨트롤 — 선택 시 노출 (spec 025). 왼쪽 2장 연속 = 나란히 배치 */}
+      {selected && (
+        <div
+          style={{
+            position: "absolute",
+            top: "6px",
+            left: "6px",
+            display: "flex",
+            gap: "4px",
+            zIndex: 5,
+          }}
+        >
+          {alignBtn("left", "⬅ 글감싸기", "왼쪽 배치 — 오른쪽으로 글이 감싸요 (2장 연속이면 나란히)")}
+          {alignBtn("center", "가운데", "가운데 단독 배치")}
+          {alignBtn("right", "글감싸기 ➡", "오른쪽 배치 — 왼쪽으로 글이 감싸요")}
+        </div>
+      )}
       {/* Resize handle */}
       <div
         title="드래그하여 크기 조절"
@@ -119,12 +177,31 @@ const ResizableImage = Image.extend({
       width: {
         default: null,
         parseHTML: (el) => el.getAttribute("width"),
-        renderHTML: ({ width }) =>
-          width
-            ? { width, style: `width:${width}px;max-width:100%;height:auto` }
-            : { style: "max-width:100%;height:auto" },
+        renderHTML: () => ({}), // style은 아래 align과 합쳐 한 번에 렌더
+      },
+      align: {
+        default: null,
+        parseHTML: (el) => el.getAttribute("data-align"),
+        renderHTML: () => ({}),
       },
     };
+  },
+
+  // width + align을 합쳐 style 하나로 렌더(저장 HTML에 그대로 실려 카드·포털 표시에 적용).
+  renderHTML({ HTMLAttributes, node }) {
+    const width = node.attrs.width as number | null;
+    const align = node.attrs.align as ImgAlign;
+    const style =
+      (width ? `width:${width}px;` : "") + "max-width:100%;height:auto;border-radius:8px;" + alignStyle(align);
+    return [
+      "img",
+      {
+        ...HTMLAttributes,
+        ...(width ? { width } : {}),
+        ...(align ? { "data-align": align } : {}),
+        style,
+      },
+    ];
   },
 
   addNodeView() {
@@ -157,6 +234,8 @@ export const RichTextEditor = forwardRef<RichTextEditorHandle, Props>(
 function RichTextEditor({ value, onChange, placeholder }, ref) {
   const [annotateFile, setAnnotateFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
+  const [showPicker, setShowPicker] = useState(false); // spec 025 자료 픽커
+  const [fullscreen, setFullscreen] = useState(false); // spec 025 상담 캔버스(전체화면)
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Ref so Tiptap event handlers always see the latest state setter
@@ -247,12 +326,30 @@ function RichTextEditor({ value, onChange, placeholder }, ref) {
     }
   }
 
+  function insertAsset(a: { image_url: string; title: string; caption: string | null }) {
+    if (!editor) return;
+    editor.chain().focus().setImage({ src: a.image_url, alt: a.title }).run();
+    if (a.caption) {
+      const esc = a.caption
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;");
+      editor.chain().focus().insertContent(`<p>${esc}</p>`).run();
+    }
+  }
+
   if (!editor) return null;
 
   const btn = (active: boolean) => (active ? BTN_ACTIVE : BTN);
 
   return (
-    <div className="mt-3 overflow-hidden rounded-xl border border-sky-200 bg-white focus-within:border-sky-400 focus-within:ring-2 focus-within:ring-sky-400/30">
+    <div
+      className={
+        fullscreen
+          ? "fixed inset-0 z-[100] flex flex-col overflow-hidden bg-white"
+          : "mt-3 overflow-hidden rounded-xl border border-sky-200 bg-white focus-within:border-sky-400 focus-within:ring-2 focus-within:ring-sky-400/30"
+      }
+    >
       {/* Toolbar */}
       <div className="flex flex-wrap items-center gap-0.5 border-b border-sky-100 bg-slate-50/60 px-2 py-1.5">
         <button
@@ -363,6 +460,15 @@ function RichTextEditor({ value, onChange, placeholder }, ref) {
         >
           {uploading ? "업로드 중..." : "이미지"}
         </button>
+        {/* spec 025 — 상담 자료 라이브러리 픽커 */}
+        <button
+          type="button"
+          title="상담 자료 — 미리 등록한 이미지를 골라 삽입"
+          onClick={() => setShowPicker(true)}
+          className={BTN}
+        >
+          📚 자료
+        </button>
 
         <span className="mx-1 h-4 w-px bg-slate-200" />
 
@@ -384,6 +490,16 @@ function RichTextEditor({ value, onChange, placeholder }, ref) {
         >
           ↪
         </button>
+
+        {/* spec 025 — 상담 캔버스(전체화면) 토글 */}
+        <button
+          type="button"
+          title={fullscreen ? "전체화면 종료 (원래 화면으로)" : "전체화면으로 크게 편집"}
+          onClick={() => setFullscreen((f) => !f)}
+          className={`ml-auto ${btn(fullscreen)}`}
+        >
+          {fullscreen ? "✕ 닫기" : "⛶ 크게"}
+        </button>
       </div>
 
       {/* Hidden file input */}
@@ -401,11 +517,13 @@ function RichTextEditor({ value, onChange, placeholder }, ref) {
 
       {/* Hint */}
       <div className="border-b border-sky-50 px-4 py-1 text-[11px] text-slate-400">
-        이미지 버튼 · 드래그 앤 드롭 · Ctrl+V 로 이미지를 텍스트 안에 삽입 — 모서리를 드래그해 크기 조절
+        이미지·📚자료·드래그·Ctrl+V로 삽입 — 모서리 드래그 크기조절, 이미지 클릭 후 글감싸기/가운데 배치(왼쪽 2장이면 나란히)
       </div>
 
       {/* Editor */}
-      <EditorContent editor={editor} />
+      <div className={fullscreen ? "min-h-0 flex-1 overflow-y-auto" : ""}>
+        <EditorContent editor={editor} />
+      </div>
 
       {/* Annotator modal */}
       {annotateFile && (
@@ -415,6 +533,9 @@ function RichTextEditor({ value, onChange, placeholder }, ref) {
           onSave={handleAnnotateSave}
         />
       )}
+
+      {/* spec 025 — 상담 자료 픽커 */}
+      {showPicker && <AssetPicker onInsert={insertAsset} onClose={() => setShowPicker(false)} />}
     </div>
   );
 });

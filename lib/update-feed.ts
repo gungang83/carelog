@@ -59,6 +59,17 @@ export const UPDATE_FEED: UpdateFeedEntry[] = [
     internal: "세션 66",
   },
   {
+    id: "2026-07-08-consult-assets",
+    date: "2026-07-08",
+    emoji: "📚",
+    title: "상담 자료 라이브러리 + 편집기 업그레이드",
+    items: [
+      "자주 쓰는 설명 이미지를 설정 → 상담 자료에 등록해 두고, 상담 중 편집기의 '📚 자료' 버튼으로 바로 꺼내 쓸 수 있습니다.",
+      "편집기가 커졌습니다 — 전체화면으로 크게 쓰고, 이미지를 글 옆에 배치(글감싸기)하거나 나란히 놓을 수 있습니다.",
+    ],
+    internal: "spec 025 · 세션 66",
+  },
+  {
     id: "2026-07-05-announce-ticker",
     date: "2026-07-05",
     emoji: "📢",

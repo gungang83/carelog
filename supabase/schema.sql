@@ -638,3 +638,19 @@ alter table public.patient_push_subscriptions enable row level security;
 -- 배선: app/actions/update-feed.ts(getUpdateFeed·publishUpdateAnnouncement·dismiss·clear).
 --   UI /admin/updates + components/admin/update-feed-manager.tsx(선택→문구 조합→발행/보류).
 -- ───────────────────────────────────────────────────────────────────────────
+
+-- ───────────────────────────────────────────────────────────────────────────
+-- 상담 이미지 라이브러리 (spec 025-consult-assets) — migration: 20260708000001_consult_assets.sql
+-- 기관이 미리 등록해 두고 상담 중 에디터 픽커('📚 자료')로 삽입하는 설명 자료.
+--   create table public.consult_assets(
+--     id uuid pk, institution_id uuid→institutions cascade (null=전역 Carelog 제공, v1은 항상 기관),
+--     title text not null, category text default 'general',  -- lib/consult-assets.ts config 확장형
+--     image_url text not null,   -- 'consult-assets' 공개 버킷(webp 압축), 업로드는 서버액션 service_role
+--     caption text, display_order int, active bool, created_by text, created_at);
+--   index: (institution_id, active, category, display_order).
+-- RLS: read = 자기 기관 멤버십 + 활성 전역 / write = owner·admin 멤버십(전역은 service_role만).
+-- 삭제 시 스토리지 원본은 보존(이미 상담 기록 본문에 삽입된 이미지 URL이 깨지지 않게).
+-- storage.buckets: 'consult-assets' public read.
+-- 배선: app/actions/consult-assets.ts, /settings 상담 자료 섹션, components/consult-assets/asset-picker.tsx,
+--   rich-text-editor.tsx(픽커·전체화면·이미지 정렬 data-align).
+-- ───────────────────────────────────────────────────────────────────────────
