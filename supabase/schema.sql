@@ -674,3 +674,12 @@ alter table public.patient_push_subscriptions enable row level security;
 --   lib/treatment-items.ts formatEstimateBlock(형식 고정 — 후속 상담 데이터화 파싱 대상).
 -- consult_assets 카테고리에 'consent'(동의서) 추가 — 코드 config(스키마 변경 없음).
 -- ───────────────────────────────────────────────────────────────────────────
+
+-- ───────────────────────────────────────────────────────────────────────────
+-- 상담 세션 안전망 (spec 027-consult-session) — migration: 20260708000004_consult_settings.sql
+-- institutions.consult_settings jsonb default '{}' — { idle_minutes:10, grace_minutes:5, voice_detect:true }
+--   (기본값 병합은 lib/consult-settings.ts). 수정은 owner/admin(서버액션 service_role).
+-- 코드: RecordingGuard(레이아웃 상시) — 전역 플로팅 필·방치 감시(입력+음성 RMS)·경고 모달·
+--   grace 만료 시 등록 콜백(runAutoFinalize: 보드='종료및저장', 오버레이='종료(전사)') 실행,
+--   전역 beforeunload·탭 제목 🔴·Document PiP 항상-위 미니창(지원 브라우저).
+-- ───────────────────────────────────────────────────────────────────────────

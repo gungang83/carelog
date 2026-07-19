@@ -17,6 +17,8 @@ import { ConsultAssetsManager } from "@/components/settings/consult-assets-manag
 import { listConsultAssetsForManage } from "@/app/actions/consult-assets";
 import { TreatmentItemsManager } from "@/components/settings/treatment-items-manager";
 import { listTreatmentItemsForManage } from "@/app/actions/treatment-items";
+import { ConsultSafetySettings } from "@/components/settings/consult-safety-settings";
+import { getConsultSettings } from "@/app/actions/consult-settings";
 
 export default async function SettingsPage() {
   const supabase = await createServerSupabaseClient();
@@ -42,6 +44,7 @@ export default async function SettingsPage() {
       isOwnerOrAdmin ? listConsultAssetsForManage() : Promise.resolve([]),
     ]);
   const treatmentItems = isOwnerOrAdmin ? await listTreatmentItemsForManage() : [];
+  const consultSettings = await getConsultSettings();
   const members = staffResult?.ok ? staffResult.members : [];
 
   return (
@@ -114,6 +117,18 @@ export default async function SettingsPage() {
             </p>
           </div>
           <TreatmentItemsManager initialItems={treatmentItems} />
+        </section>
+      )}
+
+      {isOwnerOrAdmin && (
+        <section className="space-y-4">
+          <div>
+            <h2 className="text-base font-semibold text-slate-800">상담 안전망</h2>
+            <p className="mt-0.5 text-xs text-slate-500">
+              녹음을 켜둔 채 자리를 비웠을 때의 경고·자동 저장 기준입니다.
+            </p>
+          </div>
+          <ConsultSafetySettings initial={consultSettings} />
         </section>
       )}
 

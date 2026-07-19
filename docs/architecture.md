@@ -746,3 +746,18 @@ AI 전사 성공(app/actions/transcribe.ts: transcribeEngine·transcribeAndSumma
 [빈 캔버스] 픽커 상단 백지/모눈/줄노트 — 클라 canvas 생성 → 바로 스테이지(그리기) → 담기 시에만 업로드
 [동의서] consult_assets 카테고리 'consent' — (a안) 스테이지에서 설명·펜 서명 → 기록에 담기(spec 026 §6.5)
 ```
+
+## 상담 세션 안전망 (spec 027-consult-session)
+
+```
+[가드] components/chair/recording-guard.tsx — 레이아웃 상시 마운트
+  · 활성 세션 = ChairProvider activeRecordingKeys(recording|paused, DRAFT 포함)
+  · 플로팅 필(전역): 세션명·경과·무활동(2분↑)·탭하면 openOverlay 복귀 / 탭 제목 🔴 / 전역 beforeunload
+  · 방치 판정: 입력 이벤트(스로틀) ∪ 마이크 RMS(getStream+AnalyserNode, voice_detect 설정) → 활동 시 리셋
+  · idle분 초과 → 경고(모달+비프+OS 로컬알림, 활동하면 자동 해제) → grace분 카운트다운
+  · 만료 → runAutoFinalize(key): 보드가 등록한 '종료 및 저장'(DRAFT, 체어 미선택이면 최근 체어 자동지정)
+    / 오버레이가 등록한 '종료(전사)'(열려 있는 동안만 — 닫힌 오버레이 세션은 경고 유지)
+  · Document PiP: '⧉ 항상 위' — 다른 프로그램 위 미니창(데스크톱 크롬), 미지원 기기는 필+알림
+[설정] /settings 상담 안전망(owner/admin) → institutions.consult_settings
+[안내] 보드 에디터 상단 '💾 이 내용은 [체어] 상담 기록으로 저장됩니다'(spec 027 ⑤)
+```

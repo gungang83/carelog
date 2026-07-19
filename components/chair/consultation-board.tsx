@@ -92,6 +92,7 @@ function BoardContent({
     refreshUnlinkedCount,
     engine,
     setEngine,
+    registerAutoFinalize,
   } = useChairContext();
 
   const isOpen = openChairId === DRAFT_CHAIR_KEY;
@@ -447,6 +448,28 @@ function BoardContent({
     };
     void finish();
   };
+
+  // spec 027 — 방치 자동 종료: 가드(RecordingGuard)가 호출할 '종료 및 저장'을 등록.
+  // 보드는 레이아웃 상시 마운트라 녹음 중이면 항상 등록되어 있다.
+  const stopSaveRef = useRef<() => void>(() => {});
+  stopSaveRef.current = handleStopAndSave;
+  useEffect(() => {
+    if (status !== "recording" && status !== "paused") return;
+    registerAutoFinalize(DRAFT_CHAIR_KEY, () => {
+      if (!selectedChair) {
+        // 체어 미선택 방치 — 최근 체어(없으면 첫 체어)로 자동 지정 후 저장(기록 유실 방지).
+        const last = getLastChairId();
+        const fb = chairs.find((c) => c.id === last) ?? chairs[0];
+        if (fb) {
+          setSelectedChair({ id: fb.id, name: fb.name });
+          setTimeout(() => stopSaveRef.current(), 300); // 상태 반영 후 실행
+          return;
+        }
+      }
+      stopSaveRef.current();
+    });
+    return () => registerAutoFinalize(DRAFT_CHAIR_KEY, null);
+  }, [status, selectedChair, chairs, registerAutoFinalize]);
 
   // 자동 저장 — 전사 완료 직후 호출. 실패는 비차단으로 로그 + 임시본 보존(복구 가능).
   const doAutoSave = async (engineUsed: string | null) => {
@@ -1049,6 +1072,18 @@ function BoardContent({
             </p>
 
             {/* 본문 — 타이핑 + 인라인 이미지/그림 주석 */}
+            {/* spec 027 ⑤ — 저장 위치 안내 */}
+            <p className="text-[11px] text-sky-600">
+              💾 이 내용은{" "}
+              {selectedChair ? (
+                <>
+                  <span className="font-semibold">[{selectedChair.name}]</span> 상담 기록으로
+                  저장됩니다
+                </>
+              ) : (
+                "체어를 선택하면 해당 체어의 상담 기록으로 저장됩니다"
+              )}
+            </p>
             <RichTextEditor
               ref={editorRef}
               value={editText}

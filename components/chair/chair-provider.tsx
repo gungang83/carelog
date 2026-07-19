@@ -28,6 +28,7 @@ type ChairRecordingState = {
   status: ChairStatus;
   transcribedText: string;
   savedConsultationId: string | null;
+  startedAt: number | null; // spec 027 — 녹음 시작 시각(상시 표시 경과시간용)
 };
 
 type ChairState = {
@@ -49,7 +50,7 @@ type ChairAction =
   | { type: "RESET_CHAIR"; chairId: string };
 
 function getDefaultRecording(): ChairRecordingState {
-  return { status: "idle", transcribedText: "", savedConsultationId: null };
+  return { status: "idle", transcribedText: "", savedConsultationId: null, startedAt: null };
 }
 
 function reducer(state: ChairState, action: ChairAction): ChairState {
@@ -60,11 +61,18 @@ function reducer(state: ChairState, action: ChairAction): ChairState {
       return { ...state, openChairId: null };
     case "SET_STATUS": {
       const prev = state.recording[action.chairId] ?? getDefaultRecording();
+      // spec 027 — recording 진입 시 시작 시각 기록(일시정지/재개는 유지), 세션 종료 시 해제
+      const startedAt =
+        action.status === "recording"
+          ? (prev.startedAt ?? Date.now())
+          : action.status === "idle" || action.status === "has_records"
+            ? null
+            : prev.startedAt;
       return {
         ...state,
         recording: {
           ...state.recording,
-          [action.chairId]: { ...prev, status: action.status },
+          [action.chairId]: { ...prev, status: action.status, startedAt },
         },
       };
     }
@@ -177,6 +185,17 @@ type ChairContextValue = {
   /** 다음 녹음에 쓸 엔진(히어로에서 시작 전 선택 → 보드가 사용). 비-lab은 서버에서 basic 강제 */
   engine: EngineMode;
   setEngine: (engine: EngineMode) => void;
+  // ── spec 027 상담 세션 안전망 ──────────────────────────────────
+  /** 녹음/일시정지 중인 세션 키 목록(DRAFT 포함) — 상시 표시·방치 감시 대상 */
+  activeRecordingKeys: string[];
+  /** 녹음 시작 시각(경과 표시용) */
+  getStartedAt: (chairId: string) => number | null;
+  /** 활성 마이크 스트림(음성 활동 감지용 — 읽기 전용으로만 사용할 것) */
+  getStream: (chairId: string) => MediaStream | null;
+  /** 방치 자동 종료 콜백 등록 — 보드/오버레이가 자기 '종료 및 저장'을 등록한다 */
+  registerAutoFinalize: (chairId: string, cb: (() => void) | null) => void;
+  /** 등록된 자동 종료 콜백 실행. 등록이 없으면 false(가드는 경고만 유지) */
+  runAutoFinalize: (chairId: string) => boolean;
 };
 
 const ChairContext = createContext<ChairContextValue | null>(null);
@@ -514,6 +533,34 @@ export function ChairProvider({
     dispatch({ type: "RESET_CHAIR", chairId });
   }, []);
 
+  // ── spec 027 — 세션 안전망 지원 ─────────────────────────────────
+  const autoFinalizeMap = useRef<Record<string, (() => void) | null>>({});
+
+  const registerAutoFinalize = useCallback((chairId: string, cb: (() => void) | null) => {
+    autoFinalizeMap.current[chairId] = cb;
+  }, []);
+
+  const runAutoFinalize = useCallback((chairId: string): boolean => {
+    const cb = autoFinalizeMap.current[chairId];
+    if (!cb) return false;
+    cb();
+    return true;
+  }, []);
+
+  const getStartedAt = useCallback(
+    (chairId: string) => state.recording[chairId]?.startedAt ?? null,
+    [state.recording],
+  );
+
+  const getStream = useCallback(
+    (chairId: string) => mediaRefsMap.current[chairId]?.stream ?? null,
+    [],
+  );
+
+  const activeRecordingKeys = Object.entries(state.recording)
+    .filter(([, v]) => v.status === "recording" || v.status === "paused")
+    .map(([k]) => k);
+
   const refreshUnlinkedCount = useCallback(async (chairId: string) => {
     const records = await getUnlinkedChairRecords(chairId);
     dispatch({
@@ -556,6 +603,11 @@ export function ChairProvider({
     labEnabled,
     engine,
     setEngine,
+    activeRecordingKeys,
+    getStartedAt,
+    getStream,
+    registerAutoFinalize,
+    runAutoFinalize,
   };
 
   return <ChairContext.Provider value={value}>{children}</ChairContext.Provider>;

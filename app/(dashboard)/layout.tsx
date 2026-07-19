@@ -13,6 +13,7 @@ import { isSuperAdmin } from "@/lib/admin";
 import { getChairs } from "@/app/actions/chairs";
 import { getClinicMembers } from "@/app/actions/clinic-members";
 import { ChairProvider } from "@/components/chair/chair-provider";
+import { RecordingGuard } from "@/components/chair/recording-guard";
 import { ChairOverlay } from "@/components/chair/chair-overlay";
 import { ConsultationBoard } from "@/components/chair/consultation-board";
 import { LiveAlertsProvider } from "@/components/notifications/live-alerts-provider";
@@ -74,6 +75,7 @@ export default async function DashboardLayout({
       <BadgeManager />
       <ChairOverlay />
       <ConsultationBoard institutionId={activeInstitutionId ?? ""} labEnabled={labEnabled} />
+      <RecordingGuard />
       <LiveAlertsProvider
         institutionId={activeInstitutionId ?? ""}
         chairNames={Object.fromEntries(chairs.map((c) => [c.id, c.name]))}
