@@ -279,6 +279,17 @@ function BoardContent({
     return () => clearInterval(t);
   }, [status, editText, selectedChair, authorName]);
 
+  // spec 027 — 방치 자동 종료: 가드(RecordingGuard)가 호출할 '종료 및 저장'을 등록.
+  // ⚠️ 훅은 아래 조기 return보다 반드시 위에(호출 순서 고정 — 안 지키면 보드 오픈 순간 훅 순서 위반).
+  //    핸들러 본문은 조기 return 뒤에 정의되므로 ref 간접 참조로 연결한다.
+  const stopSaveRef = useRef<(opts?: { allowUnassigned?: boolean }) => void>(() => {});
+  useEffect(() => {
+    if (status !== "recording" && status !== "paused") return;
+    // 체어 미선택이면 '미지정'(chair_id null)으로 저장 — 임의 체어 지정하지 않는다(대표 확정).
+    registerAutoFinalize(DRAFT_CHAIR_KEY, () => stopSaveRef.current({ allowUnassigned: true }));
+    return () => registerAutoFinalize(DRAFT_CHAIR_KEY, null);
+  }, [status, registerAutoFinalize]);
+
   if (!isOpen) return null;
 
   const fmtTime = (s: number) =>
@@ -451,16 +462,8 @@ function BoardContent({
     void finish();
   };
 
-  // spec 027 — 방치 자동 종료: 가드(RecordingGuard)가 호출할 '종료 및 저장'을 등록.
-  // 보드는 레이아웃 상시 마운트라 녹음 중이면 항상 등록되어 있다.
-  const stopSaveRef = useRef<(opts?: { allowUnassigned?: boolean }) => void>(() => {});
+  // 가드 자동 종료가 항상 최신 '종료 및 저장'을 잡도록 렌더마다 갱신(훅 아님 — 조기 return 뒤 실행 무방).
   stopSaveRef.current = handleStopAndSave;
-  useEffect(() => {
-    if (status !== "recording" && status !== "paused") return;
-    // 체어 미선택이면 '미지정'(chair_id null)으로 저장 — 임의 체어 지정하지 않는다(대표 확정).
-    registerAutoFinalize(DRAFT_CHAIR_KEY, () => stopSaveRef.current({ allowUnassigned: true }));
-    return () => registerAutoFinalize(DRAFT_CHAIR_KEY, null);
-  }, [status, registerAutoFinalize]);
 
   // 자동 저장 — 전사 완료 직후 호출. 실패는 비차단으로 로그 + 임시본 보존(복구 가능).
   const doAutoSave = async (engineUsed: string | null) => {
