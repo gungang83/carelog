@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Component, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { useChairContext, DRAFT_CHAIR_KEY } from "@/components/chair/chair-provider";
 import { getConsultSettings } from "@/app/actions/consult-settings";
@@ -33,7 +33,26 @@ function fmtElapsed(ms: number): string {
   return `${m}:${String(s % 60).padStart(2, "0")}`;
 }
 
+// 가드 자체 오류가 앱을 무너뜨리지 않게 격리 — 안전망이 사고 원인이 되면 안 된다.
+class GuardBoundary extends Component<{ children: ReactNode }, { failed: boolean }> {
+  state = { failed: false };
+  static getDerivedStateFromError() {
+    return { failed: true };
+  }
+  render() {
+    return this.state.failed ? null : this.props.children;
+  }
+}
+
 export function RecordingGuard() {
+  return (
+    <GuardBoundary>
+      <RecordingGuardInner />
+    </GuardBoundary>
+  );
+}
+
+function RecordingGuardInner() {
   const {
     chairs,
     activeRecordingKeys,
@@ -105,7 +124,12 @@ export function RecordingGuard() {
   const activeJoined = active.join(",");
   useEffect(() => {
     if (!isActive || !settings.voice_detect) return;
-    const ctx = new AudioContext();
+    let ctx: AudioContext;
+    try {
+      ctx = new AudioContext();
+    } catch {
+      return; // 오디오 분석 불가 — 입력 이벤트 신호만으로 동작
+    }
     const analysers: AnalyserNode[] = [];
     for (const key of activeJoined.split(",").filter(Boolean)) {
       const stream = getStream(key);

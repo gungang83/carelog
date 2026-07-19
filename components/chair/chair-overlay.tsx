@@ -105,6 +105,16 @@ function OverlayContent() {
     };
   }, [status]);
 
+  // spec 027 — 방치 자동 종료(오버레이 세션) 등록. ⚠️ 훅은 아래 조기 return보다 반드시 위에(호출 순서 고정).
+  const stopRef = useRef<() => void>(() => {});
+  useEffect(() => {
+    if (!openChairId || status !== "recording") return;
+    const key = openChairId;
+    registerAutoFinalize(key, () => stopRef.current());
+    return () => registerAutoFinalize(key, null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [openChairId, status]);
+
   if (!openChairId || !chair) return null;
 
   const fmtTime = (s: number) =>
@@ -115,8 +125,6 @@ function OverlayContent() {
     const result = await startRecording(openChairId);
     if (!result.ok) setMicError(result.error ?? "녹음 시작 실패");
   };
-
-  const stopRef = useRef<() => void>(() => {}); // spec 027 — 가드 자동 종료용 최신 핸들러
 
   const handleStopRecording = () => {
     if (!openChairId) return;
@@ -189,16 +197,8 @@ function OverlayContent() {
     });
   };
 
-  // spec 027 — 방치 자동 종료(오버레이 세션): 열려 있는 동안 '종료(전사)'를 등록.
-  // 오버레이를 닫은 세션은 v1 자동 종료 제외(가드가 경고만 유지) — 저장 확정은 사람이.
+  // 가드 자동 종료가 항상 최신 핸들러를 잡도록 렌더마다 갱신(훅 아님 — 조건부 실행 무방)
   stopRef.current = handleStopRecording;
-  useEffect(() => {
-    if (!openChairId || status !== "recording") return;
-    const key = openChairId;
-    registerAutoFinalize(key, () => stopRef.current());
-    return () => registerAutoFinalize(key, null);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [openChairId, status]);
 
   const handleDiscard = () => {
     if (!openChairId) return;
