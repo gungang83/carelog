@@ -721,3 +721,16 @@ AI 전사 성공(app/actions/transcribe.ts: transcribeEngine·transcribeAndSumma
       왼쪽 글감싸기 2장 연속 = 나란히 배치. globals.css .tiptap/.rich-content clearfix.
 ```
 - 전역(Carelog 제공) 자산은 스키마만 준비(institution_id null) — 발행 UI(/admin/assets)는 후속.
+
+## 상담 스테이지 (spec 026-consult-stage)
+
+```
+[스테이지] 픽커 미리보기 '🖊 크게 열고 그리기' / 에디터 이미지 선택 → '🖊 크게'
+  → fetch(이미지) → ImageAnnotator(saveLabel='기록에 담기' — 펜·화살표·도형·텍스트·터치·핀치줌 재사용)
+  → 담기: 그린 스냅샷 업로드 → 에디터 삽입(기록 이미지의 경우 해당 노드 바로 뒤에)
+[영상] consult_assets kind='video_link'(외부 URL만, 파일 업로드 X — 이그레스·체어타임 보호)
+  → 픽커 '기록에 넣기' → 본문에 "▶ 제목 (영상): URL" 평문 삽입
+  → 표시 파이프라인 lib/content-html.ts renderContentHtml = stripMarkdownMarkers → linkifyUrls → optimizeContentHtml
+      (카드·환자상세·포털 공용 — 맨 URL 자동 링크화, 전체복사는 URL 텍스트 그대로)
+```
+- 3환경(모니터+마우스/태블릿+펜/상담실 키보드) 단일 스테이지 대응 — 기기별 화면 없음.

@@ -4,14 +4,27 @@ import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { CONSULT_ASSET_CATEGORIES, categoryLabel, type ConsultAsset } from "@/lib/consult-assets";
 import { getConsultAssets, createConsultAsset } from "@/app/actions/consult-assets";
 import { compressImageFile } from "@/lib/image/optimize";
+import { ImageAnnotator } from "@/components/image-annotator";
+
+export type AssetInsertPayload = {
+  kind: "image" | "video_link";
+  image_url: string | null;
+  link_url: string | null;
+  title: string;
+  caption: string | null;
+};
 
 // spec 025 — 상담 에디터 자료 픽커. 카테고리 필터 + 검색 + 확대 미리보기 + 삽입.
 // 즉석 업로드(라이브러리 등록과 동시에 삽입)도 지원 — 상담 중 찍은 사진을 바로.
+// spec 026 — 스테이지: "크게 열고 그리기" → 그린 스냅샷을 기록에 담기. 영상 링크 자산 삽입.
 export function AssetPicker({
   onInsert,
+  onInsertAnnotated,
   onClose,
 }: {
-  onInsert: (asset: { image_url: string; title: string; caption: string | null }) => void;
+  onInsert: (asset: AssetInsertPayload) => void;
+  /** 스테이지에서 그린 스냅샷 파일을 업로드·삽입(에디터가 처리) */
+  onInsertAnnotated?: (file: File) => void;
   onClose: () => void;
 }) {
   const [assets, setAssets] = useState<ConsultAsset[] | null>(null);
@@ -38,9 +51,34 @@ export function AssetPicker({
     );
   }, [assets, filter, query]);
 
+  const [stageFile, setStageFile] = useState<File | null>(null);
+  const [stageBusy, setStageBusy] = useState(false);
+
   const insert = (a: ConsultAsset) => {
-    onInsert({ image_url: a.image_url, title: a.title, caption: withCaption ? a.caption : null });
+    onInsert({
+      kind: (a.kind ?? "image") as "image" | "video_link",
+      image_url: a.image_url,
+      link_url: a.link_url,
+      title: a.title,
+      caption: withCaption ? a.caption : null,
+    });
     onClose();
+  };
+
+  // spec 026 — 스테이지로 크게 열기(그리며 설명 → 기록에 담기)
+  const openStage = async (a: ConsultAsset) => {
+    if (!a.image_url || stageBusy) return;
+    setStageBusy(true);
+    setError("");
+    try {
+      const res = await fetch(a.image_url);
+      const blob = await res.blob();
+      setStageFile(new File([blob], "stage.webp", { type: blob.type || "image/webp" }));
+    } catch {
+      setError("이미지를 열지 못했습니다.");
+    } finally {
+      setStageBusy(false);
+    }
   };
 
   // 즉석 업로드 → 라이브러리 등록 + 바로 삽입
@@ -140,9 +178,18 @@ export function AssetPicker({
                     className="block w-full overflow-hidden rounded-xl border border-slate-200 bg-white text-left shadow-sm transition hover:border-sky-400 hover:shadow"
                     title={a.title}
                   >
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={a.image_url} alt={a.title} loading="lazy" className="h-20 w-full object-cover" />
-                    <p className="truncate px-2 py-1.5 text-[11px] font-medium text-slate-700">{a.title}</p>
+                    {a.kind === "video_link" || !a.image_url ? (
+                      <div className="flex h-20 w-full items-center justify-center bg-slate-800 text-2xl text-white">
+                        ▶
+                      </div>
+                    ) : (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={a.image_url} alt={a.title} loading="lazy" className="h-20 w-full object-cover" />
+                    )}
+                    <p className="truncate px-2 py-1.5 text-[11px] font-medium text-slate-700">
+                      {a.kind === "video_link" ? "▶ " : ""}
+                      {a.title}
+                    </p>
                   </button>
                 </li>
               ))}
@@ -211,20 +258,68 @@ export function AssetPicker({
               </span>
             </div>
             <div className="flex min-h-0 flex-1 items-center justify-center overflow-auto bg-slate-50 p-4">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={preview.image_url} alt={preview.title} className="max-h-full max-w-full rounded-lg object-contain" />
+              {preview.kind === "video_link" || !preview.image_url ? (
+                <div className="space-y-3 text-center">
+                  <div className="mx-auto flex h-24 w-40 items-center justify-center rounded-xl bg-slate-800 text-4xl text-white">
+                    ▶
+                  </div>
+                  {preview.link_url && (
+                    <a
+                      href={preview.link_url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="block break-all text-xs text-sky-600 underline"
+                    >
+                      {preview.link_url}
+                    </a>
+                  )}
+                  <p className="text-[11px] text-slate-400">
+                    영상은 링크로 기록에 담겨요 — 환자에게 전달되면 대기실·집에서 볼 수 있어요.
+                  </p>
+                </div>
+              ) : (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={preview.image_url} alt={preview.title} className="max-h-full max-w-full rounded-lg object-contain" />
+              )}
             </div>
-            <div className="flex items-center justify-between gap-2 border-t border-slate-100 px-4 py-3">
-              <p className="min-w-0 truncate text-xs text-slate-500">{preview.caption ?? ""}</p>
-              <button
-                type="button"
-                onClick={() => insert(preview)}
-                className="shrink-0 rounded-xl bg-sky-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-sky-700"
-              >
-                에디터에 삽입
-              </button>
+            <div className="flex flex-wrap items-center justify-between gap-2 border-t border-slate-100 px-4 py-3">
+              <p className="min-w-0 flex-1 truncate text-xs text-slate-500">{preview.caption ?? ""}</p>
+              <div className="flex shrink-0 gap-2">
+                {preview.kind !== "video_link" && preview.image_url && onInsertAnnotated && (
+                  <button
+                    type="button"
+                    onClick={() => openStage(preview)}
+                    disabled={stageBusy}
+                    className="rounded-xl border border-teal-200 bg-teal-50 px-4 py-2 text-sm font-semibold text-teal-700 transition hover:bg-teal-100 disabled:opacity-50"
+                    title="전체화면으로 열고 펜/마우스로 그리며 설명 — '기록에 담기'로 그린 스냅샷 삽입"
+                  >
+                    {stageBusy ? "여는 중…" : "🖊 크게 열고 그리기"}
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={() => insert(preview)}
+                  className="rounded-xl bg-sky-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-sky-700"
+                >
+                  {preview.kind === "video_link" ? "기록에 넣기" : "에디터에 삽입"}
+                </button>
+              </div>
             </div>
           </div>
+        )}
+
+        {/* spec 026 스테이지 — 그리며 설명 → 기록에 담기 */}
+        {stageFile && (
+          <ImageAnnotator
+            file={stageFile}
+            saveLabel="기록에 담기"
+            onClose={() => setStageFile(null)}
+            onSave={(f) => {
+              setStageFile(null);
+              onInsertAnnotated?.(f);
+              onClose();
+            }}
+          />
         )}
       </div>
     </div>

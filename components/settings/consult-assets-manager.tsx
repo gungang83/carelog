@@ -4,6 +4,7 @@ import { useRef, useState, useTransition } from "react";
 import { CONSULT_ASSET_CATEGORIES, categoryLabel, type ConsultAsset } from "@/lib/consult-assets";
 import {
   createConsultAsset,
+  createConsultVideoAsset,
   updateConsultAsset,
   deleteConsultAsset,
 } from "@/app/actions/consult-assets";
@@ -12,9 +13,11 @@ import { compressImageFile } from "@/lib/image/optimize";
 // spec 025 — /settings "상담 자료" 섹션. 라이브러리 업로드·활성 토글·삭제 (owner/admin).
 export function ConsultAssetsManager({ initialAssets }: { initialAssets: ConsultAsset[] }) {
   const [assets, setAssets] = useState<ConsultAsset[]>(initialAssets);
+  const [mode, setMode] = useState<"image" | "video">("image"); // spec 026 — 영상 링크 등록
   const [file, setFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [title, setTitle] = useState("");
+  const [linkUrl, setLinkUrl] = useState("");
   const [category, setCategory] = useState<string>("general");
   const [caption, setCaption] = useState("");
   const [error, setError] = useState("");
@@ -30,7 +33,40 @@ export function ConsultAssetsManager({ initialAssets }: { initialAssets: Consult
     if (f && !title.trim()) setTitle(f.name.replace(/\.[^.]+$/, ""));
   };
 
+  const handleAddVideo = () => {
+    if (!title.trim()) {
+      setError("제목을 입력해 주세요.");
+      return;
+    }
+    if (!/^https?:\/\//i.test(linkUrl.trim())) {
+      setError("영상 링크는 http(s):// 로 시작하는 URL이어야 합니다.");
+      return;
+    }
+    setError("");
+    startTransition(async () => {
+      const r = await createConsultVideoAsset({
+        title: title.trim(),
+        link_url: linkUrl.trim(),
+        category,
+        caption: caption.trim(),
+      });
+      if (!r.ok) {
+        setError(r.message);
+        return;
+      }
+      setAssets((prev) => [r.asset, ...prev]);
+      setTitle("");
+      setLinkUrl("");
+      setCaption("");
+      setCategory("general");
+    });
+  };
+
   const handleAdd = () => {
+    if (mode === "video") {
+      handleAddVideo();
+      return;
+    }
     if (!file) {
       setError("이미지를 선택해 주세요.");
       return;
@@ -92,27 +128,60 @@ export function ConsultAssetsManager({ initialAssets }: { initialAssets: Consult
     <div className="space-y-4">
       {/* 업로드 폼 */}
       <div className="space-y-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-        <h3 className="text-sm font-semibold text-slate-700">새 자료 등록</h3>
+        <div className="flex items-center gap-2">
+          <h3 className="text-sm font-semibold text-slate-700">새 자료 등록</h3>
+          <div className="ml-1 flex gap-1">
+            {(["image", "video"] as const).map((m) => (
+              <button
+                key={m}
+                type="button"
+                onClick={() => {
+                  setMode(m);
+                  setError("");
+                }}
+                className={`rounded-full px-2.5 py-1 text-xs font-medium transition ${
+                  mode === m ? "bg-sky-600 text-white" : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                }`}
+              >
+                {m === "image" ? "이미지" : "▶ 영상 링크"}
+              </button>
+            ))}
+          </div>
+        </div>
         <div className="flex flex-wrap items-start gap-3">
-          <button
-            type="button"
-            onClick={() => fileRef.current?.click()}
-            className="flex h-24 w-24 shrink-0 items-center justify-center overflow-hidden rounded-xl border-2 border-dashed border-slate-300 text-xs text-slate-400 transition hover:border-sky-400 hover:text-sky-600"
-          >
-            {previewUrl ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img src={previewUrl} alt="미리보기" className="h-full w-full object-cover" />
-            ) : (
-              "이미지 선택"
-            )}
-          </button>
+          {mode === "image" ? (
+            <button
+              type="button"
+              onClick={() => fileRef.current?.click()}
+              className="flex h-24 w-24 shrink-0 items-center justify-center overflow-hidden rounded-xl border-2 border-dashed border-slate-300 text-xs text-slate-400 transition hover:border-sky-400 hover:text-sky-600"
+            >
+              {previewUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={previewUrl} alt="미리보기" className="h-full w-full object-cover" />
+              ) : (
+                "이미지 선택"
+              )}
+            </button>
+          ) : (
+            <div className="flex h-24 w-24 shrink-0 items-center justify-center rounded-xl bg-slate-800 text-3xl text-white">
+              ▶
+            </div>
+          )}
           <div className="min-w-[14rem] flex-1 space-y-2">
             <input
               value={title}
               onChange={(e) => setTitle(e.target.value)}
-              placeholder="제목 (예: 임플란트 시술 단계)"
+              placeholder={mode === "image" ? "제목 (예: 임플란트 시술 단계)" : "제목 (예: 신경치료 과정 안내 영상)"}
               className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm outline-none focus:border-sky-500"
             />
+            {mode === "video" && (
+              <input
+                value={linkUrl}
+                onChange={(e) => setLinkUrl(e.target.value)}
+                placeholder="영상 링크 (예: https://youtu.be/…) — 외부 콘텐츠는 링크만"
+                className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm outline-none focus:border-sky-500"
+              />
+            )}
             <div className="flex gap-2">
               <select
                 value={category}
@@ -169,8 +238,14 @@ export function ConsultAssetsManager({ initialAssets }: { initialAssets: Consult
                 a.active ? "border-slate-200" : "border-slate-100 opacity-60"
               }`}
             >
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={a.image_url} alt={a.title} loading="lazy" className="h-28 w-full object-cover" />
+              {a.kind === "video_link" || !a.image_url ? (
+                <div className="flex h-28 w-full items-center justify-center bg-slate-800 text-3xl text-white">
+                  ▶
+                </div>
+              ) : (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={a.image_url} alt={a.title} loading="lazy" className="h-28 w-full object-cover" />
+              )}
               <div className="space-y-1.5 p-2.5">
                 <p className="truncate text-xs font-medium text-slate-800" title={a.title}>
                   {a.title}

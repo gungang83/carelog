@@ -44,14 +44,52 @@ function alignStyle(align: ImgAlign): string {
 }
 
 // ── Resizable image node view (React component) ───────────────
-function ResizableImageView({ node, updateAttributes, selected }: NodeViewProps) {
+function ResizableImageView({ node, updateAttributes, selected, editor, getPos }: NodeViewProps) {
   const imgRef = useRef<HTMLImageElement>(null);
+  const [stageFile, setStageFile] = useState<File | null>(null); // spec 026 스테이지(다시 열어 그리기)
+  const [stageBusy, setStageBusy] = useState(false);
   const { src, alt, width, align } = node.attrs as {
     src: string;
     alt: string;
     width: number | null;
     align: ImgAlign;
   };
+
+  // spec 026 — 기록 속 이미지를 스테이지로 크게 열어 그리며 설명 → "기록에 담기"로 스냅샷 추가
+  async function openStage() {
+    if (stageBusy) return;
+    setStageBusy(true);
+    try {
+      const res = await fetch(src);
+      const blob = await res.blob();
+      setStageFile(new File([blob], "stage.webp", { type: blob.type || "image/webp" }));
+    } catch {
+      alert("이미지를 열지 못했습니다. 다시 시도해 주세요.");
+    } finally {
+      setStageBusy(false);
+    }
+  }
+
+  async function handleStageSave(f: File) {
+    setStageFile(null);
+    setStageBusy(true);
+    try {
+      const url = await uploadImage(f);
+      const pos = typeof getPos === "function" ? getPos() : null;
+      if (pos != null) {
+        editor
+          .chain()
+          .insertContentAt(pos + node.nodeSize, { type: "image", attrs: { src: url, alt: alt ?? "" } })
+          .run();
+      } else {
+        editor.chain().focus().setImage({ src: url }).run();
+      }
+    } catch {
+      alert("스냅샷 저장에 실패했습니다. 다시 시도해 주세요.");
+    } finally {
+      setStageBusy(false);
+    }
+  }
 
   function onResizeStart(e: React.MouseEvent) {
     e.preventDefault();
@@ -136,7 +174,36 @@ function ResizableImageView({ node, updateAttributes, selected }: NodeViewProps)
           {alignBtn("left", "⬅ 글감싸기", "왼쪽 배치 — 오른쪽으로 글이 감싸요 (2장 연속이면 나란히)")}
           {alignBtn("center", "가운데", "가운데 단독 배치")}
           {alignBtn("right", "글감싸기 ➡", "오른쪽 배치 — 왼쪽으로 글이 감싸요")}
+          <button
+            type="button"
+            title="크게 열어 그리며 설명 — '기록에 담기'로 그린 스냅샷 추가 (spec 026 스테이지)"
+            onMouseDown={(e) => {
+              e.preventDefault();
+              openStage();
+            }}
+            style={{
+              padding: "2px 6px",
+              fontSize: "11px",
+              fontWeight: 600,
+              borderRadius: "4px",
+              border: "none",
+              cursor: "pointer",
+              background: "#0f766e",
+              color: "#fff",
+            }}
+          >
+            {stageBusy ? "여는 중…" : "🖊 크게"}
+          </button>
         </div>
+      )}
+      {/* spec 026 스테이지 — 전체화면 그리기(주석 도구 재사용) */}
+      {stageFile && (
+        <ImageAnnotator
+          file={stageFile}
+          saveLabel="기록에 담기"
+          onClose={() => setStageFile(null)}
+          onSave={handleStageSave}
+        />
       )}
       {/* Resize handle */}
       <div
@@ -326,15 +393,26 @@ function RichTextEditor({ value, onChange, placeholder }, ref) {
     }
   }
 
-  function insertAsset(a: { image_url: string; title: string; caption: string | null }) {
+  function insertAsset(a: {
+    kind: "image" | "video_link";
+    image_url: string | null;
+    link_url: string | null;
+    title: string;
+    caption: string | null;
+  }) {
     if (!editor) return;
-    editor.chain().focus().setImage({ src: a.image_url, alt: a.title }).run();
+    const esc = (s: string) =>
+      s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    if (a.kind === "video_link" && a.link_url) {
+      // 영상은 링크로 기록에 담는다(spec 026) — 표시에서 자동 링크화, 환자 포털에서 클릭 시청.
+      editor.chain().focus().insertContent(`<p>▶ ${esc(a.title)} (영상): ${a.link_url}</p>`).run();
+    } else if (a.image_url) {
+      editor.chain().focus().setImage({ src: a.image_url, alt: a.title }).run();
+    } else {
+      return;
+    }
     if (a.caption) {
-      const esc = a.caption
-        .replace(/&/g, "&amp;")
-        .replace(/</g, "&lt;")
-        .replace(/>/g, "&gt;");
-      editor.chain().focus().insertContent(`<p>${esc}</p>`).run();
+      editor.chain().focus().insertContent(`<p>${esc(a.caption)}</p>`).run();
     }
   }
 
@@ -534,8 +612,14 @@ function RichTextEditor({ value, onChange, placeholder }, ref) {
         />
       )}
 
-      {/* spec 025 — 상담 자료 픽커 */}
-      {showPicker && <AssetPicker onInsert={insertAsset} onClose={() => setShowPicker(false)} />}
+      {/* spec 025 — 상담 자료 픽커 (+spec 026 스테이지: 크게 열고 그려서 담기) */}
+      {showPicker && (
+        <AssetPicker
+          onInsert={insertAsset}
+          onInsertAnnotated={handleAnnotateSave}
+          onClose={() => setShowPicker(false)}
+        />
+      )}
     </div>
   );
 });

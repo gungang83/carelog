@@ -654,3 +654,10 @@ alter table public.patient_push_subscriptions enable row level security;
 -- 배선: app/actions/consult-assets.ts, /settings 상담 자료 섹션, components/consult-assets/asset-picker.tsx,
 --   rich-text-editor.tsx(픽커·전체화면·이미지 정렬 data-align).
 -- ───────────────────────────────────────────────────────────────────────────
+
+-- ───────────────────────────────────────────────────────────────────────────
+-- 상담 스테이지 + 영상 링크 (spec 026-consult-stage) — migration: 20260708000002_consult_assets_video.sql
+-- consult_assets 확장: kind text default 'image' (image|video_link) + link_url text, image_url null 허용.
+-- 스테이지(코드): 자료/기록 이미지를 전체화면으로 열어 그리며 설명(ImageAnnotator 재사용)
+--   → '기록에 담기'로 그린 스냅샷을 에디터에 삽입. 영상은 링크로 기록에 담아 환자 전달(표시 시 자동 링크화).
+-- ───────────────────────────────────────────────────────────────────────────

@@ -9,7 +9,7 @@ import { ConsultationEditor } from "@/components/chair/consultation-editor";
 import { type RichTextEditorHandle } from "@/components/rich-text-editor";
 import { ChairPatientSearch } from "@/components/chair/chair-patient-search";
 import { ReviewFlags } from "@/components/consultation/review-flags";
-import { optimizeContentHtml } from "@/lib/image/optimize";
+import { renderContentHtml } from "@/lib/content-html";
 import { stripMarkdownMarkers } from "@/lib/summary-format";
 import { updateChairRecordContent, deleteChairRecord } from "@/app/actions/chairs";
 import { deleteConsultation } from "@/app/actions/consultations";
@@ -196,7 +196,7 @@ export function ConsultationCard({
             className={`mb-3 cursor-pointer rounded-xl px-2 py-1.5 -mx-2 transition ${linked ? "hover:bg-emerald-50/60" : "hover:bg-amber-50/60"}`}>
             {isViewing ? (
               <div className="rich-content text-sm leading-6 text-slate-800"
-                dangerouslySetInnerHTML={{ __html: optimizeContentHtml(stripMarkdownMarkers(record.content) || "<p>내용 없음</p>") }} />
+                dangerouslySetInnerHTML={{ __html: renderContentHtml(record.content) || "<p>내용 없음</p>" }} />
             ) : (
               <p className="text-sm leading-relaxed text-slate-700">
                 {preview || "내용 없음"}{charCount > 120 && <span className="text-slate-400">…</span>}

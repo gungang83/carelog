@@ -10,8 +10,8 @@ import {
   updateConsultationContent,
 } from "@/app/actions/consultations";
 import { CopyAllButton } from "@/components/copy-all-button";
-import { optimizeContentHtml, optimizeStorageUrl } from "@/lib/image/optimize";
-import { stripMarkdownMarkers } from "@/lib/summary-format";
+import { optimizeStorageUrl } from "@/lib/image/optimize";
+import { renderContentHtml } from "@/lib/content-html";
 import {
   searchPatientsForChair,
   unlinkChairRecord,
@@ -557,7 +557,7 @@ export function ConsultationHistory({ consultations, patientId }: Props) {
               {/* 본문 */}
               <div
                 className="rich-content mt-3 text-sm leading-6 text-slate-800"
-                dangerouslySetInnerHTML={{ __html: optimizeContentHtml(stripMarkdownMarkers(c.content)) }}
+                dangerouslySetInnerHTML={{ __html: renderContentHtml(c.content) }}
               />
 
               {/* 전체 복사 — 덴트웹 등 외부 EMR 붙여넣기용 */}

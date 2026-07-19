@@ -12,7 +12,7 @@ import type { ConsultAsset } from "@/lib/consult-assets";
 
 const BUCKET = "consult-assets";
 const COLS =
-  "id, institution_id, title, category, image_url, caption, display_order, active, created_by, created_at";
+  "id, institution_id, kind, title, category, image_url, link_url, caption, display_order, active, created_by, created_at";
 
 type Ok = { ok: true } | { ok: false; message: string };
 
@@ -119,6 +119,43 @@ export async function createConsultAsset(formData: FormData): Promise<
   if (error || !data) {
     return { ok: false, message: error?.message ?? "등록에 실패했습니다." };
   }
+
+  revalidatePath("/settings");
+  return { ok: true, asset: data as ConsultAsset };
+}
+
+/** 영상 링크 자산 등록(spec 026) — 파일 없음, 외부 URL만. */
+export async function createConsultVideoAsset(input: {
+  title: string;
+  link_url: string;
+  category?: string;
+  caption?: string;
+}): Promise<{ ok: true; asset: ConsultAsset } | { ok: false; message: string }> {
+  const guard = await requireOwnerAdmin();
+  if (!guard.ok) return guard;
+
+  const title = input.title.trim();
+  const linkUrl = input.link_url.trim();
+  if (!title) return { ok: false, message: "제목을 입력해 주세요." };
+  if (!/^https?:\/\//i.test(linkUrl)) {
+    return { ok: false, message: "영상 링크는 http(s):// 로 시작하는 URL이어야 합니다." };
+  }
+
+  const admin = createAdminSupabaseClient();
+  const { data, error } = await admin
+    .from("consult_assets")
+    .insert({
+      institution_id: guard.institutionId,
+      kind: "video_link",
+      title,
+      category: input.category?.trim() || "general",
+      link_url: linkUrl,
+      caption: input.caption?.trim() || null,
+      created_by: guard.name,
+    })
+    .select(COLS)
+    .single();
+  if (error || !data) return { ok: false, message: error?.message ?? "등록에 실패했습니다." };
 
   revalidatePath("/settings");
   return { ok: true, asset: data as ConsultAsset };

@@ -17,12 +17,16 @@ export function categoryLabel(id: string): string {
   return CATEGORY_MAP.get(id as ConsultAssetCategory) ?? "기타";
 }
 
+export type ConsultAssetKind = "image" | "video_link";
+
 export type ConsultAsset = {
   id: string;
   institution_id: string | null; // null = 전역(Carelog 제공, 후속)
+  kind: ConsultAssetKind; // image | video_link(외부 영상 링크, spec 026)
   title: string;
   category: string;
-  image_url: string;
+  image_url: string | null; // image 필수 / video_link는 null 가능
+  link_url: string | null; // video_link 필수
   caption: string | null;
   display_order: number;
   active: boolean;

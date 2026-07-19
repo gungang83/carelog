@@ -38,9 +38,11 @@ type Props = {
   file: File;
   onClose: () => void;
   onSave: (file: File) => void;
+  /** 저장 버튼 라벨(기본 "저장") — 상담 스테이지(spec 026)에서 "기록에 담기"로 사용 */
+  saveLabel?: string;
 };
 
-export function ImageAnnotator({ file, onClose, onSave }: Props) {
+export function ImageAnnotator({ file, onClose, onSave, saveLabel }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const wrapRef = useRef<HTMLDivElement>(null);
 
@@ -310,7 +312,7 @@ export function ImageAnnotator({ file, onClose, onSave }: Props) {
               onClick={handleSave}
               className="rounded-lg bg-sky-600 px-4 py-1.5 text-xs font-semibold text-white hover:bg-sky-700"
             >
-              저장
+              {saveLabel ?? "저장"}
             </button>
           </div>
         </div>
