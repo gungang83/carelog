@@ -65,6 +65,50 @@ export function AssetPicker({
     onClose();
   };
 
+  // spec 028 확장 — 빈 캔버스 템플릿(백지·모눈·줄노트): 클라에서 생성해 바로 스테이지로.
+  // 스토리지·DB 불필요 — '기록에 담기' 시점에만 그린 스냅샷이 업로드된다.
+  const openBlankCanvas = (tpl: "blank" | "grid" | "lined") => {
+    const W = 1600;
+    const H = 1200;
+    const canvas = document.createElement("canvas");
+    canvas.width = W;
+    canvas.height = H;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+    ctx.fillStyle = "#ffffff";
+    ctx.fillRect(0, 0, W, H);
+    ctx.strokeStyle = "#e2e8f0";
+    ctx.lineWidth = 1;
+    if (tpl === "grid") {
+      for (let x = 0; x <= W; x += 50) {
+        ctx.beginPath();
+        ctx.moveTo(x + 0.5, 0);
+        ctx.lineTo(x + 0.5, H);
+        ctx.stroke();
+      }
+      for (let y = 0; y <= H; y += 50) {
+        ctx.beginPath();
+        ctx.moveTo(0, y + 0.5);
+        ctx.lineTo(W, y + 0.5);
+        ctx.stroke();
+      }
+    } else if (tpl === "lined") {
+      for (let y = 80; y <= H; y += 70) {
+        ctx.beginPath();
+        ctx.moveTo(40, y + 0.5);
+        ctx.lineTo(W - 40, y + 0.5);
+        ctx.stroke();
+      }
+    }
+    canvas.toBlob(
+      (blob) => {
+        if (blob) setStageFile(new File([blob], `${tpl}.webp`, { type: blob.type || "image/webp" }));
+      },
+      "image/webp",
+      0.9,
+    );
+  };
+
   // spec 026 — 스테이지로 크게 열기(그리며 설명 → 기록에 담기)
   const openStage = async (a: ConsultAsset) => {
     if (!a.image_url || stageBusy) return;
@@ -151,6 +195,30 @@ export function AssetPicker({
             </button>
           ))}
         </div>
+
+        {/* 빈 캔버스 — 바로 스테이지로 열어 그리기 (spec 028 확장) */}
+        {onInsertAnnotated && (
+          <div className="flex flex-wrap items-center gap-1.5 border-b border-slate-100 bg-slate-50/60 px-4 py-2">
+            <span className="text-[11px] font-semibold text-slate-500">🗒 빈 캔버스에 그리기:</span>
+            {(
+              [
+                { tpl: "blank", label: "백지" },
+                { tpl: "grid", label: "모눈" },
+                { tpl: "lined", label: "줄노트" },
+              ] as const
+            ).map(({ tpl, label }) => (
+              <button
+                key={tpl}
+                type="button"
+                onClick={() => openBlankCanvas(tpl)}
+                className="rounded-full border border-teal-200 bg-teal-50 px-2.5 py-1 text-xs font-medium text-teal-700 transition hover:bg-teal-100"
+                title={`${label}를 전체화면으로 열어 그리며 설명 — '기록에 담기'로 삽입`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        )}
 
         {/* 본문 */}
         <div className="min-h-0 flex-1 overflow-y-auto p-4">

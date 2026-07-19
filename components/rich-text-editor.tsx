@@ -13,6 +13,7 @@ import Placeholder from "@tiptap/extension-placeholder";
 import Image from "@tiptap/extension-image";
 import { ImageAnnotator } from "@/components/image-annotator";
 import { AssetPicker } from "@/components/consult-assets/asset-picker";
+import { EstimateBuilder } from "@/components/estimate/estimate-builder";
 import { createBrowserSupabaseClient } from "@/lib/supabase/client";
 import { compressImageFile } from "@/lib/image/optimize";
 
@@ -302,6 +303,7 @@ function RichTextEditor({ value, onChange, placeholder }, ref) {
   const [annotateFile, setAnnotateFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
   const [showPicker, setShowPicker] = useState(false); // spec 025 자료 픽커
+  const [showEstimate, setShowEstimate] = useState(false); // spec 028 견적 빌더
   const [fullscreen, setFullscreen] = useState(false); // spec 025 상담 캔버스(전체화면)
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -541,11 +543,20 @@ function RichTextEditor({ value, onChange, placeholder }, ref) {
         {/* spec 025 — 상담 자료 라이브러리 픽커 */}
         <button
           type="button"
-          title="상담 자료 — 미리 등록한 이미지를 골라 삽입"
+          title="상담 자료 — 미리 등록한 이미지를 골라 삽입, 크게 열고 그리기·빈 캔버스"
           onClick={() => setShowPicker(true)}
           className={BTN}
         >
           📚 자료
+        </button>
+        {/* spec 028 — 치료비 견적 빌더 */}
+        <button
+          type="button"
+          title="치료비 견적 — 항목·수량·금액을 골라 [치료비 견적] 블록으로 삽입"
+          onClick={() => setShowEstimate(true)}
+          className={BTN}
+        >
+          ₩ 견적
         </button>
 
         <span className="mx-1 h-4 w-px bg-slate-200" />
@@ -612,12 +623,29 @@ function RichTextEditor({ value, onChange, placeholder }, ref) {
         />
       )}
 
-      {/* spec 025 — 상담 자료 픽커 (+spec 026 스테이지: 크게 열고 그려서 담기) */}
+      {/* spec 025 — 상담 자료 픽커 (+spec 026 스테이지: 크게 열고 그려서 담기, 빈 캔버스) */}
       {showPicker && (
         <AssetPicker
           onInsert={insertAsset}
           onInsertAnnotated={handleAnnotateSave}
           onClose={() => setShowPicker(false)}
+        />
+      )}
+
+      {/* spec 028 — 견적 빌더: [치료비 견적] 평문 블록 삽입 */}
+      {showEstimate && (
+        <EstimateBuilder
+          onInsert={(text) => {
+            if (!editor) return;
+            const esc = (s: string) =>
+              s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+            const html = text
+              .split("\n")
+              .map((line) => `<p>${esc(line)}</p>`)
+              .join("");
+            editor.chain().focus().insertContent(html).run();
+          }}
+          onClose={() => setShowEstimate(false)}
         />
       )}
     </div>

@@ -734,3 +734,15 @@ AI 전사 성공(app/actions/transcribe.ts: transcribeEngine·transcribeAndSumma
       (카드·환자상세·포털 공용 — 맨 URL 자동 링크화, 전체복사는 URL 텍스트 그대로)
 ```
 - 3환경(모니터+마우스/태블릿+펜/상담실 키보드) 단일 스테이지 대응 — 기기별 화면 없음.
+
+## 견적 빌더 (spec 028-estimate-builder)
+
+```
+[프리셋] /settings 치료 항목·수가(owner/admin) → treatment_items (참고 단가)
+[빌더] rich-text-editor 툴바 '₩ 견적' → components/estimate/estimate-builder.tsx
+  (프리셋 탭→행 추가 · 수량 스텝퍼 · 직접 입력 · 할인=음수 단가 · 합계 자동 · 메모)
+  → lib/treatment-items.ts formatEstimateBlock → [치료비 견적] 평문 블록을 <p>줄로 삽입
+      (표 아님 — 차트 전체복사 유지·[라벨] 문법 일관·후속 데이터화 파싱 가능. 형식 고정)
+[빈 캔버스] 픽커 상단 백지/모눈/줄노트 — 클라 canvas 생성 → 바로 스테이지(그리기) → 담기 시에만 업로드
+[동의서] consult_assets 카테고리 'consent' — (a안) 스테이지에서 설명·펜 서명 → 기록에 담기(spec 026 §6.5)
+```

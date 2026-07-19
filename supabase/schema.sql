@@ -661,3 +661,16 @@ alter table public.patient_push_subscriptions enable row level security;
 -- 스테이지(코드): 자료/기록 이미지를 전체화면으로 열어 그리며 설명(ImageAnnotator 재사용)
 --   → '기록에 담기'로 그린 스냅샷을 에디터에 삽입. 영상은 링크로 기록에 담아 환자 전달(표시 시 자동 링크화).
 -- ───────────────────────────────────────────────────────────────────────────
+
+-- ───────────────────────────────────────────────────────────────────────────
+-- 치료 항목 사전 (spec 028-estimate-builder) — migration: 20260708000003_treatment_items.sql
+-- 견적 빌더('₩ 견적')의 기관 프리셋. 견적 자체는 DB 저장 없음 — 본문 [치료비 견적] 평문 블록이 기록.
+--   create table public.treatment_items(
+--     id uuid pk, institution_id uuid not null→institutions cascade,
+--     name text not null, price integer default 0,  -- 참고 단가(원), 빌더에서 건별 수정
+--     display_order int, active bool, created_at);
+-- RLS: read=멤버십(모든 직원이 빌더 사용) / write=owner·admin 멤버십.
+-- 배선: app/actions/treatment-items.ts, /settings 치료 항목·수가, components/estimate/estimate-builder.tsx,
+--   lib/treatment-items.ts formatEstimateBlock(형식 고정 — 후속 상담 데이터화 파싱 대상).
+-- consult_assets 카테고리에 'consent'(동의서) 추가 — 코드 config(스키마 변경 없음).
+-- ───────────────────────────────────────────────────────────────────────────

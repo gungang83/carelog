@@ -15,6 +15,8 @@ import { ChairSettings } from "@/components/settings/chair-settings";
 import { ClinicMemberSettings } from "@/components/settings/clinic-member-settings";
 import { ConsultAssetsManager } from "@/components/settings/consult-assets-manager";
 import { listConsultAssetsForManage } from "@/app/actions/consult-assets";
+import { TreatmentItemsManager } from "@/components/settings/treatment-items-manager";
+import { listTreatmentItemsForManage } from "@/app/actions/treatment-items";
 
 export default async function SettingsPage() {
   const supabase = await createServerSupabaseClient();
@@ -39,6 +41,7 @@ export default async function SettingsPage() {
       getMyInstitutionPlan(),
       isOwnerOrAdmin ? listConsultAssetsForManage() : Promise.resolve([]),
     ]);
+  const treatmentItems = isOwnerOrAdmin ? await listTreatmentItemsForManage() : [];
   const members = staffResult?.ok ? staffResult.members : [];
 
   return (
@@ -99,6 +102,18 @@ export default async function SettingsPage() {
             </p>
           </div>
           <ConsultAssetsManager initialAssets={consultAssets} />
+        </section>
+      )}
+
+      {isOwnerOrAdmin && (
+        <section className="space-y-4">
+          <div>
+            <h2 className="text-base font-semibold text-slate-800">치료 항목 · 수가</h2>
+            <p className="mt-0.5 text-xs text-slate-500">
+              상담 편집기의 &apos;₩ 견적&apos; 빌더에서 쓰는 프리셋입니다. 단가는 참고값이에요.
+            </p>
+          </div>
+          <TreatmentItemsManager initialItems={treatmentItems} />
         </section>
       )}
 

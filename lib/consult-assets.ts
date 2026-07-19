@@ -7,6 +7,7 @@ export const CONSULT_ASSET_CATEGORIES = [
   { id: "perio", label: "치주" },
   { id: "prevent", label: "예방" },
   { id: "appliance", label: "장치" },
+  { id: "consent", label: "동의서" }, // spec 026 P3-A(a안) — 스테이지에서 설명·펜 서명 → 기록에 담기
   { id: "general", label: "기타" },
 ] as const;
 
