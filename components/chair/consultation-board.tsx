@@ -378,13 +378,15 @@ function BoardContent({
 
   // 상담 종료 및 저장(spec 020 서버 비동기 전사) — 음성만 서버에 올리고 즉시 종료.
   // 전사·요약은 서버 백그라운드 워커가 처리 → 탭 닫거나 폰 잠가도 완료되면 알림이 온다.
-  const handleStopAndSave = () => {
+  // spec 027 — allowUnassigned: 방치 자동 저장 시 체어 미선택이면 '미지정'(chair_id null)으로 저장.
+  //   (보드는 최근 체어를 자동 선택하므로, 미선택 = 첫 브라우저/기기 케이스)
+  const handleStopAndSave = (opts?: { allowUnassigned?: boolean }) => {
     setSaveMsg("");
-    if (!selectedChair) {
+    if (!selectedChair && !opts?.allowUnassigned) {
       setSaveMsg("체어를 먼저 선택하면 저장돼요.");
       return;
     }
-    const chair = selectedChair;
+    const chair = selectedChair; // null 허용(미지정)
     const prefixHtml = editorRef.current?.getHTML() ?? ""; // 직접 입력해둔 본문 보존
     setAutoSaving(true);
 
@@ -409,7 +411,7 @@ function BoardContent({
 
       const fd = new FormData();
       fd.append("audio", blob, "recording.webm");
-      fd.append("chairId", chair.id);
+      fd.append("chairId", chair?.id ?? ""); // 빈 값 = 미지정(spec 027)
       fd.append("engine", engine);
       fd.append("prescriptions", JSON.stringify(prescriptions));
       fd.append("participants", JSON.stringify(participants));
@@ -424,7 +426,7 @@ function BoardContent({
           liveTextsRef.current = [];
           liveTasksRef.current = [];
           void clearDraft();
-          setLastChairId(chair.id);
+          if (chair) setLastChairId(chair.id);
           resetChair(DRAFT_CHAIR_KEY);
           setEditText("");
           editorRef.current?.clear();
@@ -436,13 +438,13 @@ function BoardContent({
           setEngine("basic");
           setAutoSaving(false);
           resetDefaults();
-          await refreshUnlinkedCount(chair.id);
+          if (chair) await refreshUnlinkedCount(chair.id);
           closeOverlay();
           router.refresh();
         } else {
           setAutoSaving(false);
           setMicError(`백그라운드 전사 등록 실패: ${r.message} — 녹음은 보관됐어요. '상담 종료'로 다시 시도해 주세요.`);
-          void reportAutoSaveFailure({ reason: "enqueue", message: r.message, chairId: chair.id });
+          void reportAutoSaveFailure({ reason: "enqueue", message: r.message, chairId: chair?.id ?? null });
         }
       });
     };
@@ -451,25 +453,14 @@ function BoardContent({
 
   // spec 027 — 방치 자동 종료: 가드(RecordingGuard)가 호출할 '종료 및 저장'을 등록.
   // 보드는 레이아웃 상시 마운트라 녹음 중이면 항상 등록되어 있다.
-  const stopSaveRef = useRef<() => void>(() => {});
+  const stopSaveRef = useRef<(opts?: { allowUnassigned?: boolean }) => void>(() => {});
   stopSaveRef.current = handleStopAndSave;
   useEffect(() => {
     if (status !== "recording" && status !== "paused") return;
-    registerAutoFinalize(DRAFT_CHAIR_KEY, () => {
-      if (!selectedChair) {
-        // 체어 미선택 방치 — 최근 체어(없으면 첫 체어)로 자동 지정 후 저장(기록 유실 방지).
-        const last = getLastChairId();
-        const fb = chairs.find((c) => c.id === last) ?? chairs[0];
-        if (fb) {
-          setSelectedChair({ id: fb.id, name: fb.name });
-          setTimeout(() => stopSaveRef.current(), 300); // 상태 반영 후 실행
-          return;
-        }
-      }
-      stopSaveRef.current();
-    });
+    // 체어 미선택이면 '미지정'(chair_id null)으로 저장 — 임의 체어 지정하지 않는다(대표 확정).
+    registerAutoFinalize(DRAFT_CHAIR_KEY, () => stopSaveRef.current({ allowUnassigned: true }));
     return () => registerAutoFinalize(DRAFT_CHAIR_KEY, null);
-  }, [status, selectedChair, chairs, registerAutoFinalize]);
+  }, [status, registerAutoFinalize]);
 
   // 자동 저장 — 전사 완료 직후 호출. 실패는 비차단으로 로그 + 임시본 보존(복구 가능).
   const doAutoSave = async (engineUsed: string | null) => {
@@ -895,7 +886,7 @@ function BoardContent({
                   </button>
                   <button
                     type="button"
-                    onClick={handleStopAndSave}
+                    onClick={() => handleStopAndSave()}
                     disabled={!selectedChair}
                     title={!selectedChair ? "체어를 먼저 선택하면 종료와 동시에 저장돼요" : undefined}
                     className="rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"

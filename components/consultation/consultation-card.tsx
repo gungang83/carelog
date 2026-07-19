@@ -66,7 +66,8 @@ export function ConsultationCard({
   const [isPending, startTransition] = useTransition();
   const editorRef = useRef<RichTextEditorHandle | null>(null);
 
-  const chairName = (id: string | null) => (id ? chairs.find((c) => c.id === id)?.name ?? "체어" : "체어");
+  const chairName = (id: string | null) =>
+    id ? (chairs.find((c) => c.id === id)?.name ?? "체어") : "미지정"; // spec 027 — 체어 미지정 저장 표시
   const plainContent = stripMarkdownMarkers(stripHtml(record.content));
   const preview = plainContent.slice(0, 120);
   const charCount = plainContent.length;

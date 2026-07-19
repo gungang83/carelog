@@ -32,14 +32,18 @@ export async function enqueueServerTranscription(formData: FormData): Promise<En
   const audio = formData.get("audio") as File | null;
   if (!audio || audio.size < 1024) return { ok: false, message: "녹음이 비어 있습니다." };
 
-  // 체어 기관 검증
-  const { data: chair } = await supabase
-    .from("chairs")
-    .select("id")
-    .eq("id", chairId)
-    .eq("institution_id", institutionId)
-    .maybeSingle();
-  if (!chair) return { ok: false, message: "유효하지 않은 체어입니다." };
+  // 체어 기관 검증 — spec 027: 체어 미지정(빈 값) 허용(방치 자동 저장 등). chair_id null로 저장.
+  let validChairId: string | null = null;
+  if (chairId) {
+    const { data: chair } = await supabase
+      .from("chairs")
+      .select("id")
+      .eq("id", chairId)
+      .eq("institution_id", institutionId)
+      .maybeSingle();
+    if (!chair) return { ok: false, message: "유효하지 않은 체어입니다." };
+    validChairId = chairId;
+  }
 
   let prescriptions: string[] = [];
   let participants: { id: string; name: string; role: string | null }[] = [];
@@ -63,7 +67,7 @@ export async function enqueueServerTranscription(formData: FormData): Promise<En
     .insert({
       institution_id: institutionId,
       patient_id: null,
-      chair_id: chairId,
+      chair_id: validChairId,
       content: placeholder,
       prescriptions,
       participants,
@@ -79,13 +83,15 @@ export async function enqueueServerTranscription(formData: FormData): Promise<En
     return { ok: false, message: `저장 준비 실패: ${error?.message ?? "원인 미상"}` };
   }
 
-  await supabase.from("chair_audit_logs").insert({
-    institution_id: institutionId,
-    chair_id: chairId,
-    consultation_id: consultation.id,
-    event_type: "record_created",
-    actor_user_id: user.id,
-  });
+  if (validChairId) {
+    await supabase.from("chair_audit_logs").insert({
+      institution_id: institutionId,
+      chair_id: validChairId,
+      consultation_id: consultation.id,
+      event_type: "record_created",
+      actor_user_id: user.id,
+    });
+  }
 
   // 2) 음성 업로드(기존 경로 재사용 — audio_path 세팅). 실패 시 job 등록 중단(전사 불가).
   const up = await uploadConsultationAudio(consultation.id, formData);

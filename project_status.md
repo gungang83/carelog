@@ -13,7 +13,7 @@
 
 - **RecordingGuard**(레이아웃 상시, `recording-guard.tsx`): 전역 플로팅 필(세션명·경과·무활동 2분↑ 표시·탭하면 복귀) + 전역 beforeunload + 탭 제목 🔴 + **Document PiP '항상 위' 미니창**(데스크톱 크롬 — 차트 프로그램 위 상주).
 - **방치 감시 2신호**: 입력 이벤트(스로틀) ∪ **마이크 음성 RMS**(AnalyserNode — 대화 중 오판 방지, 설정 on/off). 활동 시 타이머 리셋 + 경고 자동 해제. 일시정지 중은 감시 제외.
-- **자동 종료**: 무활동 idle분(기본 10) → 경고 모달+비프+OS 로컬알림 → grace분(기본 5) 카운트다운 → 무응답 시 등록 콜백 실행 — 보드(DRAFT)는 '종료 및 저장'(체어 미선택이면 최근 체어 자동 지정), 오버레이는 열려 있는 동안 '종료(전사)'. 폐기 아님 — 자동 저장된 기록은 이어서 수정 가능.
+- **자동 종료**: 무활동 idle분(기본 10) → 경고 모달+비프+OS 로컬알림 → grace분(기본 5) 카운트다운 → 무응답 시 등록 콜백 실행 — 보드(DRAFT)는 '종료 및 저장' — 체어 미선택이면 **'미지정'(chair_id null)으로 저장**(대표 확정: 임의 체어 지정 금지. 보드가 최근 체어를 자동 선택하므로 미선택=첫 브라우저/기기 케이스). 오버레이는 열려 있는 동안 '종료(전사)'. 폐기 아님 — 자동 저장된 기록은 이어서 수정 가능.
 - **Provider 확장**: startedAt·activeRecordingKeys·getStream·registerAutoFinalize/runAutoFinalize.
 - **설정**(`institutions.consult_settings` jsonb + /settings '상담 안전망', owner/admin): idle·grace·음성 감지.
 - **⑤ 저장 위치 안내**: 보드 에디터 상단 '💾 이 내용은 [체어] 상담 기록으로 저장됩니다'.
