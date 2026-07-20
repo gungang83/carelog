@@ -103,6 +103,16 @@ export const UPDATE_FEED: UpdateFeedEntry[] = [
     internal: "spec 026 P3-A · spec 028 확장 · 세션 66",
   },
   {
+    id: "2026-07-08-settings-ia",
+    date: "2026-07-08",
+    emoji: "⚙️",
+    title: "설정 화면이 찾기 쉬워졌어요",
+    items: [
+      "설정이 성격별 그룹(내 설정 · 상담 운영 · 직원 · 기관)으로 정리되고, 각 항목은 접혀 있어 제목만 훑어도 원하는 설정을 바로 찾을 수 있습니다.",
+    ],
+    internal: "세션 66 · EO spec-054 벤치마킹",
+  },
+  {
     id: "2026-07-08-recording-guard",
     date: "2026-07-08",
     emoji: "🔴",

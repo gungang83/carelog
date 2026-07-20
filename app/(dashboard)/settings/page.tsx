@@ -19,6 +19,10 @@ import { TreatmentItemsManager } from "@/components/settings/treatment-items-man
 import { listTreatmentItemsForManage } from "@/app/actions/treatment-items";
 import { ConsultSafetySettings } from "@/components/settings/consult-safety-settings";
 import { getConsultSettings } from "@/app/actions/consult-settings";
+import {
+  CollapsibleSection,
+  SettingsGroupHeader,
+} from "@/components/settings/collapsible-section";
 
 export default async function SettingsPage() {
   const supabase = await createServerSupabaseClient();
@@ -48,129 +52,122 @@ export default async function SettingsPage() {
   const members = staffResult?.ok ? staffResult.members : [];
 
   return (
-    <div className="mx-auto max-w-3xl space-y-8 px-4 py-10 sm:px-6">
-      <div>
+    <div className="mx-auto max-w-3xl space-y-3 px-4 py-10 sm:px-6">
+      <div className="pb-2">
         <h1 className="text-2xl font-bold text-slate-900">설정</h1>
         <p className="mt-1 text-sm text-slate-500">{institution.name}</p>
       </div>
 
+      {/* 세션 66 — EO spec-054 설정 IA 벤치마킹: 성격 기준 그룹 + 접이식 섹션(제목·부제 스캔) */}
+
+      <SettingsGroupHeader emoji="🙋" title="내 설정" desc="내 알림과 내 상담 기록" />
+
+      <CollapsibleSection emoji="🔔" title="알림" subtitle="웹 푸시 · 알림 수신 설정">
+        <NotificationSettings />
+      </CollapsibleSection>
+
+      <CollapsibleSection
+        emoji="📂"
+        title="내 상담 기록"
+        subtitle="내 환자 계정과 연결해 상담 기록 직접 받아보기"
+      >
+        <PatientAccountLink initialLinked={patientLinkStatus.ok && patientLinkStatus.linked} />
+      </CollapsibleSection>
+
       {isOwnerOrAdmin && (
-        <section className="space-y-3">
-          <h2 className="text-base font-semibold text-slate-800">일일 리포트</h2>
-          <a
-            href="/reports/daily/today"
-            className="flex items-center justify-between gap-3 rounded-2xl border border-sky-200 bg-sky-50 px-5 py-4 transition hover:bg-sky-100"
+        <>
+          <SettingsGroupHeader
+            emoji="🩺"
+            title="상담 운영"
+            desc="체어 · 참여자 · 상담 자료 · 견적 · 안전망"
+          />
+
+          <CollapsibleSection emoji="🪑" title="체어 관리" subtitle="체어 추가 · 이름 변경 · 사용 여부">
+            <ChairSettings initialChairs={chairs} />
+          </CollapsibleSection>
+
+          <CollapsibleSection
+            emoji="🧑‍⚕️"
+            title="멤버(참여자) 관리"
+            subtitle="상담 참여자 선택에 쓰는 우리 기관 명단"
           >
-            <div>
-              <p className="text-sm font-semibold text-sky-800">📊 우리 워크스페이스 일일 사용 리포트</p>
-              <p className="mt-0.5 text-xs text-sky-600">화면 사용·AI 사용량을 직원·기능별로. 매일 아침 알림으로도 받아요.</p>
+            <ClinicMemberSettings initialMembers={clinicMembers} />
+          </CollapsibleSection>
+
+          <CollapsibleSection
+            emoji="📚"
+            title="상담 자료"
+            subtitle="상담 편집기 '📚 자료' 라이브러리 — 설명 이미지 · 동의서 · 영상 링크"
+          >
+            <ConsultAssetsManager initialAssets={consultAssets} />
+          </CollapsibleSection>
+
+          <CollapsibleSection
+            emoji="₩"
+            title="치료 항목 · 수가"
+            subtitle="'₩ 견적' 빌더 프리셋 — 단가는 참고값, 견적마다 수정 가능"
+          >
+            <TreatmentItemsManager initialItems={treatmentItems} />
+          </CollapsibleSection>
+
+          <CollapsibleSection
+            emoji="🛟"
+            title="상담 안전망"
+            subtitle="녹음 방치 감지 경고 · 자동 저장 기준"
+          >
+            <ConsultSafetySettings initial={consultSettings} />
+          </CollapsibleSection>
+
+          <SettingsGroupHeader emoji="👥" title="직원 · 권한" desc="계정 권한 · 활성화 · 초대" />
+
+          <CollapsibleSection
+            emoji="👤"
+            title="직원 관리"
+            subtitle={`계정 ${members.length}명 — 권한 변경 · 활성화 · 초대`}
+          >
+            <StaffList members={members} currentUserId={user.id} currentRole={role} />
+            <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+              <h3 className="mb-3 text-sm font-semibold text-slate-700">직원 초대</h3>
+              <StaffInviteForm />
             </div>
-            <span className="shrink-0 text-sky-600">→</span>
-          </a>
-        </section>
+          </CollapsibleSection>
+        </>
       )}
 
-      <section className="space-y-4">
-        <h2 className="text-base font-semibold text-slate-800">요금제</h2>
-        <PlanSection currentPlan={plan} />
-      </section>
+      <SettingsGroupHeader emoji="🏥" title="기관 · 요금" desc="기관 정보 · 플랜 · 사용 리포트" />
 
       {role === "owner" && (
-        <section className="space-y-4">
-          <h2 className="text-base font-semibold text-slate-800">기관 프로필</h2>
+        <CollapsibleSection emoji="🏷" title="기관 프로필" subtitle="기관 이름 변경 (대표 전용)">
           <InstitutionNameForm currentName={institution.name} />
-        </section>
+        </CollapsibleSection>
       )}
 
-      {isOwnerOrAdmin && (
-        <section className="space-y-4">
-          <h2 className="text-base font-semibold text-slate-800">체어 관리</h2>
-          <ChairSettings initialChairs={chairs} />
-        </section>
-      )}
+      <CollapsibleSection emoji="💳" title="요금제" subtitle={`현재 플랜 확인`}>
+        <PlanSection currentPlan={plan} />
+      </CollapsibleSection>
 
       {isOwnerOrAdmin && (
-        <section className="space-y-4">
-          <h2 className="text-base font-semibold text-slate-800">멤버 관리</h2>
-          <ClinicMemberSettings initialMembers={clinicMembers} />
-        </section>
-      )}
-
-      {isOwnerOrAdmin && (
-        <section className="space-y-4">
-          <div>
-            <h2 className="text-base font-semibold text-slate-800">상담 자료</h2>
-            <p className="mt-0.5 text-xs text-slate-500">
-              자주 쓰는 설명 이미지를 등록해 두면 상담 편집기의 &apos;📚 자료&apos;에서 바로 삽입할 수 있어요.
-            </p>
+        <a
+          href="/reports/daily/today"
+          className="flex items-center justify-between gap-3 rounded-2xl border border-sky-200 bg-sky-50 px-4 py-3.5 transition hover:bg-sky-100"
+        >
+          <div className="flex items-center gap-3">
+            <span className="text-base">📊</span>
+            <div>
+              <p className="text-sm font-semibold text-sky-800">일일 사용 리포트</p>
+              <p className="mt-0.5 text-xs text-sky-600">
+                화면 사용·AI 사용량을 직원·기능별로 — 매일 아침 알림으로도 받아요
+              </p>
+            </div>
           </div>
-          <ConsultAssetsManager initialAssets={consultAssets} />
-        </section>
+          <span className="shrink-0 text-sky-600">→</span>
+        </a>
       )}
-
-      {isOwnerOrAdmin && (
-        <section className="space-y-4">
-          <div>
-            <h2 className="text-base font-semibold text-slate-800">치료 항목 · 수가</h2>
-            <p className="mt-0.5 text-xs text-slate-500">
-              상담 편집기의 &apos;₩ 견적&apos; 빌더에서 쓰는 프리셋입니다. 단가는 참고값이에요.
-            </p>
-          </div>
-          <TreatmentItemsManager initialItems={treatmentItems} />
-        </section>
-      )}
-
-      {isOwnerOrAdmin && (
-        <section className="space-y-4">
-          <div>
-            <h2 className="text-base font-semibold text-slate-800">상담 안전망</h2>
-            <p className="mt-0.5 text-xs text-slate-500">
-              녹음을 켜둔 채 자리를 비웠을 때의 경고·자동 저장 기준입니다.
-            </p>
-          </div>
-          <ConsultSafetySettings initial={consultSettings} />
-        </section>
-      )}
-
-      {isOwnerOrAdmin && (
-        <section className="space-y-4">
-          <div className="flex items-center justify-between">
-            <h2 className="text-base font-semibold text-slate-800">직원 관리</h2>
-            <span className="text-xs text-slate-400">{members.length}명</span>
-          </div>
-          <StaffList
-            members={members}
-            currentUserId={user.id}
-            currentRole={role}
-          />
-          <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-            <h3 className="mb-3 text-sm font-semibold text-slate-700">직원 초대</h3>
-            <StaffInviteForm />
-          </div>
-        </section>
-      )}
-
-      <section className="space-y-4">
-        <h2 className="text-base font-semibold text-slate-800">내 상담 기록</h2>
-        <PatientAccountLink
-          initialLinked={patientLinkStatus.ok && patientLinkStatus.linked}
-        />
-      </section>
-
-      <section className="space-y-4">
-        <h2 className="text-base font-semibold text-slate-800">알림 관리</h2>
-        <NotificationSettings />
-      </section>
 
       {!isOwnerOrAdmin && (
-        <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-          <p className="text-sm text-slate-600">
-            현재 역할: <span className="font-semibold text-slate-800">직원</span>
-          </p>
-          <p className="mt-1 text-xs text-slate-500">
-            직원 관리는 기관 대표 또는 관리자만 가능합니다.
-          </p>
-        </section>
+        <p className="px-1 pt-3 text-xs text-slate-400">
+          현재 역할: 직원 — 상담 운영·직원 관리 설정은 기관 대표 또는 관리자에게 보입니다.
+        </p>
       )}
     </div>
   );
