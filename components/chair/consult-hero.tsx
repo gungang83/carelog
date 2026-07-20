@@ -49,14 +49,25 @@ export function ConsultHero() {
         <EngineSelector engine={engine} onChange={setEngine} className="mt-6" />
       )}
 
-      <button
-        type="button"
-        onClick={handleStart}
-        className="mt-6 flex w-full items-center justify-center gap-2.5 rounded-2xl bg-sky-600 px-6 py-4 text-base font-semibold text-white shadow-sm shadow-sky-200 transition hover:bg-sky-700 active:scale-[0.99] sm:w-auto"
-      >
-        <MicIcon className="size-5 shrink-0" />
-        상담 기록 시작
-      </button>
+      <div className="mt-6 flex flex-col gap-2 sm:flex-row sm:items-center">
+        <button
+          type="button"
+          onClick={handleStart}
+          className="flex w-full items-center justify-center gap-2.5 rounded-2xl bg-sky-600 px-6 py-4 text-base font-semibold text-white shadow-sm shadow-sky-200 transition hover:bg-sky-700 active:scale-[0.99] sm:w-auto"
+        >
+          <MicIcon className="size-5 shrink-0" />
+          상담 기록 시작
+        </button>
+        {/* spec 027 ③ — 녹음 없이 기록만: 보드를 idle로 연다(마이크 미사용). */}
+        <button
+          type="button"
+          onClick={() => openOverlay(DRAFT_CHAIR_KEY)}
+          className="w-full rounded-2xl border border-slate-200 bg-white px-5 py-4 text-sm font-medium text-slate-600 transition hover:bg-slate-50 sm:w-auto sm:py-3.5"
+          title="마이크 없이 상담보드만 열어 기록·자료·견적을 작성합니다 (보드 안에서 '녹음 시작'도 가능)"
+        >
+          ✏️ 녹음 없이 기록만
+        </button>
+      </div>
     </section>
   );
 }

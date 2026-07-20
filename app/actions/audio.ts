@@ -50,6 +50,21 @@ export async function uploadConsultationAudio(
   }
 
   const path = `${institutionId}/${consultationId}.webm`;
+
+  // spec 027 ④ — 같은 상담에 다시 녹음(이어서 상담 등)할 때 기존 음성을 덮지 않고
+  // .prev-<ts> 로 보관한다(의료기록 원본 보존 — UI 재생은 최신 세션).
+  const { data: prev } = await admin
+    .from("consultation")
+    .select("audio_path")
+    .eq("id", consultationId)
+    .maybeSingle();
+  if (prev?.audio_path === path) {
+    await admin.storage
+      .from(audioBucket)
+      .move(path, `${institutionId}/${consultationId}.prev-${Date.now()}.webm`)
+      .catch(() => {});
+  }
+
   const { error: upErr } = await admin.storage
     .from(audioBucket)
     .upload(path, file, { contentType: file.type || "audio/webm", upsert: true });

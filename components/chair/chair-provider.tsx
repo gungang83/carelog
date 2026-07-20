@@ -196,6 +196,20 @@ type ChairContextValue = {
   registerAutoFinalize: (chairId: string, cb: (() => void) | null) => void;
   /** 등록된 자동 종료 콜백 실행. 등록이 없으면 false(가드는 경고만 유지) */
   runAutoFinalize: (chairId: string) => boolean;
+  // ── spec 027 ④ 이어서 상담 ────────────────────────────────────
+  /** 기존 상담 기록을 실어 보드를 연다(카드 → 보드 핸드오프). */
+  openBoardWithPrefill: (prefill: BoardPrefill) => void;
+  /** 보드가 오픈 시 1회 소비. 없으면 null. */
+  consumeBoardPrefill: () => BoardPrefill | null;
+};
+
+/** spec 027 ④ — 이어서 상담 프리필(카드 → 보드) */
+export type BoardPrefill = {
+  consultationId: string;
+  content: string;
+  prescriptions: string[];
+  participants: Participant[];
+  chairId: string | null;
 };
 
 const ChairContext = createContext<ChairContextValue | null>(null);
@@ -533,6 +547,18 @@ export function ChairProvider({
     dispatch({ type: "RESET_CHAIR", chairId });
   }, []);
 
+  // ── spec 027 ④ — 이어서 상담 프리필(ref 핸드오프, 1회 소비) ──────
+  const boardPrefillRef = useRef<BoardPrefill | null>(null);
+  const openBoardWithPrefill = useCallback((prefill: BoardPrefill) => {
+    boardPrefillRef.current = prefill;
+    dispatch({ type: "OPEN_OVERLAY", chairId: DRAFT_CHAIR_KEY });
+  }, []);
+  const consumeBoardPrefill = useCallback(() => {
+    const p = boardPrefillRef.current;
+    boardPrefillRef.current = null;
+    return p;
+  }, []);
+
   // ── spec 027 — 세션 안전망 지원 ─────────────────────────────────
   const autoFinalizeMap = useRef<Record<string, (() => void) | null>>({});
 
@@ -608,6 +634,8 @@ export function ChairProvider({
     getStream,
     registerAutoFinalize,
     runAutoFinalize,
+    openBoardWithPrefill,
+    consumeBoardPrefill,
   };
 
   return <ChairContext.Provider value={value}>{children}</ChairContext.Provider>;

@@ -60,27 +60,59 @@ export async function enqueueServerTranscription(formData: FormData): Promise<En
 
   const { author_employee_id, author_name } = await getMyAuthorInfo();
 
-  // 1) 플레이스홀더 상담 생성('전사 중')
+  // spec 027 ④ — 이어서 상담: 기존 상담을 업데이트(새 레코드 생성 X).
+  //   prefixHtml에 기존 본문+구분 블록이 실려 오고, 워커가 그 뒤에 새 요약을 붙인다.
+  const continueId = String(formData.get("continueConsultationId") ?? "");
+
   const placeholder = sanitizeRichHtml(ensureHtml(`${prefixHtml}<p>${PENDING_MARK}</p>`));
-  const { data: consultation, error } = await supabase
-    .from("consultation")
-    .insert({
-      institution_id: institutionId,
-      patient_id: null,
-      chair_id: validChairId,
-      content: placeholder,
-      prescriptions,
-      participants,
-      status: "draft",
-      author_employee_id,
-      author_name,
-      transcription_engine: engine,
-    })
-    .select("id")
-    .single();
-  if (error || !consultation) {
-    console.error("[enqueueServerTranscription] 상담 생성 실패:", error?.message);
-    return { ok: false, message: `저장 준비 실패: ${error?.message ?? "원인 미상"}` };
+  let consultation: { id: string } | null = null;
+
+  if (continueId) {
+    const { data: target } = await supabase
+      .from("consultation")
+      .select("id, institution_id")
+      .eq("id", continueId)
+      .maybeSingle();
+    if (!target || target.institution_id !== institutionId) {
+      return { ok: false, message: "이어서 저장할 상담을 찾을 수 없습니다." };
+    }
+    const { error: updErr } = await supabase
+      .from("consultation")
+      .update({
+        content: placeholder,
+        prescriptions,
+        participants,
+        ...(validChairId ? { chair_id: validChairId } : {}),
+        transcription_engine: engine,
+      })
+      .eq("id", continueId);
+    if (updErr) {
+      return { ok: false, message: `이어서 저장 준비 실패: ${updErr.message}` };
+    }
+    consultation = { id: continueId };
+  } else {
+    // 1) 플레이스홀더 상담 생성('전사 중')
+    const { data: created, error } = await supabase
+      .from("consultation")
+      .insert({
+        institution_id: institutionId,
+        patient_id: null,
+        chair_id: validChairId,
+        content: placeholder,
+        prescriptions,
+        participants,
+        status: "draft",
+        author_employee_id,
+        author_name,
+        transcription_engine: engine,
+      })
+      .select("id")
+      .single();
+    if (error || !created) {
+      console.error("[enqueueServerTranscription] 상담 생성 실패:", error?.message);
+      return { ok: false, message: `저장 준비 실패: ${error?.message ?? "원인 미상"}` };
+    }
+    consultation = created;
   }
 
   if (validChairId) {

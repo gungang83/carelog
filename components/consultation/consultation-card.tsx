@@ -53,7 +53,8 @@ export function ConsultationCard({
   onMutated: () => void | Promise<void>;
   onFlagsChanged?: () => void;
 }) {
-  const { chairs, members, me, openOverlay, refreshUnlinkedCount } = useChairContext();
+  const { chairs, members, me, openOverlay, refreshUnlinkedCount, openBoardWithPrefill } =
+    useChairContext();
   const [isEditing, setEditing] = useState(false);
   const [isLinking, setLinking] = useState(false);
   const [isDeleteConfirm, setDeleteConfirm] = useState(false);
@@ -229,6 +230,21 @@ export function ConsultationCard({
               <CopyAllButton html={record.content} label="전체 복사"
                 className="inline-flex min-h-8 items-center gap-1.5 rounded-xl bg-slate-800 px-3 text-xs font-semibold text-white hover:bg-slate-900" />
               {record.has_audio && <AudioReplayButton consultationId={record.id} />}
+              {/* spec 027 ④ — 이어서 상담: 이 기록을 보드에 깔고 이어쓴다(상담자 교체 포함) */}
+              <button type="button"
+                onClick={() =>
+                  openBoardWithPrefill({
+                    consultationId: record.id,
+                    content: record.content,
+                    prescriptions: record.prescriptions ?? [],
+                    participants: record.participants ?? [],
+                    chairId: record.chair_id,
+                  })
+                }
+                title="이 기록을 상담보드에 열어 이어서 상담합니다 — 새 녹음·메모가 같은 기록에 추가돼요"
+                className="inline-flex min-h-8 items-center gap-1 rounded-xl border border-emerald-200 bg-emerald-50 px-3 text-xs font-semibold text-emerald-700 hover:bg-emerald-100">
+                🎙 이어서 상담
+              </button>
               {!linked && (
                 <button type="button" onClick={() => setLinking(true)}
                   className="inline-flex min-h-8 items-center rounded-xl border border-sky-200 bg-sky-50 px-3 text-xs font-semibold text-sky-700 hover:bg-sky-100">환자 연결</button>

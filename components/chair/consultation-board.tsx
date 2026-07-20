@@ -14,6 +14,7 @@ import { uploadConsultationAudio } from "@/app/actions/audio";
 import {
   transcribeChairAudio,
   saveChairRecord,
+  updateChairRecordContent,
   getOrCreateChairByName,
   getRecentParticipants,
   reportAutoSaveFailure,
@@ -93,6 +94,7 @@ function BoardContent({
     engine,
     setEngine,
     registerAutoFinalize,
+    consumeBoardPrefill,
   } = useChairContext();
 
   const isOpen = openChairId === DRAFT_CHAIR_KEY;
@@ -145,6 +147,28 @@ function BoardContent({
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // spec 027 ④ — 이어서 상담: 카드가 실어 보낸 기존 기록을 소비해 보드에 깐다.
+  //   구분 블록([이어서 상담 — 일시 · 상담: 이름])을 붙이고, 저장은 기존 기록 업데이트로.
+  const [continuationId, setContinuationId] = useState<string | null>(null);
+  useEffect(() => {
+    if (!isOpen) return;
+    const p = consumeBoardPrefill();
+    if (!p) return;
+    const d = new Date();
+    const stamp = `${d.getMonth() + 1}/${d.getDate()} ${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+    const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    const divider = `<p>[이어서 상담 — ${stamp} · 상담: ${esc(authorName)}]</p><p></p>`;
+    const html = `${p.content}${divider}`;
+    setContinuationId(p.consultationId);
+    setEditText(html);
+    editorRef.current?.setHTML(html);
+    setPrescriptions(p.prescriptions);
+    setParticipants(p.participants.length ? p.participants : me ? [me] : []);
+    const chair = p.chairId ? chairs.find((c) => c.id === p.chairId) : undefined;
+    setSelectedChair(chair ? { id: chair.id, name: chair.name } : null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen]);
 
   function resetDefaults() {
     setParticipants(me ? [me] : []);
@@ -423,6 +447,7 @@ function BoardContent({
       const fd = new FormData();
       fd.append("audio", blob, "recording.webm");
       fd.append("chairId", chair?.id ?? ""); // 빈 값 = 미지정(spec 027)
+      if (continuationId) fd.append("continueConsultationId", continuationId); // ④ 이어서 상담
       fd.append("engine", engine);
       fd.append("prescriptions", JSON.stringify(prescriptions));
       fd.append("participants", JSON.stringify(participants));
@@ -437,6 +462,7 @@ function BoardContent({
           liveTextsRef.current = [];
           liveTasksRef.current = [];
           void clearDraft();
+          setContinuationId(null);
           if (chair) setLastChairId(chair.id);
           resetChair(DRAFT_CHAIR_KEY);
           setEditText("");
@@ -476,7 +502,8 @@ function BoardContent({
       void reportAutoSaveFailure({ reason: "empty", chairId: selectedChair?.id ?? null });
       return;
     }
-    if (!selectedChair) {
+    // spec 027 ④ — 이어서 상담(클라 전사 경로): 기존 기록 업데이트. 체어 미선택 허용(기존 유지).
+    if (!selectedChair && !continuationId) {
       autoSaveRef.current = false;
       setAutoSaving(false);
       setSaveMsg("체어를 선택하면 자동 저장돼요 — 작성한 내용은 보관됐어요.");
@@ -484,13 +511,24 @@ function BoardContent({
       return; // 내용·음성 유지 → 체어 선택 후 수동 '저장' 가능
     }
     const chair = selectedChair;
-    const result = await saveChairRecord({
-      chairId: chair.id,
-      content: html,
-      prescriptions,
-      participants,
-      transcriptionEngine: engineUsed,
-    });
+    const result = continuationId
+      ? await (async () => {
+          const r = await updateChairRecordContent({
+            consultationId: continuationId,
+            content: html,
+            prescriptions,
+            participants,
+            ...(chair ? { chairId: chair.id } : {}),
+          });
+          return r.ok ? { ok: true as const, consultationId: continuationId } : r;
+        })()
+      : await saveChairRecord({
+          chairId: chair!.id,
+          content: html,
+          prescriptions,
+          participants,
+          transcriptionEngine: engineUsed,
+        });
     autoSaveRef.current = false;
     if (result.ok) {
       markLocalSave(result.consultationId);
@@ -505,7 +543,8 @@ function BoardContent({
       liveTextsRef.current = [];
       liveTasksRef.current = [];
       void clearDraft();
-      setLastChairId(chair.id);
+      setContinuationId(null);
+      if (chair) setLastChairId(chair.id);
       resetChair(DRAFT_CHAIR_KEY);
       setEditText("");
       editorRef.current?.clear();
@@ -517,14 +556,14 @@ function BoardContent({
       setEngine("basic");
       setAutoSaving(false);
       resetDefaults();
-      await refreshUnlinkedCount(chair.id);
+      if (chair) await refreshUnlinkedCount(chair.id);
       closeOverlay();
       router.refresh();
     } else {
       setAutoSaving(false);
       setSaveMsg(`자동 저장 실패: ${result.message} — 작성 내용·녹음은 보관됐어요. 다시 저장해 주세요.`);
       console.error("[autosave] saveChairRecord 실패:", result.message);
-      void reportAutoSaveFailure({ reason: "save", message: result.message, chairId: chair.id, contentLength: plain.length });
+      void reportAutoSaveFailure({ reason: "save", message: result.message, chairId: chair?.id ?? null, contentLength: plain.length });
       // 임시본은 이미 영속 — 사용자가 수동 '저장' 재시도 가능.
     }
   };
@@ -709,6 +748,7 @@ function BoardContent({
     if (hasContent && !window.confirm("작성 중인 내용과 녹음을 버릴까요? 되돌릴 수 없어요.")) {
       return;
     }
+    setContinuationId(null); // spec 027 ④ — 이어서 모드 해제
     audioBlobRef.current = null;
     audioSegmentsRef.current = [];
     // spec 016 — 점진 전사·자동저장 상태 초기화
@@ -768,6 +808,36 @@ function BoardContent({
     }
     if (!editText.trim()) {
       setSaveMsg("기록할 내용이 없어요. 녹음하거나 직접 입력해 주세요.");
+      return;
+    }
+    // spec 027 ④ — 이어서 상담: 기존 기록 업데이트(체어는 기존 유지, 미선택 허용)
+    if (continuationId) {
+      const contId = continuationId;
+      startTransition(async () => {
+        const result = await updateChairRecordContent({
+          consultationId: contId,
+          content: editText,
+          prescriptions,
+          participants,
+          ...(selectedChair ? { chairId: selectedChair.id } : {}),
+        });
+        if (result.ok) {
+          markLocalSave(contId);
+          void clearDraft();
+          setContinuationId(null);
+          resetChair(DRAFT_CHAIR_KEY);
+          setEditText("");
+          editorRef.current?.clear();
+          setPrescriptions([]);
+          setSaveMsg("");
+          resetDefaults();
+          if (selectedChair) await refreshUnlinkedCount(selectedChair.id);
+          closeOverlay();
+          router.refresh();
+        } else {
+          setSaveMsg(`이어서 저장 실패: ${result.message}`);
+        }
+      });
       return;
     }
     if (!selectedChair) {
@@ -910,7 +980,9 @@ function BoardContent({
               </>
             ) : (
               <>
-                <span className="text-sm font-semibold text-slate-800">상담보드</span>
+                <span className="text-sm font-semibold text-slate-800">
+                  {continuationId ? "이어서 상담" : "상담보드"}
+                </span>
                 {labEnabled && (
                   <span className="rounded bg-violet-100 px-1.5 py-0.5 text-[10px] font-bold text-violet-700">
                     실험실
@@ -1066,16 +1138,18 @@ function BoardContent({
             </p>
 
             {/* 본문 — 타이핑 + 인라인 이미지/그림 주석 */}
-            {/* spec 027 ⑤ — 저장 위치 안내 */}
+            {/* spec 027 ⑤ — 저장 위치 안내 (④ 이어서 모드 문구 분기) */}
             <p className="text-[11px] text-sky-600">
-              💾 이 내용은{" "}
-              {selectedChair ? (
+              💾{" "}
+              {continuationId ? (
+                <span className="font-semibold">기존 상담 기록에 이어서 저장됩니다</span>
+              ) : selectedChair ? (
                 <>
-                  <span className="font-semibold">[{selectedChair.name}]</span> 상담 기록으로
-                  저장됩니다
+                  이 내용은 <span className="font-semibold">[{selectedChair.name}]</span> 상담
+                  기록으로 저장됩니다
                 </>
               ) : (
-                "체어를 선택하면 해당 체어의 상담 기록으로 저장됩니다"
+                "이 내용은 체어를 선택하면 해당 체어의 상담 기록으로 저장됩니다"
               )}
             </p>
             <RichTextEditor
