@@ -12,6 +12,7 @@
 
 import { createAdminSupabaseClient } from "@/lib/supabase/admin";
 import { fetchEoMaster, type EoMasterMember } from "@/lib/eo/gateway";
+import { mapEoClinicType } from "@/lib/specialties";
 
 export type SyncEoMasterResult =
   | {
@@ -59,8 +60,30 @@ export async function syncEoMaster(
     return { ok: false, reason: fetched.reason };
   }
 
-  const { members, synced_at } = fetched.data;
+  const { members, synced_at, clinic } = fetched.data;
   const admin = createAdminSupabaseClient();
+
+  // spec 029 ① — EO clinic_type → 기관 분과(institutions.type) 자동 동기화(매핑 실패 시 유지)
+  const specialty = mapEoClinicType(clinic?.clinic_type ?? null);
+  if (specialty) {
+    await admin
+      .from("institutions")
+      .update({ type: specialty })
+      .eq("id", institutionId)
+      .neq("type", specialty);
+  }
+
+  // spec 029 ③ — EO 퇴사(active:false) → Carelog 로그인 계정(institution_members) 자동 비활성.
+  //   제거가 아닌 비활성(기록 귀속 보존). eo_employee_id 매칭 계정만 — 수동 초대 계정은 무관.
+  const resignedIds = members.filter((m) => !m.active).map((m) => m.id);
+  if (resignedIds.length > 0) {
+    await admin
+      .from("institution_members")
+      .update({ is_active: false })
+      .eq("institution_id", institutionId)
+      .eq("is_active", true)
+      .in("eo_employee_id", resignedIds);
+  }
 
   // 현재 EO-source 캐시 상태(upsert/비활성 판정용)
   const { data: existingRows, error: selErr } = await admin

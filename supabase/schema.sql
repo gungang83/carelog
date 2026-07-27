@@ -683,3 +683,16 @@ alter table public.patient_push_subscriptions enable row level security;
 --   grace 만료 시 등록 콜백(runAutoFinalize: 보드='종료및저장', 오버레이='종료(전사)') 실행,
 --   전역 beforeunload·탭 제목 🔴·Document PiP 항상-위 미니창(지원 브라우저).
 -- ───────────────────────────────────────────────────────────────────────────
+
+-- ───────────────────────────────────────────────────────────────────────────
+-- 상담자료 관리 체계 (spec 029) — migration: 20260708000005_asset_mgmt_permissions.sql
+-- ① consult_assets.specialty text — 전역 자료 분과 타겟(null=전 분과 공통). 분과 config=lib/specialties.ts,
+--    EO clinic_type → institutions.type 자동 동기화(lib/eo/sync-master.ts).
+-- ② 큐레이션: consult_asset_categories(기관 카테고리 그릇) + consult_asset_category_items(담기 매핑,
+--    unique(category_id, asset_id), 전역 자료 참조 가능·복수 카테고리 허용). RLS read=멤버십/write=service_role.
+-- ③ permission_overrides(member_id→institution_members, feature_id, allowed) — EO 3층 권한 모델의 개인
+--    오버라이드. 판정=lib/auth/feature-gate.ts requireFeature(오버라이드>역할 기본값 lib/permissions.ts).
+--    RLS 정책 0(서버액션 전용). + EO 퇴사(active:false) → institution_members 자동 비활성(sync-master).
+-- 배선: /admin/assets(전역 발행), 설정 '상담 자료'(2패널 큐레이션+Library 브라우저)·'기능 권한',
+--    픽커=카테고리 뷰+전체 Library(우리 기관/Carelog 제공 탭).
+-- ───────────────────────────────────────────────────────────────────────────

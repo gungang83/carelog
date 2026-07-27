@@ -36,6 +36,12 @@ export default async function AdminPage() {
             업데이트 피드 →
           </Link>
           <Link
+            href="/admin/assets"
+            className="rounded-xl border border-teal-200 bg-teal-50 px-3 py-2 text-sm font-medium text-teal-700 transition hover:bg-teal-100"
+          >
+            공통 상담자료 →
+          </Link>
+          <Link
             href="/admin/announcements"
             className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm font-medium text-amber-700 transition hover:bg-amber-100"
           >

@@ -761,3 +761,17 @@ AI 전사 성공(app/actions/transcribe.ts: transcribeEngine·transcribeAndSumma
 [설정] /settings 상담 안전망(owner/admin) → institutions.consult_settings
 [안내] 보드 에디터 상단 '💾 이 내용은 [체어] 상담 기록으로 저장됩니다'(spec 027 ⑤)
 ```
+
+## 상담자료 관리 체계 (spec 029)
+
+```
+[전역 Library] /admin/assets(슈퍼어드민) — 분과 타겟(specialty)·분류 발행 → consult_assets(institution_id null)
+  분과: lib/specialties.ts(SPECIALTIES·분과별 기본 분류) · EO clinic_type→institutions.type 자동 동기화(sync-master)
+[기관 Library] 설정→상담 자료 'Library 관리'(업로드·숨김·삭제)
+[큐레이션] 설정→상담 자료 2패널: 카테고리(그릇) 구성 → 'Library 브라우저'([우리 기관][Carelog 제공]+분류·검색)에서 골라 담기
+  → consult_asset_categories + category_items(복수 담기 허용)
+[픽커] 기본=기관 카테고리 뷰(큐레이션 순서) · '전체 Library' 탭(출처 구분·분류·검색) · 미구성 기관은 Library 폴백
+[권한] lib/permissions.ts FEATURES(상담자료·치료항목) + permission_overrides(개인) → lib/auth/feature-gate.ts requireFeature
+  설정→기능 권한(admin): 직원×기능 3상태(기본/허용/차단). staff 개인 허용 시 설정 관리 섹션 노출
+[EO 연동] sync-master: clinic_type→분과 동기화 + 퇴사(active:false)→institution_members 자동 비활성(기록 귀속 보존)
+```

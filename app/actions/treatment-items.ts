@@ -4,6 +4,8 @@ import { revalidatePath } from "next/cache";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { createAdminSupabaseClient } from "@/lib/supabase/admin";
 import { getMyInstitutionId } from "@/lib/auth/institution";
+import { requireFeature } from "@/lib/auth/feature-gate";
+import { FEATURES } from "@/lib/permissions";
 import type { TreatmentItem } from "@/lib/treatment-items";
 
 // spec 028 치료 항목 사전 — 조회(멤버) + 관리(owner·admin). 견적 자체는 DB 저장 없음.
@@ -12,28 +14,8 @@ const COLS = "id, institution_id, name, price, display_order, active, created_at
 
 type Ok = { ok: true } | { ok: false; message: string };
 
-async function requireOwnerAdmin(): Promise<
-  { ok: true; institutionId: string } | { ok: false; message: string }
-> {
-  const supabase = await createServerSupabaseClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { ok: false, message: "로그인이 필요합니다." };
-  const institutionId = await getMyInstitutionId();
-  if (!institutionId) return { ok: false, message: "기관 정보를 찾을 수 없습니다." };
-  const { data: member } = await supabase
-    .from("institution_members")
-    .select("role")
-    .eq("user_id", user.id)
-    .eq("institution_id", institutionId)
-    .eq("is_active", true)
-    .maybeSingle();
-  if (!member || (member.role !== "owner" && member.role !== "admin")) {
-    return { ok: false, message: "기관 대표 또는 관리자만 치료 항목을 관리할 수 있습니다." };
-  }
-  return { ok: true, institutionId };
-}
+// spec 029 — 기능 권한 가드(개인 오버라이드 > 역할 기본값)
+const requireOwnerAdmin = () => requireFeature(FEATURES.TREATMENT_ITEMS_MANAGE);
 
 /** 견적 빌더용: 현재 기관 활성 항목. 모든 직원. */
 export async function getTreatmentItems(): Promise<TreatmentItem[]> {

@@ -23,6 +23,11 @@ import {
   CollapsibleSection,
   SettingsGroupHeader,
 } from "@/components/settings/collapsible-section";
+import { listCategoriesForManage } from "@/app/actions/consult-assets";
+import { getMyFeatureMap } from "@/lib/auth/feature-gate";
+import { FEATURES } from "@/lib/permissions";
+import { listMemberFeaturePermissions } from "@/app/actions/permissions";
+import { FeaturePermissionsManager } from "@/components/settings/feature-permissions-manager";
 
 export default async function SettingsPage() {
   const supabase = await createServerSupabaseClient();
@@ -38,17 +43,24 @@ export default async function SettingsPage() {
 
   const isOwnerOrAdmin = role === "owner" || role === "admin";
 
-  const [staffResult, patientLinkStatus, chairs, clinicMembers, plan, consultAssets] =
-    await Promise.all([
-      isOwnerOrAdmin ? getStaffList() : Promise.resolve(null),
-      getMyPatientLinkStatus(),
-      isOwnerOrAdmin ? getChairs() : Promise.resolve([]),
-      isOwnerOrAdmin ? getClinicMembers() : Promise.resolve([]),
-      getMyInstitutionPlan(),
-      isOwnerOrAdmin ? listConsultAssetsForManage() : Promise.resolve([]),
-    ]);
-  const treatmentItems = isOwnerOrAdmin ? await listTreatmentItemsForManage() : [];
+  const [staffResult, patientLinkStatus, chairs, clinicMembers, plan] = await Promise.all([
+    isOwnerOrAdmin ? getStaffList() : Promise.resolve(null),
+    getMyPatientLinkStatus(),
+    isOwnerOrAdmin ? getChairs() : Promise.resolve([]),
+    isOwnerOrAdmin ? getClinicMembers() : Promise.resolve([]),
+    getMyInstitutionPlan(),
+  ]);
   const consultSettings = await getConsultSettings();
+  // spec 029 — 기능 권한(개인 오버라이드 포함) 기반 노출: staff도 개인 허용이면 관리 섹션이 보인다
+  const featureMap = await getMyFeatureMap();
+  const canManageAssets = featureMap[FEATURES.CONSULT_ASSETS_MANAGE] === true;
+  const canManageItems = featureMap[FEATURES.TREATMENT_ITEMS_MANAGE] === true;
+  const [consultAssets, assetCategories, treatmentItems] = await Promise.all([
+    canManageAssets ? listConsultAssetsForManage() : Promise.resolve([]),
+    canManageAssets ? listCategoriesForManage() : Promise.resolve([]),
+    canManageItems ? listTreatmentItemsForManage() : Promise.resolve([]),
+  ]);
+  const permissionRows = isOwnerOrAdmin ? await listMemberFeaturePermissions() : [];
   const members = staffResult?.ok ? staffResult.members : [];
 
   return (
@@ -74,7 +86,7 @@ export default async function SettingsPage() {
         <PatientAccountLink initialLinked={patientLinkStatus.ok && patientLinkStatus.linked} />
       </CollapsibleSection>
 
-      {isOwnerOrAdmin && (
+      {(isOwnerOrAdmin || canManageAssets || canManageItems) && (
         <>
           <SettingsGroupHeader
             emoji="🩺"
@@ -82,10 +94,13 @@ export default async function SettingsPage() {
             desc="체어 · 참여자 · 상담 자료 · 견적 · 안전망"
           />
 
+          {isOwnerOrAdmin && (
           <CollapsibleSection emoji="🪑" title="체어 관리" subtitle="체어 추가 · 이름 변경 · 사용 여부">
             <ChairSettings initialChairs={chairs} />
           </CollapsibleSection>
+          )}
 
+          {isOwnerOrAdmin && (
           <CollapsibleSection
             emoji="🧑‍⚕️"
             title="멤버(참여자) 관리"
@@ -93,23 +108,29 @@ export default async function SettingsPage() {
           >
             <ClinicMemberSettings initialMembers={clinicMembers} />
           </CollapsibleSection>
+          )}
 
-          <CollapsibleSection
-            emoji="📚"
-            title="상담 자료"
-            subtitle="상담 편집기 '📚 자료' 라이브러리 — 설명 이미지 · 동의서 · 영상 링크"
-          >
-            <ConsultAssetsManager initialAssets={consultAssets} />
-          </CollapsibleSection>
+          {canManageAssets && (
+            <CollapsibleSection
+              emoji="📚"
+              title="상담 자료"
+              subtitle="카테고리 구성(Library에서 골라 담기) + 우리 기관 Library 관리"
+            >
+              <ConsultAssetsManager initialAssets={consultAssets} initialCategories={assetCategories} />
+            </CollapsibleSection>
+          )}
 
-          <CollapsibleSection
-            emoji="₩"
-            title="치료 항목 · 수가"
-            subtitle="'₩ 견적' 빌더 프리셋 — 단가는 참고값, 견적마다 수정 가능"
-          >
-            <TreatmentItemsManager initialItems={treatmentItems} />
-          </CollapsibleSection>
+          {canManageItems && (
+            <CollapsibleSection
+              emoji="₩"
+              title="치료 항목 · 수가"
+              subtitle="'₩ 견적' 빌더 프리셋 — 단가는 참고값, 견적마다 수정 가능"
+            >
+              <TreatmentItemsManager initialItems={treatmentItems} />
+            </CollapsibleSection>
+          )}
 
+          {isOwnerOrAdmin && (
           <CollapsibleSection
             emoji="🛟"
             title="상담 안전망"
@@ -117,8 +138,10 @@ export default async function SettingsPage() {
           >
             <ConsultSafetySettings initial={consultSettings} />
           </CollapsibleSection>
+          )}
 
-          <SettingsGroupHeader emoji="👥" title="직원 · 권한" desc="계정 권한 · 활성화 · 초대" />
+          {isOwnerOrAdmin && (<>
+          <SettingsGroupHeader emoji="👥" title="직원 · 권한" desc="계정 권한 · 활성화 · 초대 · 기능 권한" />
 
           <CollapsibleSection
             emoji="👤"
@@ -131,6 +154,15 @@ export default async function SettingsPage() {
               <StaffInviteForm />
             </div>
           </CollapsibleSection>
+
+          <CollapsibleSection
+            emoji="🔑"
+            title="기능 권한"
+            subtitle="직원별 기능 접근 — 기본값(역할) 위에 개인별 허용/차단"
+          >
+            <FeaturePermissionsManager initialRows={permissionRows} />
+          </CollapsibleSection>
+          </>)}
         </>
       )}
 

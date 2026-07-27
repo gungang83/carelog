@@ -552,3 +552,10 @@ Supabase auth.users와 patient_accounts를 연결. Google OAuth 가입 시 생�
 ## 상담 세션 안전망 (spec 027-consult-session)
 - `institutions.consult_settings`(jsonb, default `{}`) — `{ idle_minutes, grace_minutes, voice_detect }`. 기본값 병합은 `lib/consult-settings.ts`, 수정은 owner/admin(`app/actions/consult-settings.ts`).
 - migration: `20260708000004_consult_settings.sql`
+
+## 상담자료 관리 체계 (spec 029)
+- `consult_assets.specialty`(text null) — 전역 자료 분과 타겟(null=전 분과 공통). 기관 분과=`institutions.type`(EO clinic_type 자동 동기화).
+- `consult_asset_categories` — 기관 카테고리(그릇): institution_id·name·display_order·active. read=멤버십/write=service_role(기능 권한 가드).
+- `consult_asset_category_items` — 담기 매핑: category_id·asset_id·display_order·added_by, unique(category_id,asset_id). 전역 자료 참조 가능, 복수 카테고리 허용.
+- `permission_overrides` — 개인 권한 오버라이드(EO 모델): member_id(→institution_members)·feature_id·allowed, unique(member_id,feature_id). RLS 정책 0(서버 전용). 판정=개인 오버라이드>역할 기본값(lib/permissions.ts).
+- migration: `20260708000005_asset_mgmt_permissions.sql`

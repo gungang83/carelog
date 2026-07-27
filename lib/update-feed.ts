@@ -114,6 +114,17 @@ export const UPDATE_FEED: UpdateFeedEntry[] = [
     internal: "spec 027 ③④ · 세션 66",
   },
   {
+    id: "2026-07-08-asset-curation",
+    date: "2026-07-08",
+    emoji: "🗄️",
+    title: "상담 자료 카테고리 구성 + Carelog 제공 자료",
+    items: [
+      "설정 → 상담 자료에서 우리 병원만의 카테고리를 만들고, Carelog가 제공하는 자료와 우리 기관 자료 중 쓸 것만 골라 담을 수 있습니다 — 상담 중 '📚 자료'에 그 구성이 그대로 보입니다.",
+      "직원별로 자료·수가 관리 권한을 줄 수 있습니다(설정 → 기능 권한).",
+    ],
+    internal: "spec 029 · 세션 66",
+  },
+  {
     id: "2026-07-08-settings-ia",
     date: "2026-07-08",
     emoji: "⚙️",
