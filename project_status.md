@@ -14,7 +14,7 @@
 - **① 전역 Library**: /admin/assets 슈퍼어드민 발행(이미지·영상, **분과 타겟** specialty, 분류·활성·필터). 분과 config `lib/specialties.ts`(치과부터, 분과별 기본 분류 세트) + **EO clinic_type → institutions.type 자동 동기화**(sync-master).
 - **② 큐레이션**(카테고리=그릇, 대표 확정 모델): `consult_asset_categories`+`category_items`(복수 담기 허용). 설정→상담 자료 **2패널**(카테고리 구성 / 담긴 자료 순서·빼기) + **Library 브라우저**([우리 기관][Carelog 제공]+분류·검색 체크 담기) + 기관 Library 관리(기존 업로드·숨김·삭제 유지). **픽커 = 카테고리 뷰 기본**(미구성 기관은 Library 폴백, '전체 Library' 탭·Carelog 뱃지).
 - **③ 권한**(EO 3층 모델): `lib/permissions.ts` FEATURES 2키(상담자료·치료항목) + `permission_overrides`(개인 allow/deny) + `requireFeature` 가드(consult-assets·treatment-items 액션 교체). 설정→**기능 권한**(admin): 직원×기능 3상태 셀렉트. staff 개인 허용 시 설정 관리 섹션 노출. + **EO 퇴사 → institution_members 자동 비활성**(sync-master, 기록 귀속 보존).
-- **마이그레이션**(`20260708000005_asset_mgmt_permissions.sql`) 실행 필요(specialty 컬럼+테이블 3개). 미실행 시: 픽커/설정 자료 조회 실패(빈 목록) — 실행 전 배포 주의(66c와 동일 패턴).
+- **마이그레이션**(`20260708000005_asset_mgmt_permissions.sql`) ✅ 실행 완료(2026-07-08).
 
 ## 2026-07-08 세션 66h (feat) — 이어서 상담 + 녹음 없이 기록 (spec 027 ③④)
 
