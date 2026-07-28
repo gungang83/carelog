@@ -53,7 +53,15 @@
 
 - owner 셀프 삭제·정리 도구, 기관 간 데이터 이관, EO 링크 해제/재지정(EO 측 기능), 개인 계정(auth user) 삭제.
 
-## 5. 당면 케이스 — 중복 워크스페이스 정리 (코드 배포 불필요)
+## 5. 당면 케이스 — 중복 워크스페이스 정리 ✅ 완료 (2026-07-28, SQL 수동 처리)
 
-`notes.md` §4의 절차 그대로: 진단 SQL → 빈 기관 + 비연동 확인 → `delete from institutions where id = '<대상>';`
-EO 링크 기관을 남기고 비연동 중복을 지우는 것이 정석.
+진단 결과와 처리 내역 (코드 배포 없이 SQL로 해결):
+
+- **원인 규명**: EO 예미안 워크스페이스의 carelog 링크가 6/28 재연동 과정에서 **새 UUID로 재발급**되어(카드 #621 가드 이전), 빈 워크스페이스 `예미안치과의원(734b610d)`이 SSO로 자동 생성됨. 이후 신규 SSO 직원 4명이 빈 쪽으로 합류(전원 정본에도 멤버십 보유 — 손실 0 확인).
+- **처리**: ① EO `workspace_integrations`의 carelog external_id를 정본 `예미안치과(0e4e85d6)`으로 UPDATE(재지정) → ② Carelog에서 빈 중복(`734b610d`) + 시드 잔재(`기본 의료기관 a0000000…`) + 테스트(`d d865efc5…`) 3건 hard delete.
+- **교훈 → E 논점 근거**: EO 슈퍼어드민 케어로그 토글은 OFF→ON 시 externalId 재발급 구멍이 있음(재연결 시 기존 id 복원 안 됨) — **EO 측 수정 요청 카드 Claire 전달**(§5.1). Carelog 온보딩 예방(E)과 별개로 EO 쪽 원천도 막아야 함.
+
+### 5.1 Claire(EO) 전달 카드 — 케어로그 토글 재발급 구멍
+
+- 증상: `/api/superadmin/integrations` POST는 기존 행 있으면 external_id 보존(#621)하지만, **DELETE 후 재-POST는 새 UUID 발급** → 위성(Carelog)에 유령 워크스페이스 생성.
+- 요청: ① 재연결 시 직전 external_id 복원(soft delete 또는 이력 테이블) ② (운영용) externalId 수동 입력 옵션 — 1:1 중복 가드는 이미 있음 ③ 토글 OFF 시 "재연결 시 새 ID가 발급됩니다" 경고 카피.
