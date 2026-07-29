@@ -55,19 +55,16 @@ const LONG_RECORDING_SECS = 180; // 3분
  */
 export function ConsultationBoard({
   institutionId,
-  creditBalance = 0,
   labEnabled = false,
 }: {
   institutionId: string;
   labEnabled?: boolean;
-  /** spec 030 §3 — 로드 시점 크레딧 잔액(프리미엄 엔진 잠금·임박 표시용) */
-  creditBalance?: number;
 }) {
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
   if (!mounted) return null;
   return createPortal(
-    <BoardContent institutionId={institutionId} labEnabled={labEnabled} creditBalance={creditBalance} />,
+    <BoardContent institutionId={institutionId} labEnabled={labEnabled} />,
     document.body,
   );
 }
@@ -75,11 +72,9 @@ export function ConsultationBoard({
 function BoardContent({
   institutionId,
   labEnabled,
-  creditBalance,
 }: {
   institutionId: string;
   labEnabled: boolean;
-  creditBalance: number;
 }) {
   const {
     chairs,
@@ -102,6 +97,7 @@ function BoardContent({
     registerAutoFinalize,
     consumeBoardPrefill,
     getStream,
+    creditBalance, // spec 030 §3 — 컨텍스트 단일 소스(히어로·보드 공용)
   } = useChairContext();
 
   const isOpen = openChairId === DRAFT_CHAIR_KEY;

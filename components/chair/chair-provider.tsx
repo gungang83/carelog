@@ -182,6 +182,8 @@ type ChairContextValue = {
   refreshUnlinkedCount: (chairId: string) => Promise<void>;
   /** 실험실(lab) 활성 워크스페이스 여부 — 녹음 엔진 선택 노출 조건 */
   labEnabled: boolean;
+  /** spec 030 §3 — 로드 시점 크레딧 잔액(프리미엄 엔진 잠금·임박 표시. 서버 게이트가 권위) */
+  creditBalance: number;
   /** 다음 녹음에 쓸 엔진(히어로에서 시작 전 선택 → 보드가 사용). 비-lab은 서버에서 basic 강제 */
   engine: EngineMode;
   setEngine: (engine: EngineMode) => void;
@@ -225,12 +227,14 @@ export function ChairProvider({
   members = [],
   me = null,
   labEnabled = false,
+  creditBalance = 0,
   children,
 }: {
   initialChairs: ChairRow[];
   members?: ClinicMemberRow[];
   me?: Participant | null;
   labEnabled?: boolean;
+  creditBalance?: number;
   children: ReactNode;
 }) {
   // 녹음 엔진 — 히어로(녹음 시작 전)에서 고르고 보드가 사용. 세션 공유 단일 상태.
@@ -627,6 +631,7 @@ export function ChairProvider({
     unlinkedCounts: state.unlinkedCounts,
     refreshUnlinkedCount,
     labEnabled,
+    creditBalance,
     engine,
     setEngine,
     activeRecordingKeys,

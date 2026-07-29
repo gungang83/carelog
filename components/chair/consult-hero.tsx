@@ -17,7 +17,7 @@ import { EngineSelector } from "@/components/chair/engine-selector";
  * **버튼을 누르기 전 여기서** 고른다(보드 idle을 못 보기 때문).
  */
 export function ConsultHero() {
-  const { openOverlay, startRecording, labEnabled, engine, setEngine } =
+  const { openOverlay, startRecording, labEnabled, engine, setEngine, creditBalance } =
     useChairContext();
 
   // 클릭 제스처 안에서 보드를 열고 같은 제스처로 녹음을 시작(getUserMedia 제스처 보존).
@@ -46,7 +46,12 @@ export function ConsultHero() {
 
       {/* 실험실 — 녹음 엔진 선택. 시작 버튼이 즉시 녹음을 켜므로 반드시 버튼 위(시작 전)에 둔다. */}
       {labEnabled && (
-        <EngineSelector engine={engine} onChange={setEngine} className="mt-6" />
+        <EngineSelector
+          engine={engine}
+          onChange={setEngine}
+          className="mt-6"
+          creditBalance={creditBalance}
+        />
       )}
 
       <div className="mt-6 flex flex-col gap-2 sm:flex-row sm:items-center">

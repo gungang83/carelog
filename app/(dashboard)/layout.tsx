@@ -74,15 +74,17 @@ export default async function DashboardLayout({
   }
 
   return (
-    <ChairProvider initialChairs={chairs} members={members} me={me} labEnabled={labEnabled}>
+    <ChairProvider
+      initialChairs={chairs}
+      members={members}
+      me={me}
+      labEnabled={labEnabled}
+      creditBalance={creditBalance}
+    >
       <SessionRefresher />
       <BadgeManager />
       <ChairOverlay />
-      <ConsultationBoard
-        institutionId={activeInstitutionId ?? ""}
-        labEnabled={labEnabled}
-        creditBalance={creditBalance}
-      />
+      <ConsultationBoard institutionId={activeInstitutionId ?? ""} labEnabled={labEnabled} />
       <RecordingGuard />
       <LiveAlertsProvider
         institutionId={activeInstitutionId ?? ""}
