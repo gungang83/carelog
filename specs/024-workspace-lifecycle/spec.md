@@ -61,7 +61,7 @@
 - **처리**: ① EO `workspace_integrations`의 carelog external_id를 정본 `예미안치과(0e4e85d6)`으로 UPDATE(재지정) → ② Carelog에서 빈 중복(`734b610d`) + 시드 잔재(`기본 의료기관 a0000000…`) + 테스트(`d d865efc5…`) 3건 hard delete.
 - **교훈 → E 논점 근거**: EO 슈퍼어드민 케어로그 토글은 OFF→ON 시 externalId 재발급 구멍이 있음(재연결 시 기존 id 복원 안 됨) — **EO 측 수정 요청 카드 헤임달 전달**(§5.1). Carelog 온보딩 예방(E)과 별개로 EO 쪽 원천도 막아야 함.
 
-### 5.1 Claire(EO) 전달 카드 — 케어로그 토글 재발급 구멍
+### 5.1 헤임달(EO) 전달 카드 — 케어로그 토글 재발급 구멍
 
 - 증상: `/api/superadmin/integrations` POST는 기존 행 있으면 external_id 보존(#621)하지만, **DELETE 후 재-POST는 새 UUID 발급** → 위성(Carelog)에 유령 워크스페이스 생성.
 - 요청: ① 재연결 시 직전 external_id 복원(soft delete 또는 이력 테이블) ② (운영용) externalId 수동 입력 옵션 — 1:1 중복 가드는 이미 있음 ③ 토글 OFF 시 "재연결 시 새 ID가 발급됩니다" 경고 카피.
