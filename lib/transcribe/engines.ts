@@ -26,6 +26,15 @@ export const LAB_ENGINE_OPTIONS: { value: EngineMode; label: string; desc: strin
 /** 실시간 통역(spec 030) 표기 — 분당 소모. SSOT 동기 대상. */
 export const INTERPRET_CREDIT_PER_MIN = 1;
 
+// ── spec 030 §3 — 크레딧 소진 정책(b: 소프트 차단 · 고정 임계, 대표 확정 2026-07-29) ──
+// 소진(잔액 ≤ 0) 시 프리미엄 엔진만 시작 잠금. 기본 계열(basic·quick·chunk)은 유예 허용
+// (마이너스 누적) — 상담 기록 자체는 막지 않는다. 정식 서비스화 시 전면 차단(a) 전환 예정.
+export const CREDIT_LOW_THRESHOLD = 20; // 임박 고정 임계(잔액 ≤ 20 → 임박 안내)
+export const PREMIUM_ENGINE_MODES: readonly string[] = ["detailed", "dental", "multilingual", "comparison"];
+export function isPremiumMode(mode: string): boolean {
+  return PREMIUM_ENGINE_MODES.includes(mode);
+}
+
 // 청크(긴 상담) 모드 상수 — 분할 녹음·전사 오케스트레이션 공용(spec 010 research R5).
 export const CHUNK_SEGMENT_MS = 5 * 60 * 1000; // 구간 길이 5분
 export const CHUNK_CONCURRENCY = 3; // 구간 전사 동시성

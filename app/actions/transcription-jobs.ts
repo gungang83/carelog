@@ -6,6 +6,8 @@ import { createAdminSupabaseClient } from "@/lib/supabase/admin";
 import { getMyInstitutionId, getMyAuthorInfo } from "@/lib/auth/institution";
 import { sanitizeRichHtml, ensureHtml } from "@/lib/sanitize-html";
 import { uploadConsultationAudio } from "@/app/actions/audio";
+import { getCreditBalance } from "@/lib/credits";
+import { isPremiumMode } from "@/lib/transcribe/engines";
 
 // spec 020 서버 비동기 전사 — '상담 종료 및 저장' 시 음성만 올리고 job 등록.
 //   플레이스홀더 상담 레코드를 즉시 생성('전사 중') → 브라우저는 바로 종료.
@@ -28,7 +30,9 @@ export async function enqueueServerTranscription(formData: FormData): Promise<En
   if (!user) return { ok: false, message: "로그인이 필요합니다." };
 
   const chairId = String(formData.get("chairId") ?? "");
-  const engine = String(formData.get("engine") ?? "basic");
+  let engine = String(formData.get("engine") ?? "basic");
+  // spec 030 §3(b) — 크레딧 소진 시 프리미엄 엔진 잠금: 서버 비동기 전사도 basic 강등(기록은 유지)
+  if (isPremiumMode(engine) && (await getCreditBalance(institutionId)) <= 0) engine = "basic";
   const audio = formData.get("audio") as File | null;
   if (!audio || audio.size < 1024) return { ok: false, message: "녹음이 비어 있습니다." };
 

@@ -10,6 +10,7 @@ import { SessionRefresher } from "@/components/layout/session-refresher";
 import { BadgeManager } from "@/components/layout/badge-manager";
 import { getMyInstitutions, getMyInstitutionId, getMyAuthorInfo, getMyInstitutionLab, getSessionUser } from "@/lib/auth/institution";
 import { isSuperAdmin } from "@/lib/admin";
+import { getCreditBalance } from "@/lib/credits";
 import { getChairs } from "@/app/actions/chairs";
 import { getClinicMembers } from "@/app/actions/clinic-members";
 import { ChairProvider } from "@/components/chair/chair-provider";
@@ -38,6 +39,9 @@ export default async function DashboardLayout({
     getMyAuthorInfo(),
     getMyInstitutionLab(),
   ]);
+
+  // spec 030 §3 — 크레딧 잔액(엔진 잠금·임박 표시용, 페이지 로드 시점 스냅샷. 서버 게이트가 권위)
+  const creditBalance = activeInstitutionId ? await getCreditBalance(activeInstitutionId) : 0;
 
   const userEmail = user.email ?? "";
   const superAdmin = isSuperAdmin(user.email);
@@ -74,7 +78,11 @@ export default async function DashboardLayout({
       <SessionRefresher />
       <BadgeManager />
       <ChairOverlay />
-      <ConsultationBoard institutionId={activeInstitutionId ?? ""} labEnabled={labEnabled} />
+      <ConsultationBoard
+        institutionId={activeInstitutionId ?? ""}
+        labEnabled={labEnabled}
+        creditBalance={creditBalance}
+      />
       <RecordingGuard />
       <LiveAlertsProvider
         institutionId={activeInstitutionId ?? ""}

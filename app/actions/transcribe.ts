@@ -3,7 +3,8 @@
 import OpenAI from "openai";
 import Anthropic from "@anthropic-ai/sdk";
 import { getMyInstitutionLab, getMyInstitutionId, getSessionUser } from "@/lib/auth/institution";
-import { deductCredit, type CreditFeature } from "@/lib/credits";
+import { deductCredit, getCreditBalance, type CreditFeature } from "@/lib/credits";
+import { isPremiumMode } from "@/lib/transcribe/engines";
 import type {
   EngineId,
   EngineMode,
@@ -440,6 +441,14 @@ export async function transcribeEngine(
   const clients = getClients();
   if (!clients.ok) return { ok: false, message: clients.message };
   const { openai, anthropic } = clients;
+
+  // spec 030 §3(b) — 크레딧 소진 시 프리미엄 엔진 시작 잠금(서버 권위 게이트).
+  // 녹음 blob은 이미 도착한 상태라 거절 대신 basic 폴백 — 상담 기록 유실 방지가 우선.
+  // (UI는 소진 시 프리미엄 선택 자체를 잠그므로 여기 도달은 드묾 — 잔액 표시 지연 등 우회 대비)
+  if (isPremiumMode(mode)) {
+    const gateInstId = await getMyInstitutionId().catch(() => null);
+    if (gateInstId && (await getCreditBalance(gateInstId)) <= 0) mode = "basic";
+  }
 
   if (mode === "comparison") {
     const [basic, multi] = await Promise.all([

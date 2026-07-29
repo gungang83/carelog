@@ -12,6 +12,7 @@ import {
   kstToday,
   type DailyReport,
 } from "@/lib/usage/daily-report";
+import { CREDIT_LOW_THRESHOLD } from "@/lib/transcribe/engines";
 
 // spec 014 — 일일 사용 리포트 발행(매일 08:00 KST = 0 23 * * * UTC).
 //   어제(KST 0~24시) 전체 워크스페이스 집계 → usage_reports 저장 → 슈퍼어드민 알림함+웹푸시.
@@ -114,6 +115,36 @@ async function deliverToOperators(date: string, institutionIds: string[]): Promi
   return { count };
 }
 
+/** spec 030 §3 — 크레딧 임박·소진 알림(고정 임계, 대표 확정). 일1회 cron에 편승 = 하루 1회 보장.
+ *  대상: 전일 활동 기관(byWorkspace)의 owner/admin. 푸시 억제(알림함만 — 전 직원 스팸 방지). */
+async function deliverLowBalanceAlerts(
+  workspaces: DailyReport["byWorkspace"],
+): Promise<{ count: number }> {
+  let count = 0;
+  for (const w of workspaces) {
+    try {
+      if (w.balance > CREDIT_LOW_THRESHOLD) continue;
+      const exhausted = w.balance <= 0;
+      await sendNotification({
+        title: exhausted ? "🪙 크레딧이 소진되었습니다" : "🪙 크레딧 소진 임박",
+        body: exhausted
+          ? `잔액 ${w.balance} — 기본 전사는 계속 쓸 수 있지만, 상세·용어 보정·다국어·실시간 통역·비교 엔진은 충전 후 이용할 수 있어요.`
+          : `잔액 ${w.balance} — 곧 소진됩니다. 충전을 준비해 주세요.`,
+        type: "credit",
+        link: "/settings",
+        recipients: "admins",
+        institutionId: w.id,
+        push: false,
+        createdBy: null,
+      });
+      count++;
+    } catch (e) {
+      console.warn("[daily-usage-report] 크레딧 알림 실패(비차단):", w.id, e);
+    }
+  }
+  return { count };
+}
+
 export async function GET(req: NextRequest) {
   if (!(await authorize(req))) {
     return NextResponse.json({ ok: false, error: "unauthorized" }, { status: 401 });
@@ -129,12 +160,15 @@ export async function GET(req: NextRequest) {
     const delivery = await deliverToSuperAdmin(report);
     // 운영자(기관 관리자)별 리포트 — 당일 활동 있는 기관마다 자기 워크스페이스 리포트 발행 + 관리자 알림
     const operators = await deliverToOperators(date, report.byWorkspace.map((w) => w.id));
+    // spec 030 §3 — 크레딧 임박(≤임계)·소진(≤0) 기관 관리자 알림
+    const creditAlerts = await deliverLowBalanceAlerts(report.byWorkspace);
     return NextResponse.json({
       ok: true,
       date,
       summary: report.summary,
       delivery,
       operators,
+      creditAlerts,
     });
   } catch (e) {
     console.error("[daily-usage-report] 실패:", e);

@@ -55,16 +55,19 @@ const LONG_RECORDING_SECS = 180; // 3분
  */
 export function ConsultationBoard({
   institutionId,
+  creditBalance = 0,
   labEnabled = false,
 }: {
   institutionId: string;
   labEnabled?: boolean;
+  /** spec 030 §3 — 로드 시점 크레딧 잔액(프리미엄 엔진 잠금·임박 표시용) */
+  creditBalance?: number;
 }) {
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
   if (!mounted) return null;
   return createPortal(
-    <BoardContent institutionId={institutionId} labEnabled={labEnabled} />,
+    <BoardContent institutionId={institutionId} labEnabled={labEnabled} creditBalance={creditBalance} />,
     document.body,
   );
 }
@@ -72,9 +75,11 @@ export function ConsultationBoard({
 function BoardContent({
   institutionId,
   labEnabled,
+  creditBalance,
 }: {
   institutionId: string;
   labEnabled: boolean;
+  creditBalance: number;
 }) {
   const {
     chairs,
@@ -959,8 +964,13 @@ function BoardContent({
                     <button
                       type="button"
                       onClick={() => setShowInterpreter(true)}
-                      className="inline-flex items-center gap-1 rounded-lg border border-violet-300 bg-violet-50 px-3 py-1.5 text-xs font-semibold text-violet-700 transition hover:bg-violet-100"
-                      title="실시간 통역 (분당 1 크레딧) — 화면에 원문·번역이 실시간 표시됩니다"
+                      disabled={creditBalance <= 0}
+                      className="inline-flex items-center gap-1 rounded-lg border border-violet-300 bg-violet-50 px-3 py-1.5 text-xs font-semibold text-violet-700 transition hover:bg-violet-100 disabled:cursor-not-allowed disabled:opacity-40"
+                      title={
+                        creditBalance <= 0
+                          ? "크레딧이 소진되어 통역을 시작할 수 없어요 — 충전 후 이용해 주세요"
+                          : "실시간 통역 (분당 1 크레딧) — 화면에 원문·번역이 실시간 표시됩니다"
+                      }
                     >
                       🌐 통역
                     </button>
@@ -1074,7 +1084,7 @@ function BoardContent({
             {/* 실험실 — 녹음 엔진 선택(idle 폴백). 보통은 히어로에서 시작 전 선택하지만,
                 보드가 idle로 열리는 경로를 위해 같은 컴포넌트로 노출한다(context 공유). */}
             {labEnabled && status === "idle" && (
-              <EngineSelector engine={engine} onChange={setEngine} />
+              <EngineSelector engine={engine} onChange={setEngine} creditBalance={creditBalance} />
             )}
 
             {/* 실험실 비교 모드 — 기본 vs 다국어 결과를 나란히 보고 한쪽을 본문에 삽입 */}
