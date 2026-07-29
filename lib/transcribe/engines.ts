@@ -12,15 +12,19 @@
 export type EngineId = "basic" | "quick" | "detailed" | "dental" | "chunk" | "multilingual";
 export type EngineMode = EngineId | "comparison";
 
-export const LAB_ENGINE_OPTIONS: { value: EngineMode; label: string; desc: string }[] = [
-  { value: "basic", label: "기본모델", desc: "한국어 전사 + 요약 (현재 기본)" },
-  { value: "quick", label: "빠른 메모", desc: "요약 없이 말한 그대로 전사만 — 가장 빠름(직접 정리용)" },
-  { value: "detailed", label: "상세 요약", desc: "증상·소견·처치·처방·다음 방문을 구조화한 자세한 상담기록" },
-  { value: "dental", label: "용어 보정", desc: "치과 용어(크라운·인레이·크랙 등) 교정 후 요약 — 정확도↑" },
-  { value: "chunk", label: "긴 상담", desc: "5분 단위로 나눠 끊김 없이 전사(긴 상담·중간 실패에 강함)" },
-  { value: "multilingual", label: "다국어", desc: "자동 언어감지 + 번역(원문/번역/요약)" },
-  { value: "comparison", label: "비교", desc: "기본 + 다국어 동시 실행해 나란히 비교" },
+// credits = 사용자 표기용 소모량(spec 030). ★단가 SSOT는 lib/credits.ts CREDIT_PRICES — 변경 시 양쪽 동기.
+export const LAB_ENGINE_OPTIONS: { value: EngineMode; label: string; desc: string; credits: string }[] = [
+  { value: "basic", label: "기본모델", desc: "한국어 전사 + 요약 (현재 기본)", credits: "2" },
+  { value: "quick", label: "빠른 메모", desc: "요약 없이 말한 그대로 전사만 — 가장 빠름(직접 정리용)", credits: "1" },
+  { value: "detailed", label: "상세 요약", desc: "증상·소견·처치·처방·다음 방문을 구조화한 자세한 상담기록", credits: "3" },
+  { value: "dental", label: "용어 보정", desc: "치과 용어(크라운·인레이·크랙 등) 교정 후 요약 — 정확도↑", credits: "3" },
+  { value: "chunk", label: "긴 상담", desc: "5분 단위로 나눠 끊김 없이 전사(긴 상담·중간 실패에 강함)", credits: "구간당 1+요약 2" },
+  { value: "multilingual", label: "다국어", desc: "자동 언어감지 + 번역(원문/번역/요약)", credits: "3" },
+  { value: "comparison", label: "비교", desc: "기본 + 다국어 동시 실행해 나란히 비교", credits: "5" },
 ];
+
+/** 실시간 통역(spec 030) 표기 — 분당 소모. SSOT 동기 대상. */
+export const INTERPRET_CREDIT_PER_MIN = 1;
 
 // 청크(긴 상담) 모드 상수 — 분할 녹음·전사 오케스트레이션 공용(spec 010 research R5).
 export const CHUNK_SEGMENT_MS = 5 * 60 * 1000; // 구간 길이 5분

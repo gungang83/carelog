@@ -30,6 +30,7 @@ import {
   type EngineRun,
 } from "@/lib/transcribe/engines";
 import { EngineSelector } from "@/components/chair/engine-selector";
+import { InterpreterStage } from "@/components/chair/interpreter-stage";
 import { RichTextEditor, type RichTextEditorHandle } from "@/components/rich-text-editor";
 import { PrescriptionPicker } from "@/components/chair/prescription-picker";
 import { ParticipantPicker } from "@/components/chair/participant-picker";
@@ -95,6 +96,7 @@ function BoardContent({
     setEngine,
     registerAutoFinalize,
     consumeBoardPrefill,
+    getStream,
   } = useChairContext();
 
   const isOpen = openChairId === DRAFT_CHAIR_KEY;
@@ -113,6 +115,8 @@ function BoardContent({
   const [comparison, setComparison] = useState<EngineRun[] | null>(null);
   // 저장 시 기록할 사용 엔진(어떤 엔진 결과를 본문에 넣었는지).
   const [usedEngine, setUsedEngine] = useState<string | null>(null);
+  // spec 030 — 실시간 통역 스테이지(실험실 PoC). ⚠️ 훅은 조기 return 위(66f).
+  const [showInterpreter, setShowInterpreter] = useState(false);
   const [recoverable, setRecoverable] = useState<BoardDraft | null>(null);
   // 청크(긴 상담) 전사 진행률 — "n/m 구간 전사 중" 표시(spec 010 US4).
   const [chunkProgress, setChunkProgress] = useState<{ done: number; total: number } | null>(null);
@@ -950,6 +954,17 @@ function BoardContent({
                   >
                     {paused ? "이어서 녹음" : "일시정지"}
                   </button>
+                  {/* spec 030 — 실시간 통역(실험실 PoC): 녹음 중 전체화면 통역 스테이지 */}
+                  {labEnabled && (
+                    <button
+                      type="button"
+                      onClick={() => setShowInterpreter(true)}
+                      className="inline-flex items-center gap-1 rounded-lg border border-violet-300 bg-violet-50 px-3 py-1.5 text-xs font-semibold text-violet-700 transition hover:bg-violet-100"
+                      title="실시간 통역 (분당 1 크레딧) — 화면에 원문·번역이 실시간 표시됩니다"
+                    >
+                      🌐 통역
+                    </button>
+                  )}
                   <button
                     type="button"
                     onClick={handleStop}
@@ -1256,6 +1271,15 @@ function BoardContent({
           </div>
         </div>
       </div>
+
+      {/* spec 030 — 실시간 통역 스테이지(마운트 시에만 연결·해제) */}
+      {showInterpreter && (
+        <InterpreterStage
+          stream={getStream(DRAFT_CHAIR_KEY)}
+          onInsert={(t) => editorRef.current?.insertText(t)}
+          onClose={() => setShowInterpreter(false)}
+        />
+      )}
     </>
   );
 }

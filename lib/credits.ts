@@ -13,6 +13,7 @@ export const CREDIT_PRICES = {
   transcribe_comparison: 5, // 비교(basic + multilingual 동시)
   transcribe_chunk_segment: 1, // 청크 구간 1개 전사
   summarize_chunk: 2, // 청크 전체 요약 1회
+  interpret_realtime: 1, // 실시간 통역 1분 (spec 030 — units=경과 분으로 정산)
 } as const;
 export type CreditFeature = keyof typeof CREDIT_PRICES;
 
@@ -25,6 +26,7 @@ export const FEATURE_LABEL: Record<string, string> = {
   transcribe_comparison: "엔진 비교",
   transcribe_chunk_segment: "긴 상담 구간 전사",
   summarize_chunk: "긴 상담 요약",
+  interpret_realtime: "실시간 통역(분당)",
   grant: "크레딧 충전",
 };
 export function featureLabel(feature: string): string {
@@ -49,16 +51,17 @@ export async function getCreditBalance(institutionId: string): Promise<number> {
  * 사용량 차감 기록. ★비차단·비throw — 전사 hot path에서 호출되므로
  * 어떤 실패도 상담 흐름을 막지 않는다(잔액 음수 허용, 관측/과금 목적).
  * tokensIn/Out: Claude 응답 usage 실토큰(있으면 기록, 없으면 0).
+ * units: 단가 × 수량 정산(spec 030 실시간 통역 = 경과 분). 기본 1.
  */
 export async function deductCredit(
   institutionId: string,
   feature: CreditFeature,
   byEmail: string,
-  opts?: { refId?: string | null; memo?: string; tokensIn?: number; tokensOut?: number },
+  opts?: { refId?: string | null; memo?: string; tokensIn?: number; tokensOut?: number; units?: number },
 ): Promise<void> {
   try {
     const admin = createAdminSupabaseClient();
-    const price = CREDIT_PRICES[feature];
+    const price = CREDIT_PRICES[feature] * Math.max(1, Math.round(opts?.units ?? 1));
     await admin.rpc("deduct_credit", {
       p_institution_id: institutionId,
       p_amount: price,

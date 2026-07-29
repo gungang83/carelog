@@ -16,7 +16,7 @@ export function EngineSelector({
   onChange: (engine: EngineMode) => void;
   className?: string;
 }) {
-  const desc = LAB_ENGINE_OPTIONS.find((o) => o.value === engine)?.desc;
+  const selected = LAB_ENGINE_OPTIONS.find((o) => o.value === engine);
   return (
     <div className={className}>
       <div className="flex items-center gap-2">
@@ -34,20 +34,33 @@ export function EngineSelector({
               key={o.value}
               type="button"
               onClick={() => onChange(o.value)}
-              title={o.desc}
+              title={`${o.desc} · ${o.credits} 크레딧`}
               aria-pressed={active}
-              className={`rounded-lg border px-3 py-1.5 text-sm font-medium transition ${
+              className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-sm font-medium transition ${
                 active
                   ? "border-sky-600 bg-sky-600 text-white"
                   : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
               }`}
             >
               {o.label}
+              {/* spec 030 — 엔진별 크레딧 소모량 상시 표기 */}
+              <span
+                className={`rounded px-1 py-px text-[10px] font-semibold ${
+                  active ? "bg-sky-500 text-sky-50" : "bg-slate-100 text-slate-400"
+                }`}
+              >
+                {o.credits}
+              </span>
             </button>
           );
         })}
       </div>
-      {desc && <p className="mt-2.5 text-xs text-slate-500">{desc}</p>}
+      {selected && (
+        <p className="mt-2.5 text-xs text-slate-500">
+          {selected.desc} · <span className="font-semibold">{selected.credits} 크레딧</span>
+          {selected.value === "chunk" ? "" : "/회"}
+        </p>
+      )}
     </div>
   );
 }
