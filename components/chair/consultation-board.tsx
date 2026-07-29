@@ -1284,6 +1284,7 @@ function BoardContent({
           stream={getStream(DRAFT_CHAIR_KEY)}
           onInsert={(t) => editorRef.current?.insertText(t)}
           onClose={() => setShowInterpreter(false)}
+          onSettled={(m, c) => setSaveMsg(`✓ 실시간 통역 ${m}분 — ${c}크레딧 사용되었습니다`)}
         />
       )}
     </>

@@ -24,10 +24,13 @@ export function InterpreterStage({
   stream,
   onInsert,
   onClose,
+  onSettled,
 }: {
   stream: MediaStream | null;
   onInsert: (text: string) => void;
   onClose: () => void;
+  /** 정산 결과 통지(분·크레딧) — 보드가 닫힌 뒤 확인 문구를 띄운다 */
+  onSettled?: (minutes: number, credits: number) => void;
 }) {
   const [status, setStatus] = useState<Status>("connecting");
   const [errorMsg, setErrorMsg] = useState("");
@@ -71,7 +74,8 @@ export function InterpreterStage({
     settledRef.current = true;
     const minutes = Math.max(1, Math.round((Date.now() - startTsRef.current) / 60000));
     void recordInterpretUsage(minutes);
-  }, []);
+    onSettled?.(minutes, minutes * INTERPRET_CREDIT_PER_MIN);
+  }, [onSettled]);
 
   // 연결 + 오디오 펌프. stream이 없으면(녹음 전) 에러 표시.
   useEffect(() => {
@@ -232,9 +236,15 @@ export function InterpreterStage({
         <span className="rounded bg-violet-500/30 px-1.5 py-0.5 text-[10px] font-bold text-violet-200">
           실험실 PoC
         </span>
-        <span className="text-sm text-slate-400">{statusLabel} · {fmt(elapsed)}</span>
+        <span className="text-sm text-slate-400">
+          {statusLabel} · {fmt(elapsed)} ·{" "}
+          {/* 누적 소모 — 정산 공식과 동일(반올림·최소 1분)이라 표시=실차감 */}
+          <span className="font-semibold text-amber-300">
+            약 {Math.max(1, Math.round(elapsed / 60)) * INTERPRET_CREDIT_PER_MIN}크레딧
+          </span>
+        </span>
         <span className="ml-auto text-[11px] text-slate-500">
-          분당 {INTERPRET_CREDIT_PER_MIN} 크레딧 · 녹음은 계속 저장됩니다
+          분당 {INTERPRET_CREDIT_PER_MIN} 크레딧 · 종료 시 정산 · 녹음은 계속 저장됩니다
         </span>
       </div>
 
