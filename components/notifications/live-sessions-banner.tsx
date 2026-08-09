@@ -1,7 +1,11 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { subscribeBoardLive, type BoardLivePayload } from "@/lib/realtime/board-live";
+import {
+  subscribeBoardLive,
+  sendBoardFinalize,
+  type BoardLivePayload,
+} from "@/lib/realtime/board-live";
 
 /**
  * 진행 중인 상담 실시간 배너 (C-05 1단계).
@@ -15,6 +19,22 @@ type LiveSession = { payload: BoardLivePayload; lastSeen: number };
 
 export function LiveSessionsBanner({ institutionId }: { institutionId: string }) {
   const [sessions, setSessions] = useState<Map<string, LiveSession>>(new Map());
+  // 원격 종료 요청 보낸 세션(중복 클릭 방지 + "요청됨" 표시)
+  const [finalizing, setFinalizing] = useState<Set<string>>(new Set());
+
+  // 다른 기기에 방치된 상담을 여기서 종료·저장 — 그 기기의 보드가 자동 저장 경로를 탄다(spec 027).
+  function requestFinalize(p: BoardLivePayload) {
+    const who = p.author || "직원";
+    const where = p.chairName ? ` (${p.chairName})` : "";
+    if (
+      !window.confirm(
+        `${who}님의 진행 중 상담${where}을 종료하고 저장할까요?\n작성하던 기기에서 자동으로 '종료 및 저장'됩니다 — 기록은 사라지지 않아요.`,
+      )
+    )
+      return;
+    sendBoardFinalize(institutionId, { sessionId: p.sessionId, requestedBy: "홈에서 원격 종료" });
+    setFinalizing((prev) => new Set(prev).add(p.sessionId));
+  }
 
   useEffect(() => {
     if (!institutionId) return;
@@ -71,6 +91,18 @@ export function LiveSessionsBanner({ institutionId }: { institutionId: string })
             <span className="shrink-0 text-xs text-slate-400">
               {elapsedLabel(payload.startedAt)} · {payload.charCount}자
             </span>
+            {finalizing.has(payload.sessionId) ? (
+              <span className="shrink-0 text-xs font-medium text-emerald-600">종료 요청됨…</span>
+            ) : (
+              <button
+                type="button"
+                onClick={() => requestFinalize(payload)}
+                className="shrink-0 rounded-lg border border-rose-200 bg-white px-2.5 py-1 text-xs font-semibold text-rose-600 transition hover:bg-rose-50"
+                title="작성 중인 기기에서 자동으로 '종료 및 저장'을 실행합니다 — 기록은 보존돼요"
+              >
+                종료·저장
+              </button>
+            )}
           </li>
         ))}
       </ul>

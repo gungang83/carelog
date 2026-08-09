@@ -25,11 +25,22 @@ function channelName(institutionId: string) {
   return `institution:${institutionId}:board-live`;
 }
 
-export function createBoardLivePublisher(institutionId: string) {
+/** 원격 종료 요청(홈 '진행 중인 상담' → 작성 중인 기기) — sessionId 대상 지정. */
+export type BoardFinalizeCommand = { sessionId: string; requestedBy: string };
+
+export function createBoardLivePublisher(
+  institutionId: string,
+  onFinalizeCommand?: (cmd: BoardFinalizeCommand) => void,
+) {
   const supabase = createBrowserSupabaseClient();
   const channel = supabase.channel(channelName(institutionId), {
     config: { broadcast: { self: false } },
   });
+  if (onFinalizeCommand) {
+    channel.on("broadcast", { event: "finalize" }, (msg) => {
+      onFinalizeCommand(msg.payload as BoardFinalizeCommand);
+    });
+  }
   channel.subscribe();
   return {
     publish(payload: BoardLivePayload) {
@@ -39,6 +50,24 @@ export function createBoardLivePublisher(institutionId: string) {
       void supabase.removeChannel(channel);
     },
   };
+}
+
+/** 다른 기기의 진행 중 상담에 '종료·저장' 요청을 보낸다(같은 기관 broadcast). */
+export function sendBoardFinalize(institutionId: string, cmd: BoardFinalizeCommand) {
+  const supabase = createBrowserSupabaseClient();
+  const channel = supabase.channel(channelName(institutionId), {
+    config: { broadcast: { self: false } },
+  });
+  channel.subscribe((status) => {
+    if (status === "SUBSCRIBED") {
+      void channel
+        .send({ type: "broadcast", event: "finalize", payload: cmd })
+        .finally(() => {
+          // 전송 후 채널 정리(one-shot)
+          setTimeout(() => void supabase.removeChannel(channel), 1000);
+        });
+    }
+  });
 }
 
 export function subscribeBoardLive(

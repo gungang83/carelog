@@ -108,8 +108,8 @@ export function HomeFeed({
       : []),
   ].sort((a, b) => b.time - a.time);
 
-  // 기본 10개만 노출, 나머지는 '전체 보기'로 펼침.
-  const COLLAPSED = 10;
+  // 최근 5개만 노출(대표 확정 — 홈은 훑는 화면), 나머지는 /records 전체보기·검색으로.
+  const COLLAPSED = 5;
   const items = expanded ? allItems : allItems.slice(0, COLLAPSED);
 
   if (records.length === 0 && linkedRecords.length === 0) return null;
@@ -200,12 +200,29 @@ export function HomeFeed({
         </ul>
       )}
 
-      {allItems.length > COLLAPSED && (
+      {allItems.length > COLLAPSED && !expanded && (
+        <div className="flex gap-2">
+          <button
+            onClick={() => router.push("/records")}
+            className="flex-1 rounded-xl border border-sky-200 bg-sky-50 py-2 text-xs font-semibold text-sky-700 transition hover:bg-sky-100"
+          >
+            전체 {allItems.length}개 보기 · 검색
+          </button>
+          <button
+            onClick={() => setExpanded(true)}
+            className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-500 transition hover:bg-slate-50"
+            title="이 화면에서 펼치기"
+          >
+            펼치기
+          </button>
+        </div>
+      )}
+      {expanded && (
         <button
-          onClick={() => setExpanded((e) => !e)}
+          onClick={() => setExpanded(false)}
           className="w-full rounded-xl border border-slate-200 bg-white py-2 text-xs font-medium text-slate-500 transition hover:bg-slate-50"
         >
-          {expanded ? "접기" : `전체 ${allItems.length}개 보기`}
+          접기
         </button>
       )}
     </section>

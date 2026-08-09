@@ -83,7 +83,13 @@ function ResizableImageView({ node, updateAttributes, selected, editor, getPos }
           .insertContentAt(pos + node.nodeSize, { type: "image", attrs: { src: url, alt: alt ?? "" } })
           .run();
       } else {
-        editor.chain().focus().setImage({ src: url }).run();
+        // ⚠️ setImage는 현재 선택(=직전 이미지 노드)을 교체한다 — 이미지+빈 문단을 이어 삽입해
+        //    커서를 문단으로 옮겨 연속 삽입이 안전하게(다중 이미지 교체 버그 방지).
+        editor
+          .chain()
+          .focus()
+          .insertContent([{ type: "image", attrs: { src: url } }, { type: "paragraph" }])
+          .run();
       }
     } catch {
       alert("스냅샷 저장에 실패했습니다. 다시 시도해 주세요.");
@@ -387,7 +393,12 @@ function RichTextEditor({ value, onChange, placeholder }, ref) {
     setUploading(true);
     try {
       const url = await uploadImage(annotated);
-      editor.chain().focus().setImage({ src: url }).run();
+      // 이미지+빈 문단 삽입 — setImage는 선택을 교체해 연속 삽입 시 직전 이미지가 사라진다(다중 이미지 버그).
+      editor
+        .chain()
+        .focus()
+        .insertContent([{ type: "image", attrs: { src: url } }, { type: "paragraph" }])
+        .run();
     } catch {
       alert("이미지 업로드에 실패했습니다. 다시 시도해 주세요.");
     } finally {
@@ -409,7 +420,15 @@ function RichTextEditor({ value, onChange, placeholder }, ref) {
       // 영상은 링크로 기록에 담는다(spec 026) — 표시에서 자동 링크화, 환자 포털에서 클릭 시청.
       editor.chain().focus().insertContent(`<p>▶ ${esc(a.title)} (영상): ${a.link_url}</p>`).run();
     } else if (a.image_url) {
-      editor.chain().focus().setImage({ src: a.image_url, alt: a.title }).run();
+      // 이미지+빈 문단 삽입 — setImage는 선택을 교체해 자료 여러 장을 연속으로 담으면 앞 장이 사라진다.
+      editor
+        .chain()
+        .focus()
+        .insertContent([
+          { type: "image", attrs: { src: a.image_url, alt: a.title } },
+          { type: "paragraph" },
+        ])
+        .run();
     } else {
       return;
     }

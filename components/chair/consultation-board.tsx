@@ -257,7 +257,12 @@ function BoardContent({
 
   useEffect(() => {
     if (!institutionId) return;
-    const pub = createBoardLivePublisher(institutionId);
+    // 원격 종료 수신 — 홈 '진행 중인 상담'에서 이 세션을 지목해 '종료·저장'을 누르면
+    // 이 기기의 보드가 자동 종료·저장 경로(체어 미선택이면 '미지정')를 그대로 탄다.
+    const pub = createBoardLivePublisher(institutionId, (cmd) => {
+      if (cmd.sessionId !== sessionIdRef.current) return;
+      stopSaveRef.current({ allowUnassigned: true });
+    });
     publisherRef.current = pub;
     return () => {
       pub.close();
