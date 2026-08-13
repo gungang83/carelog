@@ -68,7 +68,8 @@ components/
 │   ├── chair-provider.tsx         # ChairProvider (Context + useReducer) — 체어 전역 상태, MediaRecorder refs, 녹음 엔진(engine/setEngine·labEnabled) 공유
 │   ├── consult-hero.tsx           # 홈 히어로 — record-first 진입점("상담 기록 시작"=즉시 녹음). 실험실이면 시작 버튼 위 EngineSelector 노출
 │   ├── consultation-board.tsx     # 상담보드(DRAFT_CHAIR_KEY) — 녹음·전사·본문·체어·참여자·처방·저장. idle 폴백으로 EngineSelector
-│   ├── engine-selector.tsx        # 녹음 엔진 픽커(기본/빠른메모/상세요약/용어보정/긴상담/다국어/비교) — 줄바꿈 pill, 히어로·보드 공용, context engine 사용
+│   ├── engine-selector.tsx        # 녹음 엔진 픽커(기본/빠른메모/상세요약/용어보정/긴상담/다국어/비교) — 줄바꿈 pill, 히어로·보드 공용, context engine 사용. 엔진별 크레딧 뱃지 + 소진 시 프리미엄 🔒 잠금·임박 안내(spec 030 §3, creditBalance는 컨텍스트)
+│   ├── interpreter-stage.tsx      # 실시간 통역 스테이지(spec 030, 실험실 PoC) — 녹음 스트림 분기→OpenAI Realtime 전사(부분 자막)+문장별 Claude 번역, '기록에 담기'로 [실시간 통역] 블록 삽입, 분당 크레딧 카운터·종료 정산
 │
 ├── records/
 │   └── records-browser.tsx        # 상담 기록 전체 열람·검색·필터(spec 011) — searchConsultations 호출, 날짜그룹·접이식 카드·전체복사. /records 페이지에서 사용
@@ -487,6 +488,9 @@ handleSave()  — "상담 종료"(전사만) 후 수동 저장
   Vercel Cron(10분) → GET /api/cron/sync-master   (CRON_SECRET Bearer 보호)
     → 전 기관 순회: syncEoMaster(institution_id)
         → fetchEoMaster()  [lib/eo/gateway.ts]
+        → 크레딧 게이트웨이 [lib/eo/credit-gateway.ts] (spec 031) — EO_CREDIT_GATEWAY=on이면
+          deductCredit/getCreditBalance가 EO 단일 원장(POST /api/gateway/credit/deduct·GET /balance)
+          경유. 로컬 institution_credits=표시 캐시, 실패 시 fail-open 로컬 폴백([gateway-degraded])
             → GET {EO_APP_URL}/api/gateway/carelog/master?institution_id=…
               Header: x-gateway-secret: CARELOG_GATEWAY_SECRET (서버-서버)
             → 200 정상 / 404 미연동(스킵) / 401 시크릿불일치(설정) / 500 재시도
