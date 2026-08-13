@@ -1,7 +1,9 @@
 # spec 031 — EO 크레딧 게이트웨이 수렴 (카드 #1099)
 
-> 상태: **Carelog측 구현 완료 · 스위치 OFF 대기.** 정본 계약: EO `docs/bridge-credit-gateway-contract-v0.md` (v1, 헤임달 #1002).
-> 선행: 테오 EP(#1098 — `POST /api/gateway/credit/deduct` 등) **EO main 배포 확인 시점 기준 미배포** → 배포 후 스위치.
+> 상태: ✅ **발효 완료 (2026-08-14).** 테오 EP(#1098) 배포 + 잔액 이관(#1105: 예미안 -73 상계+200 지급→1,017 ·
+> 강남점 -20 상계+200 지급→750) → `EO_CREDIT_GATEWAY=on` → 검증 통과(전사 1회 → EO 차감, 로컬 캐시 1,015 동기화·로컬 원장 신규 0).
+> 이후 크레딧 정본 = **EO 단일 원장**. 충전도 EO에서(Carelog /admin 수동 충전은 사용 중단 — §4 후속).
+> 정본 계약: EO `docs/bridge-credit-gateway-contract-v0.md` (v1, 헤임달 #1002).
 
 ## 1. 목표
 
