@@ -59,6 +59,17 @@ export async function GET(req: NextRequest) {
   }
   const admin = createAdminSupabaseClient();
   const now = () => new Date().toISOString();
+  const startedAt = Date.now();
+
+  // 갇힌 job 회수 — 함수가 maxDuration으로 중간에 죽으면 processing이 영원히 남는다
+  // (워커는 pending만 집으므로 재시도 불가). 10분 이상 머문 processing을 pending으로
+  // 되돌려 다음 배치에서 재처리한다(attempts는 catch 경로에서만 증가 — 여기선 상태만 복구).
+  const staleBefore = new Date(Date.now() - 10 * 60 * 1000).toISOString();
+  await admin
+    .from("transcription_jobs")
+    .update({ status: "pending", error: "worker timeout 추정 — 자동 회수", updated_at: now() })
+    .eq("status", "processing")
+    .lt("updated_at", staleBefore);
 
   const { data: pending } = await admin
     .from("transcription_jobs")
@@ -72,6 +83,9 @@ export async function GET(req: NextRequest) {
   let failed = 0;
 
   for (const job of jobs) {
+    // 시간 예산 가드 — 240초를 넘기면 남은 job은 다음 분 cron에 양보(함수가 maxDuration으로
+    // 죽어 processing에 갇히는 것 자체를 예방. 20분+ 녹음 전사는 회당 수 분 걸릴 수 있음).
+    if (Date.now() - startedAt > 240_000) break;
     // 원자적 클레임(중복 실행 방지) — 여전히 pending일 때만 processing으로.
     const { data: claimed } = await admin
       .from("transcription_jobs")
