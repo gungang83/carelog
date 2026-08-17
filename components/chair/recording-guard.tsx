@@ -88,6 +88,40 @@ function RecordingGuardInner() {
     getConsultSettings().then(setSettings).catch(() => {});
   }, []);
 
+  // ── 모바일 녹음 보호: 녹음 중 화면 꺼짐 방지(Wake Lock) ──────────────
+  // 폰에서 화면이 잠기면 OS가 백그라운드 녹음을 죽여 저장 시 "녹음이 비어 있음"으로
+  // 유실된다(강남점 폴드6 실사례, 2026-07). 녹음 중엔 화면을 깨워두고,
+  // 탭 복귀(visibilitychange) 시 락이 풀렸으면 재획득한다. 미지원 브라우저는 조용히 무시.
+  const wakeLockRef = useRef<{ release: () => Promise<void> } | null>(null);
+  useEffect(() => {
+    if (!isActive) return;
+    const nav = navigator as Navigator & {
+      wakeLock?: { request: (type: "screen") => Promise<{ release: () => Promise<void> }> };
+    };
+    if (!nav.wakeLock) return;
+    let disposed = false;
+    const acquire = async () => {
+      try {
+        const lock = await nav.wakeLock!.request("screen");
+        if (disposed) void lock.release().catch(() => {});
+        else wakeLockRef.current = lock;
+      } catch {
+        /* 저전력 모드 등 거부 — 안내는 필 문구로 충분, 강제하지 않음 */
+      }
+    };
+    const onVisible = () => {
+      if (document.visibilityState === "visible") void acquire();
+    };
+    void acquire();
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      disposed = true;
+      document.removeEventListener("visibilitychange", onVisible);
+      void wakeLockRef.current?.release().catch(() => {});
+      wakeLockRef.current = null;
+    };
+  }, [isActive]);
+
   const resetActivity = useCallback(() => {
     lastActivityRef.current = Date.now();
     // 활동 = 사람이 있다 → 경고 자동 해제(은행식 '계속하기'와 동일 효과)
