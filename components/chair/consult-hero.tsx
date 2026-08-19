@@ -35,12 +35,16 @@ export function ConsultHero() {
       </div>
 
       <h1 className="mt-5 text-[1.7rem] font-bold leading-tight tracking-tight text-slate-900 break-keep sm:text-[2.15rem]">
-        오늘 나눈 상담, 빠짐없이 남겨{" "}
+        오늘 나눈 상담,
+        <br />
+        정확하게 정리하고
+        <br />
         <span className="text-sky-600">환자분께 전해드려요</span>
       </h1>
-      <p className="mt-3 max-w-md text-[15px] leading-relaxed text-slate-500 break-keep">
-        버튼을 누르면 바로 녹음이 시작돼요. 오늘 나눈 이야기를 정확히 남기고,
-        정리된 상담 기록은 환자분도 직접 받아 보관하실 수 있어요.
+      {/* 강제 줄바꿈 없이 컨테이너 폭에 따라 자연 줄바꿈(반응형) */}
+      <p className="mt-3 max-w-xl text-[15px] leading-relaxed text-slate-500 break-keep">
+        버튼을 누르면 바로 녹음이 시작돼요. 오늘 나눈 이야기를 빠짐없이 남기고, 정리된 상담
+        기록은 환자분도 직접 받아 보관하실 수 있어요.
       </p>
 
       {/* spec 032 — 엔진 선택 UI 제거(실사용 93%가 기본). 파이프라인은 자동:
