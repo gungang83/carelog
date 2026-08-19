@@ -26,7 +26,8 @@ export function ConsultHero() {
   };
 
   return (
-    <section className="overflow-hidden rounded-3xl border border-sky-100 bg-gradient-to-br from-sky-50 via-white to-white p-7 shadow-sm sm:p-9">
+    // 히어로 전체 가운데 정렬(대표 지시) — 로고부터 버튼까지 세로 축 중앙
+    <section className="flex flex-col items-center overflow-hidden rounded-3xl border border-sky-100 bg-gradient-to-br from-sky-50 via-white to-white p-7 text-center shadow-sm sm:p-9">
       <div className="flex items-center gap-2.5">
         <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-sky-100 text-sm font-bold text-sky-700">
           C
@@ -59,7 +60,7 @@ export function ConsultHero() {
         </p>
       ) : null}
 
-      <div className="mt-6 flex flex-col gap-2 sm:flex-row sm:items-center">
+      <div className="mt-6 flex w-full flex-col items-stretch justify-center gap-2 sm:w-auto sm:flex-row sm:items-center">
         <button
           type="button"
           onClick={handleStart}
