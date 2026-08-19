@@ -4,7 +4,7 @@ import {
   useChairContext,
   DRAFT_CHAIR_KEY,
 } from "@/components/chair/chair-provider";
-import { EngineSelector } from "@/components/chair/engine-selector";
+import { CREDIT_LOW_THRESHOLD } from "@/lib/transcribe/engines";
 
 /**
  * 홈 최상단 히어로 — 상담 기록의 진입점(record-first).
@@ -17,8 +17,7 @@ import { EngineSelector } from "@/components/chair/engine-selector";
  * **버튼을 누르기 전 여기서** 고른다(보드 idle을 못 보기 때문).
  */
 export function ConsultHero() {
-  const { openOverlay, startRecording, labEnabled, engine, setEngine, creditBalance } =
-    useChairContext();
+  const { openOverlay, startRecording, creditBalance } = useChairContext();
 
   // 클릭 제스처 안에서 보드를 열고 같은 제스처로 녹음을 시작(getUserMedia 제스처 보존).
   const handleStart = () => {
@@ -44,15 +43,17 @@ export function ConsultHero() {
         정리된 상담 기록은 환자분도 직접 받아 보관하실 수 있어요.
       </p>
 
-      {/* 실험실 — 녹음 엔진 선택. 시작 버튼이 즉시 녹음을 켜므로 반드시 버튼 위(시작 전)에 둔다. */}
-      {labEnabled && (
-        <EngineSelector
-          engine={engine}
-          onChange={setEngine}
-          className="mt-6"
-          creditBalance={creditBalance}
-        />
-      )}
+      {/* spec 032 — 엔진 선택 UI 제거(실사용 93%가 기본). 파이프라인은 자동:
+          용어 보정 상시 + 3분↑ 서버 위임. 실험실 엔진 실험은 보드 idle 픽커('녹음 없이 기록만' 경유)로. */}
+      {creditBalance <= 0 ? (
+        <p className="mt-5 rounded-xl bg-red-50 px-3 py-2 text-xs font-medium text-red-600 break-keep">
+          크레딧이 소진되었습니다 — 상담 기록은 계속 남길 수 있지만, 관리자에게 충전을 요청해 주세요.
+        </p>
+      ) : creditBalance <= CREDIT_LOW_THRESHOLD ? (
+        <p className="mt-5 rounded-xl bg-amber-50 px-3 py-2 text-xs font-medium text-amber-700 break-keep">
+          크레딧 잔액 {creditBalance} — 곧 소진됩니다. 충전을 준비해 주세요.
+        </p>
+      ) : null}
 
       <div className="mt-6 flex flex-col gap-2 sm:flex-row sm:items-center">
         <button

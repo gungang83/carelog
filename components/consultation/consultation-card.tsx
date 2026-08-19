@@ -13,6 +13,7 @@ import { renderContentHtml } from "@/lib/content-html";
 import { stripMarkdownMarkers } from "@/lib/summary-format";
 import { updateChairRecordContent, deleteChairRecord } from "@/app/actions/chairs";
 import { deleteConsultation } from "@/app/actions/consultations";
+import { requestDetailedResummary } from "@/app/actions/transcription-jobs";
 import type { Participant } from "@/lib/types/database";
 import type { ReviewFlag } from "@/lib/review-flags";
 
@@ -66,6 +67,16 @@ export function ConsultationCard({
   const [msg, setMsg] = useState("");
   const [isPending, startTransition] = useTransition();
   const editorRef = useRef<RichTextEditorHandle | null>(null);
+  // spec 032 — 사후 상세 재요약 요청 상태(중복 클릭 방지 + 안내)
+  const [resummaryMsg, setResummaryMsg] = useState("");
+
+  const handleResummary = () => {
+    if (!window.confirm("보관된 음성으로 자세한 요약을 다시 만들어 기록 아래에 추가할까요? (3크레딧)")) return;
+    startTransition(async () => {
+      const r = await requestDetailedResummary(record.id);
+      setResummaryMsg(r.ok ? "⏳ 상세 요약 준비 중 — 1~2분 뒤 기록 아래에 추가돼요" : r.message);
+    });
+  };
 
   const chairName = (id: string | null) =>
     id ? (chairs.find((c) => c.id === id)?.name ?? "체어") : "미지정"; // spec 027 — 체어 미지정 저장 표시
@@ -230,6 +241,14 @@ export function ConsultationCard({
               <CopyAllButton html={record.content} label="전체 복사"
                 className="inline-flex min-h-8 items-center gap-1.5 rounded-xl bg-slate-800 px-3 text-xs font-semibold text-white hover:bg-slate-900" />
               {record.has_audio && <AudioReplayButton consultationId={record.id} />}
+              {/* spec 032 — 사후 상세 재요약: 시작 전 엔진 선택 대신 "아쉬우면 다시" */}
+              {record.has_audio && !resummaryMsg && (
+                <button type="button" onClick={handleResummary} disabled={isPending}
+                  title="보관된 음성으로 증상·소견·처치·처방을 구조화한 자세한 요약을 다시 만들어 기록 아래에 추가합니다 (3크레딧)"
+                  className="inline-flex min-h-8 items-center gap-1 rounded-xl border border-violet-200 bg-violet-50 px-3 text-xs font-semibold text-violet-700 hover:bg-violet-100 disabled:opacity-40">
+                  📝 상세 재요약
+                </button>
+              )}
               {/* spec 027 ④ — 이어서 상담: 이 기록을 보드에 깔고 이어쓴다(상담자 교체 포함) */}
               <button type="button"
                 onClick={() =>
@@ -264,6 +283,12 @@ export function ConsultationCard({
               <button type="button" onClick={() => setDeleteConfirm(true)} disabled={isPending}
                 className="inline-flex min-h-8 items-center rounded-xl border border-red-100 bg-white px-3 text-xs font-semibold text-red-500 hover:bg-red-50 disabled:opacity-40">삭제</button>
             </div>
+          )}
+
+          {resummaryMsg && (
+            <p className={`mt-2 text-xs ${resummaryMsg.startsWith("⏳") ? "text-violet-600" : "text-red-500"}`}>
+              {resummaryMsg}
+            </p>
           )}
 
           {/* 확인 꼬리표 */}

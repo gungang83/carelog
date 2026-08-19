@@ -153,3 +153,50 @@ export async function enqueueServerTranscription(formData: FormData): Promise<En
   revalidatePath("/");
   return { ok: true, consultationId: consultation.id };
 }
+
+// spec 032 — 사후 상세 재요약: 보관된 음성으로 detailed 엔진 job을 등록,
+// 워커가 기존 본문 아래에 상세 요약을 이어 붙인다(prefix_html = 현재 본문 — 덮어쓰기 아님).
+// 시작 전 엔진 선택을 없앤 대신 "결과 보고 아쉬우면 다시"로 이동한 UX.
+export async function requestDetailedResummary(
+  consultationId: string,
+): Promise<{ ok: true } | { ok: false; message: string }> {
+  const supabase = await createServerSupabaseClient();
+  const institutionId = await getMyInstitutionId();
+  if (!institutionId) return { ok: false, message: "기관 정보를 찾을 수 없습니다." };
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false, message: "로그인이 필요합니다." };
+
+  const admin = createAdminSupabaseClient();
+  const { data: c } = await admin
+    .from("consultation")
+    .select("id, institution_id, content, audio_path")
+    .eq("id", consultationId)
+    .maybeSingle();
+  if (!c || c.institution_id !== institutionId) {
+    return { ok: false, message: "기록을 찾을 수 없습니다." };
+  }
+  if (!c.audio_path) {
+    return { ok: false, message: "음성이 보관된 기록만 다시 요약할 수 있어요." };
+  }
+  const { data: existing } = await admin
+    .from("transcription_jobs")
+    .select("id")
+    .eq("consultation_id", c.id)
+    .in("status", ["pending", "processing"])
+    .maybeSingle();
+  if (existing) {
+    return { ok: false, message: "이미 처리 중인 작업이 있어요 — 잠시 뒤 확인해 주세요." };
+  }
+
+  const { error: jobErr } = await admin.from("transcription_jobs").insert({
+    institution_id: institutionId,
+    consultation_id: c.id,
+    engine: "detailed",
+    prefix_html: (c.content as string) || null, // 기존 본문 보존 — 워커가 그 아래에 append
+    created_by: user.email ?? null,
+  });
+  if (jobErr) return { ok: false, message: `등록 실패: ${jobErr.message}` };
+  return { ok: true };
+}

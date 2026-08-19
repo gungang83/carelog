@@ -181,6 +181,18 @@ export const UPDATE_FEED: UpdateFeedEntry[] = [
     internal: "세션 67c",
   },
   {
+    id: "2026-08-16-recording-simplify",
+    date: "2026-08-16",
+    emoji: "🎙",
+    title: "녹음 시작이 더 단순해졌어요",
+    items: [
+      "엔진 선택 없이 버튼 하나로 바로 시작합니다 — 치과 용어 교정은 항상 자동으로 적용되고, 긴 상담도 알아서 처리돼요.",
+      "요약이 아쉬우면 기록 카드의 '상세 재요약'으로 보관된 음성에서 자세한 요약을 다시 만들어 붙일 수 있습니다.",
+      "녹음 중엔 휴대폰 화면이 자동으로 꺼지지 않아, 화면 잠금으로 녹음이 끊기던 문제가 사라졌습니다.",
+    ],
+    internal: "spec 032 · Wake Lock fix · 세션 68",
+  },
+  {
     id: "2026-07-05-announce-ticker",
     date: "2026-07-05",
     emoji: "📢",
