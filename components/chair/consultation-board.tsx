@@ -131,6 +131,8 @@ function BoardContent({
   const editorRef = useRef<RichTextEditorHandle | null>(null);
   // 녹음 원본 blob — 저장 후 음성 보관 업로드용(spec 009). 저장/버리기 시 해제.
   const audioBlobRef = useRef<Blob | null>(null);
+  // 전사 원문(spec 034) — 저장 시 consultation_transcripts로 보관(평가용). 저장/버리기 시 해제.
+  const transcriptRef = useRef<string>("");
   // 청크(긴 상담) 모드 분할 녹음 구간 blob 배열 — 복구 재전사용(spec 010).
   const audioSegmentsRef = useRef<Blob[]>([]);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -468,6 +470,7 @@ function BoardContent({
         if (r.ok) {
           markLocalSave(r.consultationId);
           audioBlobRef.current = null;
+          transcriptRef.current = "";
           audioSegmentsRef.current = [];
           liveTextsRef.current = [];
           liveTasksRef.current = [];
@@ -529,6 +532,7 @@ function BoardContent({
             prescriptions,
             participants,
             ...(chair ? { chairId: chair.id } : {}),
+            transcript: transcriptRef.current || undefined,
           });
           return r.ok ? { ok: true as const, consultationId: continuationId } : r;
         })()
@@ -538,6 +542,7 @@ function BoardContent({
           prescriptions,
           participants,
           transcriptionEngine: engineUsed,
+          transcript: transcriptRef.current || undefined,
         });
     autoSaveRef.current = false;
     if (result.ok) {
@@ -550,6 +555,7 @@ function BoardContent({
       }
       audioBlobRef.current = null;
       audioSegmentsRef.current = [];
+      transcriptRef.current = "";
       liveTextsRef.current = [];
       liveTasksRef.current = [];
       void clearDraft();
@@ -598,6 +604,7 @@ function BoardContent({
           setTranscriptionResult(DRAFT_CHAIR_KEY, run.summary);
           editorRef.current?.insertText(run.insertText);
           setUsedEngine(run.engine);
+          transcriptRef.current = run.transcription ?? "";
           if (autoSaveRef.current) await doAutoSave(run.engine);
         }
       } else {
@@ -726,6 +733,7 @@ function BoardContent({
     setTranscriptionResult(DRAFT_CHAIR_KEY, summary);
     editorRef.current?.insertText(summary);
     setUsedEngine("chunk");
+    transcriptRef.current = succeeded.join("\n");
     if (autoSaveRef.current) await doAutoSave("chunk");
   };
 
@@ -761,6 +769,7 @@ function BoardContent({
     setContinuationId(null); // spec 027 ④ — 이어서 모드 해제
     audioBlobRef.current = null;
     audioSegmentsRef.current = [];
+    transcriptRef.current = "";
     // spec 016 — 점진 전사·자동저장 상태 초기화
     liveTextsRef.current = [];
     liveTasksRef.current = [];
@@ -830,6 +839,7 @@ function BoardContent({
           prescriptions,
           participants,
           ...(selectedChair ? { chairId: selectedChair.id } : {}),
+          transcript: transcriptRef.current || undefined,
         });
         if (result.ok) {
           markLocalSave(contId);
@@ -862,6 +872,7 @@ function BoardContent({
         prescriptions,
         participants,
         transcriptionEngine: usedEngine,
+        transcript: transcriptRef.current || undefined,
       });
       if (result.ok) {
         // 이 탭이 저장한 기록 → 내 토스트만 숨김(같은 계정 다른 기기는 알림 받음)
@@ -875,6 +886,7 @@ function BoardContent({
         }
         audioBlobRef.current = null;
         audioSegmentsRef.current = [];
+        transcriptRef.current = "";
         liveTextsRef.current = [];
         liveTasksRef.current = [];
         setLiveDone(0);
@@ -905,6 +917,7 @@ function BoardContent({
     editorRef.current?.insertText(run.insertText);
     setTranscriptionResult(DRAFT_CHAIR_KEY, run.summary);
     setUsedEngine(run.engine);
+    transcriptRef.current = run.transcription ?? "";
     setComparison(null);
   };
 

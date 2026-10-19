@@ -107,6 +107,8 @@ function OverlayContent() {
 
   // spec 027 — 방치 자동 종료(오버레이 세션) 등록. ⚠️ 훅은 아래 조기 return보다 반드시 위에(호출 순서 고정).
   const stopRef = useRef<() => void>(() => {});
+  // 전사 원문(spec 034) — 저장 시 보관용. 저장/버리기 시 해제.
+  const transcriptRef = useRef<string>("");
   useEffect(() => {
     if (!openChairId || status !== "recording") return;
     const key = openChairId;
@@ -154,6 +156,7 @@ function OverlayContent() {
         const run = result.runs[0];
         setTranscriptionResult(openChairId, run.summary);
         setEditText(run.summary);
+        transcriptRef.current = run.transcription ?? "";
       } else {
         setMicError(`전사 실패 (녹음 ${secs}초 · ${sizeKB}KB): ${result.message}`);
         setTranscriptionResult(openChairId, "");
@@ -184,10 +187,12 @@ function OverlayContent() {
           content: editText,
           prescriptions,
           participants,
+          transcript: transcriptRef.current || undefined,
         });
         if (result.ok) {
           markLocalSave(result.consultationId);
           setSavedConsultationId(openChairId, result.consultationId);
+          transcriptRef.current = "";
           setSaveMsg("저장됨 ✓");
           await refreshUnlinkedCount(openChairId);
         } else {
@@ -203,6 +208,7 @@ function OverlayContent() {
   const handleDiscard = () => {
     if (!openChairId) return;
     resetChair(openChairId);
+    transcriptRef.current = "";
     setEditText("");
     setPrescriptions([]);
     setSaveMsg("");

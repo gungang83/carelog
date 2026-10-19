@@ -7,6 +7,7 @@ import { runServerTranscription } from "@/app/actions/transcribe";
 import { sanitizeRichHtml, ensureHtml } from "@/lib/sanitize-html";
 import { deductCredit, CREDIT_PRICES, type CreditFeature } from "@/lib/credits";
 import { sendNotification } from "@/lib/notifications";
+import { saveConsultationTranscript, type TranscriptMode } from "@/lib/transcripts";
 
 // spec 020 서버 비동기 전사 워커 — pending job을 집어 전사·요약 후 상담 레코드를 채운다.
 //   매 분(vercel.json cron) 실행. CRON_SECRET Bearer(자동) 또는 슈퍼어드민 세션(수동).
@@ -39,6 +40,7 @@ function insertTextToHtml(text: string): string {
 }
 
 function engineFeature(engine: string): CreditFeature {
+  if (engine === "transcript_only") return "transcribe_quick"; // 원문 확보 = 전사만(1크레딧)
   const k = `transcribe_${engine}` as CreditFeature;
   return k in CREDIT_PRICES ? k : "transcribe_basic";
 }
@@ -49,6 +51,7 @@ type Job = {
   consultation_id: number; // consultation.id는 bigint
   engine: string;
   prefix_html: string | null;
+  transcript_mode: string | null; // spec 034 — replace | append (null=replace)
   attempts: number;
   created_by: string | null;
 };
@@ -73,7 +76,7 @@ export async function GET(req: NextRequest) {
 
   const { data: pending } = await admin
     .from("transcription_jobs")
-    .select("id, institution_id, consultation_id, engine, prefix_html, attempts, created_by")
+    .select("id, institution_id, consultation_id, engine, prefix_html, transcript_mode, attempts, created_by")
     .eq("status", "pending")
     .order("created_at", { ascending: true })
     .limit(BATCH);
@@ -111,10 +114,16 @@ export async function GET(req: NextRequest) {
       const r = await runServerTranscription(file, job.engine);
       if (!r.ok) throw new Error(r.message);
 
-      const finalHtml = sanitizeRichHtml(
-        ensureHtml(`${job.prefix_html ?? ""}${insertTextToHtml(r.insertText)}`),
-      );
-      await admin.from("consultation").update({ content: finalHtml }).eq("id", job.consultation_id);
+      // spec 034 — 전사 원문 보관(평가용). transcript_only는 본문을 건드리지 않고 원문만 저장.
+      const tMode: TranscriptMode = job.transcript_mode === "append" ? "append" : "replace";
+      await saveConsultationTranscript(job.consultation_id, r.transcription, r.engine, tMode);
+
+      if (job.engine !== "transcript_only") {
+        const finalHtml = sanitizeRichHtml(
+          ensureHtml(`${job.prefix_html ?? ""}${insertTextToHtml(r.insertText)}`),
+        );
+        await admin.from("consultation").update({ content: finalHtml }).eq("id", job.consultation_id);
+      }
       await admin.from("transcription_jobs").update({ status: "done", error: null, updated_at: now() }).eq("id", job.id);
 
       // 사용량(크레딧·토큰) 기록 — 세션 없이 job 기준
@@ -124,14 +133,16 @@ export async function GET(req: NextRequest) {
         tokensOut: r.tokensOut,
       });
 
-      await sendNotification({
-        title: "상담 기록이 준비됐어요",
-        body: "백그라운드 전사가 완료돼 상담 기록에 반영됐어요.",
-        type: "consultation_saved",
-        link: "/records",
-        recipients: "all",
-        institutionId: job.institution_id,
-      });
+      if (job.engine !== "transcript_only") {
+        await sendNotification({
+          title: "상담 기록이 준비됐어요",
+          body: "백그라운드 전사가 완료돼 상담 기록에 반영됐어요.",
+          type: "consultation_saved",
+          link: "/records",
+          recipients: "all",
+          institutionId: job.institution_id,
+        });
+      }
       done++;
     } catch (e) {
       const attempts = (job.attempts ?? 0) + 1;
@@ -142,18 +153,21 @@ export async function GET(req: NextRequest) {
           .update({ status: "error", attempts, error: msg, updated_at: now() })
           .eq("id", job.id);
         // 상담 본문에 실패 안내 남김(유실 아님 — 음성은 보관, 재시도 가능)
-        const failHtml = sanitizeRichHtml(
-          ensureHtml(`${job.prefix_html ?? ""}<p>⚠️ 서버 전사에 실패했어요. 음성은 보관돼 있어요 — 다시 시도해 주세요.</p>`),
-        );
-        await admin.from("consultation").update({ content: failHtml }).eq("id", job.consultation_id);
-        await sendNotification({
-          title: "전사 실패",
-          body: "서버 전사에 실패했어요. 상담 기록에서 다시 시도해 주세요.",
-          type: "system",
-          link: "/records",
-          recipients: "all",
-          institutionId: job.institution_id,
-        });
+        // transcript_only(원문 확보)는 본문과 무관 — 본문을 건드리지 않고 조용히 실패 처리.
+        if (job.engine !== "transcript_only") {
+          const failHtml = sanitizeRichHtml(
+            ensureHtml(`${job.prefix_html ?? ""}<p>⚠️ 서버 전사에 실패했어요. 음성은 보관돼 있어요 — 다시 시도해 주세요.</p>`),
+          );
+          await admin.from("consultation").update({ content: failHtml }).eq("id", job.consultation_id);
+          await sendNotification({
+            title: "전사 실패",
+            body: "서버 전사에 실패했어요. 상담 기록에서 다시 시도해 주세요.",
+            type: "system",
+            link: "/records",
+            recipients: "all",
+            institutionId: job.institution_id,
+          });
+        }
         failed++;
       } else {
         // 재시도 — 다시 pending으로

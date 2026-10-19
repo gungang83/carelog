@@ -13,6 +13,7 @@ import type { ChairRow, Participant } from "@/lib/types/database";
 import { transcribeEngine } from "@/app/actions/transcribe";
 import type { EngineMode, EngineTranscribeResult } from "@/lib/transcribe/engines";
 import { sendNotification } from "@/lib/notifications";
+import { saveConsultationTranscript } from "@/lib/transcripts";
 
 // ─── transcribeChairAudio ─────────────────────────────────────────────────────
 // Server Action 파일 간 임포트 — client component는 이 파일만 참조.
@@ -88,6 +89,8 @@ export async function saveChairRecord(params: {
   prescriptions?: string[];
   participants?: { id: string; name: string; role: string | null }[];
   transcriptionEngine?: string | null;
+  /** 전사 원문(spec 034 — 평가용 보관). 녹음 없는 기록은 미전달. */
+  transcript?: string | null;
 }): Promise<SaveChairRecordResult> {
   const supabase = await createServerSupabaseClient();
   const institutionId = await getMyInstitutionId();
@@ -144,6 +147,16 @@ export async function saveChairRecord(params: {
     actor_user_id: user.id,
   });
 
+  // 전사 원문 보관(spec 034) — 비차단, 실패해도 저장 흐름 불변
+  if (params.transcript) {
+    await saveConsultationTranscript(
+      consultation.id,
+      params.transcript,
+      params.transcriptionEngine ?? null,
+      "replace",
+    );
+  }
+
   // 알림함 적재 + Web Push 통합(spec 012) — fire-and-forget(저장 결과 비차단).
   // 환자정보·진료내용은 싣지 않는다(체어 이름 + 도착 사실만).
   void sendNotification({
@@ -197,6 +210,8 @@ export async function updateChairRecordContent(params: {
   chairId?: string;
   /** 참여자 변경(선택) — 미지정 시 기존 참여자 유지. */
   participants?: { id: string; name: string; role: string | null }[];
+  /** 새 녹음의 전사 원문(spec 034) — 이어서 상담 시 기존 원문 뒤에 append. */
+  transcript?: string | null;
 }): Promise<UpdateChairRecordContentResult> {
   const supabase = await createServerSupabaseClient();
   const institutionId = await getMyInstitutionId();
@@ -253,6 +268,11 @@ export async function updateChairRecordContent(params: {
     event_type: "record_edited",
     actor_user_id: user.id,
   });
+
+  // 새 녹음(이어서 상담)의 전사 원문 — 기존 원문 뒤에 append(spec 034)
+  if (params.transcript) {
+    await saveConsultationTranscript(params.consultationId, params.transcript, null, "append");
+  }
 
   revalidatePath("/");
   return { ok: true };

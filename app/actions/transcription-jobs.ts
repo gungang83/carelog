@@ -143,6 +143,8 @@ export async function enqueueServerTranscription(formData: FormData): Promise<En
     consultation_id: consultation.id,
     engine,
     prefix_html: prefixHtml || null,
+    // spec 034 — 원문 보관: 이어서 상담은 기존 원문 뒤 append, 새 상담은 replace(=insert)
+    transcript_mode: continueId ? "append" : "replace",
     created_by: user.email ?? null,
   });
   if (jobErr) {
@@ -195,6 +197,7 @@ export async function requestDetailedResummary(
     consultation_id: c.id,
     engine: "detailed",
     prefix_html: (c.content as string) || null, // 기존 본문 보존 — 워커가 그 아래에 append
+    transcript_mode: "replace", // 같은 음성 재전사 — 원문은 교체(중복 방지, spec 034)
     created_by: user.email ?? null,
   });
   if (jobErr) return { ok: false, message: `등록 실패: ${jobErr.message}` };

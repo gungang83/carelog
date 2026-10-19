@@ -566,3 +566,10 @@ Supabase auth.users와 patient_accounts를 연결. Google OAuth 가입 시 생�
 - `eval_grants` — 열람·평가 권한 개방 대비(상담자 당사자·기획공장). `institution_id` · `grantee_email` · `can_view` · `can_evaluate` · `note`, unique(institution_id, grantee_email). **v1은 비어 있음(슈퍼어드민 전용)**.
 - RLS: 3테이블 enable + 정책 0 — service_role(슈퍼어드민 서버 액션)만. 권한 개방 시 grants 기반 정책 추가.
 - migration: `20261019000001_consult_eval.sql`
+
+## 전사 원문 보관 (spec 034 보강)
+- `consultation_transcripts` — 전사 원문(요약 전 raw). `consultation_id`(bigint pk → consultation cascade) · `transcript`(text, 오타 포함) · `engine` · `created_at` · `updated_at`. 이어서 상담은 `[이어서 상담 — 일시]` 구분자로 append. **대화 전문(민감)** — RLS enable+정책 0, service_role 서버 액션만.
+- `eval_runs.basis`(text) — 평가 판정 소스: `transcript`(원문 기반) | `summary`(요약 기반).
+- `transcription_jobs.transcript_mode`(text) — 워커의 원문 저장 방식: `replace`(같은 음성 재전사 — 재요약·원문확보) | `append`(이어서 상담 새 녹음).
+- 엔진 `transcript_only` — 워커가 전사만 수행해 원문 저장, 본문 불변(기존 기록 원문 확보용, 크레딧 transcribe_quick=1).
+- migration: `20261019000003_consult_transcripts.sql`

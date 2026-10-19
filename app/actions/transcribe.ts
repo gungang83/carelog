@@ -579,7 +579,7 @@ export async function runServerTranscription(
   audioFile: File,
   engine: string,
 ): Promise<
-  | { ok: true; insertText: string; summary: string; engine: EngineId; tokensIn: number; tokensOut: number }
+  | { ok: true; insertText: string; summary: string; transcription: string; engine: EngineId; tokensIn: number; tokensOut: number }
   | { ok: false; message: string }
 > {
   const clients = getClients();
@@ -588,6 +588,7 @@ export async function runServerTranscription(
   let result;
   switch (engine) {
     case "quick":
+    case "transcript_only": // spec 034 — 원문 확보 전용(요약 생략, 본문 미변경은 워커가 처리)
       result = await runQuick(audioFile, openai);
       break;
     case "detailed":
@@ -609,6 +610,7 @@ export async function runServerTranscription(
     ok: true,
     insertText: run.insertText,
     summary: run.summary,
+    transcription: run.transcription,
     engine: run.engine,
     tokensIn: run.tokensIn ?? 0,
     tokensOut: run.tokensOut ?? 0,

@@ -723,3 +723,18 @@ alter table public.patient_push_subscriptions enable row level security;
 -- 배선: app/actions/consult-eval.ts(가드=슈퍼어드민+eval_grants 인지형), /admin/eval,
 --   components/admin/eval-manager.tsx. 크레딧 consult_eval=3(비차단). 모델 claude-sonnet-4-6.
 -- ───────────────────────────────────────────────────────────────────────────
+
+-- ───────────────────────────────────────────────────────────────────────────
+-- 전사 원문 보관 (spec 034 보강) — migration: 20261019000003_consult_transcripts.sql
+-- 파이프라인(음성→전사 원문→요약)에서 폐기되던 원문을 보관 — 평가 정확도의 전제.
+--   create table public.consultation_transcripts(
+--     consultation_id bigint pk→consultation cascade,
+--     transcript text not null,  -- 오타 포함 원문(평가 프롬프트에서 감안)
+--     engine text, created_at, updated_at);
+--   + eval_runs.basis text         -- transcript(원문 기반) | summary(요약 기반)
+--   + transcription_jobs.transcript_mode text  -- replace(재전사·원문확보) | append(이어서 상담)
+-- RLS: enable + 정책 0 — 대화 전문(민감)이라 service_role 서버 액션만. 클라 직접 조회 불가.
+-- 배선: lib/transcripts.ts(save/get, never-throw) · 저장 경로 전부(saveChairRecord/updateChairRecordContent
+--   transcript 파라미터, 보드·오버레이 transcriptRef, 서버 워커 job.transcript_mode) ·
+--   엔진 'transcript_only'(워커 — 본문 불변 원문만 확보, 1크레딧) · runEvaluation 원문 우선+basis 기록.
+-- ───────────────────────────────────────────────────────────────────────────

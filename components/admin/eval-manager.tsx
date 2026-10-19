@@ -11,6 +11,7 @@ import {
   runEvaluation,
   getEvalRun,
   saveManualResult,
+  requestTranscriptCapture,
   updateEvalTemplate,
   createEvalTemplate,
   deleteEvalTemplate,
@@ -123,6 +124,19 @@ export function EvalManager({ institutions }: Props) {
     });
   };
 
+  // 원문 확보 — 보관된 음성을 전사만 해서 원문으로 저장(본문 불변, 워커가 수 분 내 처리)
+  const handleCapture = (consultationId: number) => {
+    if (!confirm("보관된 음성을 전사해 원문을 확보할까요? (1크레딧 · 수 분 소요, 본문은 바뀌지 않습니다)")) return;
+    startTransition(async () => {
+      const r = await requestTranscriptCapture(consultationId);
+      setMsg(
+        r.ok
+          ? "원문 확보 작업을 등록했어요 — 수 분 뒤 목록을 새로고침하면 '원문' 표시가 붙고, 그때 평가를 실행하면 원문 기반으로 판정됩니다."
+          : r.message,
+      );
+    });
+  };
+
   return (
     <div className="space-y-6">
       {/* 기관 선택 + 탭 */}
@@ -211,11 +225,32 @@ export function EvalManager({ institutions }: Props) {
                           #{c.id} · {new Date(c.created_at).toLocaleString("ko-KR")}
                         </span>
                       </div>
-                      <div className="mt-0.5 text-xs text-slate-400">
-                        {c.author_name ?? "작성자 미상"}
-                        {c.station_name ? ` · ${c.station_name}` : ""} · 본문 {c.content_chars.toLocaleString()}자
+                      <div className="mt-0.5 flex flex-wrap items-center gap-1.5 text-xs text-slate-400">
+                        <span>
+                          {c.author_name ?? "작성자 미상"}
+                          {c.station_name ? ` · ${c.station_name}` : ""} · 본문 {c.content_chars.toLocaleString()}자
+                        </span>
+                        {c.has_transcript ? (
+                          <span className="rounded-full border border-emerald-200 bg-emerald-50 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-700">
+                            원문 보유
+                          </span>
+                        ) : (
+                          <span className="rounded-full border border-slate-200 bg-slate-50 px-1.5 py-0.5 text-[10px] text-slate-400">
+                            요약만
+                          </span>
+                        )}
                       </div>
                     </div>
+                    {!c.has_transcript && c.has_audio && (
+                      <button
+                        onClick={() => handleCapture(c.id)}
+                        disabled={isPending}
+                        className="rounded-lg border border-emerald-200 px-2.5 py-1.5 text-xs text-emerald-700 transition hover:bg-emerald-50 disabled:opacity-40"
+                        title="보관된 음성을 전사해 원문을 확보합니다(본문 불변)"
+                      >
+                        원문 확보
+                      </button>
+                    )}
                     {c.last_run && (
                       <button
                         onClick={() => handleOpenRun(c.last_run!.id)}
@@ -325,6 +360,15 @@ function RunView({
             <span className="rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[11px] font-semibold text-amber-700">
               🧪 테스트중
             </span>
+            {run.basis === "transcript" ? (
+              <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[11px] font-semibold text-emerald-700">
+                원문 기반
+              </span>
+            ) : (
+              <span className="rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[11px] font-semibold text-slate-500">
+                요약 기반
+              </span>
+            )}
           </div>
           <div className="mt-0.5 text-xs text-slate-500">
             {new Date(run.created_at).toLocaleString("ko-KR")} · {run.model}
@@ -369,7 +413,9 @@ function RunView({
           );
         })}
         <p className="text-xs text-slate-400">
-          ※ 평가는 상담 기록 본문(요약) 기반 — 요약에 남지 않은 발화는 &lsquo;판정불가&rsquo;로 표시됩니다.
+          {run.basis === "transcript"
+            ? "※ 전사 원문 전체 기반 판정 — 원문에 없는 발화는 '미충족'으로 판정될 수 있습니다(전사 오타는 의미 중심으로 감안)."
+            : "※ 요약 본문 기반 판정 — 요약에 남지 않은 발화는 '판정불가'로 표시됩니다. 목록의 [원문 확보] 후 다시 평가하면 정확도가 올라갑니다."}
         </p>
       </div>
 

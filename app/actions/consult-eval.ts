@@ -11,6 +11,7 @@ import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { createAdminSupabaseClient } from "@/lib/supabase/admin";
 import { isSuperAdmin } from "@/lib/admin";
 import { deductCredit } from "@/lib/credits";
+import { getConsultationTranscript } from "@/lib/transcripts";
 
 // ── 타입 ─────────────────────────────────────────────────────
 
@@ -54,6 +55,7 @@ export type EvalRun = {
   summary: string | null;
   error: string | null;
   model: string | null;
+  basis: string | null; // transcript(전사 원문 기반) | summary(요약 기반)
   created_by: string | null;
   created_at: string;
 };
@@ -248,6 +250,8 @@ export type EvalConsultationRow = {
   author_name: string | null;
   patient_name: string | null;
   content_chars: number; // 본문 텍스트 길이(평가 가능성 가늠)
+  has_audio: boolean; // 음성 보관 여부 — 원문 확보 가능성
+  has_transcript: boolean; // 전사 원문 보유 여부 — true면 원문 기반 평가
   last_run: { id: string; created_at: string; score: number | null } | null;
 };
 
@@ -260,7 +264,7 @@ export async function getEvalConsultations(
   const admin = createAdminSupabaseClient();
   const { data: consults, error } = await admin
     .from("consultation")
-    .select("id, created_at, station_name, author_name, content, patient_id")
+    .select("id, created_at, station_name, author_name, content, patient_id, audio_path")
     .eq("institution_id", institutionId)
     .order("created_at", { ascending: false })
     .limit(20);
@@ -277,6 +281,12 @@ export async function getEvalConsultations(
   }
 
   const ids = consults.map((c) => c.id);
+  const { data: transcripts } = await admin
+    .from("consultation_transcripts")
+    .select("consultation_id")
+    .in("consultation_id", ids);
+  const transcriptSet = new Set((transcripts ?? []).map((t) => t.consultation_id as number));
+
   const { data: runs } = await admin
     .from("eval_runs")
     .select("id, consultation_id, created_at, score")
@@ -302,9 +312,47 @@ export async function getEvalConsultations(
       author_name: c.author_name as string | null,
       patient_name: c.patient_id ? (patientMap.get(c.patient_id as number) ?? null) : null,
       content_chars: htmlToText(String(c.content ?? "")).length,
+      has_audio: Boolean(c.audio_path),
+      has_transcript: transcriptSet.has(c.id as number),
       last_run: lastRunMap.get(c.id as number) ?? null,
     })),
   };
+}
+
+// ── 원문 확보 (spec 034) — 보관된 음성을 전사만 해서 원문으로 저장 ──
+// 본문은 건드리지 않는다(transcript_only job). 기존 기록(원문 미보관 시절)의 평가 품질 복구 경로.
+export async function requestTranscriptCapture(
+  consultationId: number,
+): Promise<{ ok: true } | Fail> {
+  const admin = createAdminSupabaseClient();
+  const { data: c } = await admin
+    .from("consultation")
+    .select("id, institution_id, audio_path")
+    .eq("id", consultationId)
+    .maybeSingle();
+  if (!c) return { ok: false, message: "상담 기록을 찾을 수 없습니다." };
+
+  const access = await resolveEvalAccess(c.institution_id as string);
+  if (!access?.canEvaluate) return { ok: false, message: "평가 권한이 없습니다." };
+  if (!c.audio_path) return { ok: false, message: "음성이 보관된 기록만 원문을 확보할 수 있습니다." };
+
+  const { data: existing } = await admin
+    .from("transcription_jobs")
+    .select("id")
+    .eq("consultation_id", c.id)
+    .in("status", ["pending", "processing"])
+    .maybeSingle();
+  if (existing) return { ok: false, message: "이미 처리 중인 전사 작업이 있습니다 — 잠시 뒤 확인해 주세요." };
+
+  const { error } = await admin.from("transcription_jobs").insert({
+    institution_id: c.institution_id,
+    consultation_id: c.id,
+    engine: "transcript_only",
+    transcript_mode: "replace",
+    created_by: access.email,
+  });
+  if (error) return { ok: false, message: `등록 실패: ${error.message}` };
+  return { ok: true };
 }
 
 // ── AI 평가 실행 ─────────────────────────────────────────────
@@ -372,7 +420,10 @@ export async function runEvaluation(
   const autoItems = items.filter((it) => it.type === "auto");
   if (autoItems.length === 0) return { ok: false, message: "자동 판정 항목이 없는 템플릿입니다." };
 
-  const text = htmlToText(String(consult.content ?? ""));
+  // spec 034 — 전사 원문 우선: 원문이 보관돼 있으면 원문으로 평가(정확), 없으면 요약 본문 폴백.
+  const transcript = await getConsultationTranscript(consultationId);
+  const basis: "transcript" | "summary" = transcript ? "transcript" : "summary";
+  const text = transcript ?? htmlToText(String(consult.content ?? ""));
   if (text.length < 50) {
     return { ok: false, message: "본문이 너무 짧아 평가할 수 없습니다(50자 미만)." };
   }
@@ -392,15 +443,20 @@ export async function runEvaluation(
   let tokensIn = 0;
   let tokensOut = 0;
   try {
+    const premise =
+      basis === "transcript"
+        ? `중요한 전제: 아래는 상담 녹음의 '전사 원문 전체'입니다. 음성 인식 특성상 오타·치과 용어 오류·어색한 문장이 있을 수 있으니 의미 중심으로 읽으십시오. 원문 전체이므로 해당 발화가 전혀 없으면 'unmet'(미충족)으로 판정할 수 있습니다. 'na'는 음질·전사 누락 흔적이 뚜렷해 판단이 불가능한 경우에만 쓰십시오.`
+        : `중요한 전제: 이 본문은 상담 대화의 AI 요약본이며 전사 원문이 아닙니다. 요약에 남지 않은 발화는 판정할 수 없으므로, 본문에 해당 내용의 흔적이 전혀 없으면 'unmet'이 아니라 'na'(판정 불가)로 두십시오. 'unmet'은 본문상 명백히 누락·회피가 드러날 때만 씁니다.`;
+    const sourceLabel = basis === "transcript" ? "상담 전사 원문" : "상담 기록 본문(요약)";
     const message = await anthropic.messages.create({
       model: EVAL_MODEL,
       max_tokens: 3000,
-      system: `당신은 치과 상담 품질 코치입니다. 아래 '상담 기록 본문'을 체크리스트와 대조해 항목별로 판정합니다.
+      system: `당신은 치과 상담 품질 코치입니다. 아래 '${sourceLabel}'을 체크리스트와 대조해 항목별로 판정합니다.
 
-중요한 전제: 이 본문은 상담 대화의 AI 요약본이며 전사 원문이 아닙니다. 요약에 남지 않은 발화는 판정할 수 없으므로, 본문에 해당 내용의 흔적이 전혀 없으면 'unmet'이 아니라 'na'(판정 불가)로 두십시오. 'unmet'은 본문상 명백히 누락·회피가 드러날 때만 씁니다.
+${premise}
 
-판정값: met(충족) | partial(부분 충족) | unmet(미충족 — 명백할 때만) | na(본문만으로 판정 불가)
-evidence: 본문에서 그대로 인용한 근거 구절(필수 — 없으면 빈 문자열, 그 경우 verdict는 na). 조작 금지.
+판정값: met(충족) | partial(부분 충족) | unmet(미충족) | na(판정 불가)
+evidence: 본문에서 그대로 인용한 근거 구절(필수 — 없으면 빈 문자열, 그 경우 verdict는 na 또는 unmet). 조작 금지.
 comment: 한 줄 코칭 코멘트(한국어, 존중하는 톤 — 이 평가는 코칭 보조이지 인사평가가 아님).
 
 반드시 아래 JSON만 출력(설명·마크다운 금지):
@@ -408,7 +464,7 @@ comment: 한 줄 코칭 코멘트(한국어, 존중하는 톤 — 이 평가는 
       messages: [
         {
           role: "user",
-          content: `[체크리스트]\n${checklist}\n\n[상담 기록 본문]\n${text.slice(0, 24000)}`,
+          content: `[체크리스트]\n${checklist}\n\n[${sourceLabel}]\n${text.slice(0, 32000)}`,
         },
       ],
     });
@@ -460,6 +516,7 @@ comment: 한 줄 코칭 코멘트(한국어, 존중하는 톤 — 이 평가는 
       score,
       summary,
       model: EVAL_MODEL,
+      basis,
       created_by: access.email,
     })
     .select("*")
