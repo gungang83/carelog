@@ -20,7 +20,7 @@
 
 | 테이블 | 내용 |
 |---|---|
-| `eval_templates` | 체크리스트. `institution_id` NULL=전역(파트너 템플릿 대비). `items` jsonb `[{id,label,guide,type,weight}]` |
+| `eval_templates` | 체크리스트. **3층 제공·관리 모델**(대표 확정 2026-10-19): 배포 범위=`institution_id`(NULL=전 기관 공통/지정=워크스페이스 전용) × 제공 주체=`provider`(NULL=케어로그 기본/'기획공장' 등=컨설팅 파트너, migration `20261019000002`). `items` jsonb `[{id,label,guide,type,weight}]`. 템플릿 탭에서 생성(기존 복제 포함)·편집·활성/삭제 |
 | `eval_runs` | 상담 1건 평가 결과. `ai_result`/`manual_result` jsonb `[{item_id,verdict,evidence,comment}]`, `score`(실험), `summary`(AI 총평) |
 | `eval_grants` | **권한 개방 대비**: `grantee_email` + `can_view`/`can_evaluate`. v1은 비어 있음(슈퍼어드민만) — 당사자·기획공장 개방 시 행 추가만 하면 됨 |
 

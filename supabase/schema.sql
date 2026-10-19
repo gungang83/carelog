@@ -702,7 +702,8 @@ alter table public.patient_push_subscriptions enable row level security;
 -- 기획공장 협업 — 상담 기록 본문(요약)을 체크리스트와 대조해 AI 판정 + 음성 항목(어조·경청)은
 --   사람이 녹음 듣고 수동 판정. 점수는 실험 필드(시뮬레이션으로 정교화). 코칭 보조 — 인사평가 아님.
 --   create table public.eval_templates(
---     id uuid pk, institution_id uuid→institutions cascade null,  -- NULL=전역(파트너 템플릿 대비)
+--     id uuid pk, institution_id uuid→institutions cascade null,  -- 배포 범위: NULL=전 기관 공통 / 지정=워크스페이스 전용
+--     provider text,  -- 제공 주체: NULL=케어로그 기본 / '기획공장' 등=컨설팅 파트너 (migration: 20261019000002)
 --     name text not null,
 --     items jsonb default '[]',  -- [{id,label,guide,type:'auto'|'manual',weight}]
 --     active bool default true, created_by text, created_at, updated_at);

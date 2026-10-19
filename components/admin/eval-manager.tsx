@@ -12,6 +12,8 @@ import {
   getEvalRun,
   saveManualResult,
   updateEvalTemplate,
+  createEvalTemplate,
+  deleteEvalTemplate,
   getEvalGrants,
   upsertEvalGrant,
   removeEvalGrant,
@@ -38,6 +40,17 @@ function VerdictChip({ verdict }: { verdict: EvalVerdict }) {
       {m.label}
     </span>
   );
+}
+
+/** 출처 라벨 — 배포 범위(전역/기관) × 제공 주체(케어로그/파트너). */
+function templateSource(t: EvalTemplate): string {
+  const scope = t.institution_id ? "이 기관" : "전역";
+  const provider = t.provider ?? "케어로그 기본";
+  return `${scope} · ${provider}`;
+}
+
+function templateOptionLabel(t: EvalTemplate): string {
+  return `[${templateSource(t)}] ${t.name}${t.active ? "" : " (비활성)"}`;
 }
 
 type Props = { institutions: { id: string; name: string }[] };
@@ -164,9 +177,7 @@ export function EvalManager({ institutions }: Props) {
             >
               {templates.map((t) => (
                 <option key={t.id} value={t.id}>
-                  {t.institution_id ? "" : "[전역] "}
-                  {t.name}
-                  {t.active ? "" : " (비활성)"}
+                  {templateOptionLabel(t)}
                 </option>
               ))}
             </select>
@@ -230,19 +241,35 @@ export function EvalManager({ institutions }: Props) {
         </>
       )}
 
-      {tab === "template" && template && (
-        <TemplateEditor
-          key={template.id}
-          templates={templates}
-          templateId={templateId}
-          onSelect={setTemplateId}
-          template={template}
-          onSaved={reload}
-        />
-      )}
-      {tab === "template" && !template && (
-        <div className="rounded-2xl border border-slate-200 bg-white px-5 py-8 text-center text-sm text-slate-400 shadow-sm">
-          {isPending ? "불러오는 중…" : "템플릿이 없습니다."}
+      {tab === "template" && (
+        <div className="space-y-6">
+          <TemplateCreator
+            instId={instId}
+            instName={institutions.find((i) => i.id === instId)?.name ?? "이 기관"}
+            templates={templates}
+            onCreated={(id) => {
+              setTemplateId(id);
+              reload();
+            }}
+          />
+          {template ? (
+            <TemplateEditor
+              key={template.id}
+              templates={templates}
+              templateId={templateId}
+              onSelect={setTemplateId}
+              template={template}
+              onSaved={reload}
+              onDeleted={() => {
+                setTemplateId("");
+                reload();
+              }}
+            />
+          ) : (
+            <div className="rounded-2xl border border-slate-200 bg-white px-5 py-8 text-center text-sm text-slate-400 shadow-sm">
+              {isPending ? "불러오는 중…" : "템플릿이 없습니다."}
+            </div>
+          )}
         </div>
       )}
 
@@ -401,6 +428,97 @@ function RunView({
   );
 }
 
+// ── 템플릿 생성 (3층: 케어로그 기본 / 컨설팅 파트너 / 워크스페이스) ──
+
+function TemplateCreator({
+  instId,
+  instName,
+  templates,
+  onCreated,
+}: {
+  instId: string;
+  instName: string;
+  templates: EvalTemplate[];
+  onCreated: (id: string) => void;
+}) {
+  const [isPending, startTransition] = useTransition();
+  const [name, setName] = useState("");
+  const [scope, setScope] = useState<"global" | "institution">("institution");
+  const [provider, setProvider] = useState("");
+  const [copyFrom, setCopyFrom] = useState("");
+  const [msg, setMsg] = useState("");
+
+  const create = () => {
+    startTransition(async () => {
+      const r = await createEvalTemplate({
+        institutionId: scope === "global" ? null : instId,
+        provider: provider.trim() || null,
+        name,
+        copyFromTemplateId: copyFrom || undefined,
+      });
+      if (r.ok) {
+        setName("");
+        setProvider("");
+        setCopyFrom("");
+        setMsg("");
+        onCreated(r.id);
+      } else setMsg(r.message);
+    });
+  };
+
+  return (
+    <section className="space-y-2 rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-sm">
+      <h3 className="text-sm font-semibold text-slate-700">새 템플릿 만들기</h3>
+      <div className="flex flex-wrap items-center gap-2">
+        <input
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          placeholder="템플릿 이름 (예: 기획공장 교정 상담 v1)"
+          className="min-w-64 flex-1 rounded-lg border border-slate-200 px-2.5 py-1.5 text-sm"
+        />
+        <select
+          value={scope}
+          onChange={(e) => setScope(e.target.value as "global" | "institution")}
+          className="rounded-lg border border-slate-200 px-2 py-1.5 text-xs"
+        >
+          <option value="institution">{instName} 전용</option>
+          <option value="global">전역 (모든 기관)</option>
+        </select>
+        <input
+          value={provider}
+          onChange={(e) => setProvider(e.target.value)}
+          placeholder="제공 주체 (빈칸=케어로그 기본)"
+          className="w-52 rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs"
+        />
+        <select
+          value={copyFrom}
+          onChange={(e) => setCopyFrom(e.target.value)}
+          className="max-w-64 rounded-lg border border-slate-200 px-2 py-1.5 text-xs"
+        >
+          <option value="">항목: 기본 체크리스트로 시작</option>
+          {templates.map((t) => (
+            <option key={t.id} value={t.id}>
+              복제: {templateOptionLabel(t)}
+            </option>
+          ))}
+        </select>
+        <button
+          onClick={create}
+          disabled={isPending || !name.trim()}
+          className="rounded-lg bg-slate-900 px-3 py-1.5 text-xs font-medium text-white transition hover:bg-slate-700 disabled:opacity-40"
+        >
+          {isPending ? "생성 중…" : "만들기"}
+        </button>
+      </div>
+      <p className="text-xs text-slate-400">
+        제공 주체에 컨설팅 회사명(예: 기획공장)을 적으면 파트너 제공 템플릿으로 표시됩니다.
+        전역 템플릿은 모든 워크스페이스에, 기관 전용은 해당 워크스페이스에만 보입니다.
+      </p>
+      {msg && <div className="text-xs text-rose-600">{msg}</div>}
+    </section>
+  );
+}
+
 // ── 템플릿 편집 ──────────────────────────────────────────────
 
 function TemplateEditor({
@@ -409,15 +527,18 @@ function TemplateEditor({
   onSelect,
   template,
   onSaved,
+  onDeleted,
 }: {
   templates: EvalTemplate[];
   templateId: string;
   onSelect: (id: string) => void;
   template: EvalTemplate;
   onSaved: () => void;
+  onDeleted: () => void;
 }) {
   const [isPending, startTransition] = useTransition();
   const [name, setName] = useState(template.name);
+  const [provider, setProvider] = useState(template.provider ?? "");
   const [items, setItems] = useState<EvalTemplateItem[]>(template.items);
   const [msg, setMsg] = useState("");
 
@@ -426,11 +547,28 @@ function TemplateEditor({
 
   const save = () => {
     startTransition(async () => {
-      const r = await updateEvalTemplate(templateId, { name, items });
+      const r = await updateEvalTemplate(templateId, { name, items, provider: provider.trim() || null });
       if (r.ok) {
         setMsg("저장했습니다.");
         onSaved();
       } else setMsg(r.message);
+    });
+  };
+
+  const toggleActive = () => {
+    startTransition(async () => {
+      const r = await updateEvalTemplate(templateId, { active: !template.active });
+      if (r.ok) onSaved();
+      else setMsg(r.message);
+    });
+  };
+
+  const remove = () => {
+    if (!confirm(`'${template.name}' 템플릿을 삭제할까요? 기존 평가 결과는 보존됩니다.`)) return;
+    startTransition(async () => {
+      const r = await deleteEvalTemplate(templateId);
+      if (r.ok) onDeleted();
+      else setMsg(r.message);
     });
   };
 
@@ -444,16 +582,40 @@ function TemplateEditor({
         >
           {templates.map((t) => (
             <option key={t.id} value={t.id}>
-              {t.institution_id ? "" : "[전역] "}
-              {t.name}
+              {templateOptionLabel(t)}
             </option>
           ))}
         </select>
+        <span className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs font-medium text-slate-600">
+          {templateSource(template)}
+        </span>
+        <button
+          onClick={toggleActive}
+          disabled={isPending}
+          className="rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs text-slate-600 transition hover:bg-slate-50 disabled:opacity-40"
+        >
+          {template.active ? "비활성화" : "활성화"}
+        </button>
+        <button
+          onClick={remove}
+          disabled={isPending}
+          className="rounded-lg border border-rose-200 px-2.5 py-1.5 text-xs text-rose-500 transition hover:bg-rose-50 disabled:opacity-40"
+        >
+          삭제
+        </button>
+      </div>
+      <div className="flex flex-wrap items-center gap-2">
         <input
           value={name}
           onChange={(e) => setName(e.target.value)}
           className="min-w-64 flex-1 rounded-lg border border-slate-200 px-2.5 py-1.5 text-sm"
           placeholder="템플릿 이름"
+        />
+        <input
+          value={provider}
+          onChange={(e) => setProvider(e.target.value)}
+          className="w-52 rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs"
+          placeholder="제공 주체 (빈칸=케어로그 기본)"
         />
       </div>
 

@@ -27,7 +27,8 @@ export type EvalTemplateItem = {
 
 export type EvalTemplate = {
   id: string;
-  institution_id: string | null; // null = 전역(파트너 템플릿 대비)
+  institution_id: string | null; // 배포 범위: null = 전 기관 공통 / 지정 = 해당 워크스페이스 전용
+  provider: string | null; // 제공 주체: null = 케어로그 기본 / '기획공장' 등 = 컨설팅 파트너
   name: string;
   items: EvalTemplateItem[];
   active: boolean;
@@ -126,7 +127,7 @@ export async function getEvalTemplates(
   const fetchAll = () =>
     admin
       .from("eval_templates")
-      .select("id, institution_id, name, items, active, created_at")
+      .select("id, institution_id, provider, name, items, active, created_at")
       .or(`institution_id.is.null,institution_id.eq.${institutionId}`)
       .order("created_at", { ascending: true });
 
@@ -147,10 +148,68 @@ export async function getEvalTemplates(
   return { ok: true, templates: data as EvalTemplate[] };
 }
 
-/** 템플릿 항목·이름 수정 (슈퍼어드민 전용 — 배점 시뮬레이션용). */
+/**
+ * 템플릿 생성 (슈퍼어드민 전용) — 3층 제공·관리 모델:
+ *   institutionId null=전 기관 공통 / 지정=해당 워크스페이스 전용
+ *   provider null=케어로그 기본 / '기획공장' 등=컨설팅 파트너 제공
+ * copyFromTemplateId가 있으면 그 템플릿 항목을 복제해 시작(기본 제공 → 기관/파트너 커스텀 경로).
+ */
+export async function createEvalTemplate(opts: {
+  institutionId: string | null;
+  provider: string | null;
+  name: string;
+  copyFromTemplateId?: string;
+}): Promise<{ ok: true; id: string } | Fail> {
+  const access = await resolveEvalAccess(null);
+  if (!access?.superAdmin) return { ok: false, message: "슈퍼어드민 전용입니다." };
+
+  const name = opts.name.trim();
+  if (!name) return { ok: false, message: "템플릿 이름을 입력하세요." };
+
+  const admin = createAdminSupabaseClient();
+  let items: EvalTemplateItem[] = DEFAULT_ITEMS;
+  if (opts.copyFromTemplateId) {
+    const { data: source } = await admin
+      .from("eval_templates")
+      .select("items")
+      .eq("id", opts.copyFromTemplateId)
+      .maybeSingle();
+    if (!source) return { ok: false, message: "복제할 템플릿을 찾을 수 없습니다." };
+    items = (source.items ?? []) as EvalTemplateItem[];
+  }
+
+  const { data, error } = await admin
+    .from("eval_templates")
+    .insert({
+      institution_id: opts.institutionId,
+      provider: opts.provider?.trim() || null,
+      name,
+      items,
+      created_by: access.email,
+    })
+    .select("id")
+    .single();
+  if (error || !data) return { ok: false, message: "템플릿 생성에 실패했습니다." };
+  revalidatePath("/admin/eval");
+  return { ok: true, id: data.id as string };
+}
+
+/** 템플릿 삭제 (슈퍼어드민 전용). 기존 평가 결과는 보존(eval_runs.template_id → null). */
+export async function deleteEvalTemplate(templateId: string): Promise<{ ok: true } | Fail> {
+  const access = await resolveEvalAccess(null);
+  if (!access?.superAdmin) return { ok: false, message: "슈퍼어드민 전용입니다." };
+
+  const admin = createAdminSupabaseClient();
+  const { error } = await admin.from("eval_templates").delete().eq("id", templateId);
+  if (error) return { ok: false, message: "템플릿 삭제에 실패했습니다." };
+  revalidatePath("/admin/eval");
+  return { ok: true };
+}
+
+/** 템플릿 항목·이름·제공 주체 수정 (슈퍼어드민 전용 — 배점 시뮬레이션용). */
 export async function updateEvalTemplate(
   templateId: string,
-  patch: { name?: string; items?: EvalTemplateItem[]; active?: boolean },
+  patch: { name?: string; items?: EvalTemplateItem[]; active?: boolean; provider?: string | null },
 ): Promise<{ ok: true } | Fail> {
   const access = await resolveEvalAccess(null);
   if (!access?.superAdmin) return { ok: false, message: "슈퍼어드민 전용입니다." };
@@ -158,6 +217,7 @@ export async function updateEvalTemplate(
   const update: Record<string, unknown> = { updated_at: new Date().toISOString() };
   if (patch.name !== undefined) update.name = patch.name.trim();
   if (patch.active !== undefined) update.active = patch.active;
+  if (patch.provider !== undefined) update.provider = patch.provider?.trim() || null;
   if (patch.items !== undefined) {
     const cleaned = patch.items
       .map((it) => ({
