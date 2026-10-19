@@ -53,6 +53,12 @@ export default async function AdminPage() {
           >
             사용량 · 크레딧 →
           </Link>
+          <Link
+            href="/admin/eval"
+            className="rounded-xl border border-indigo-200 bg-indigo-50 px-3 py-2 text-sm font-medium text-indigo-700 transition hover:bg-indigo-100"
+          >
+            상담 평가(테스트중) →
+          </Link>
         </div>
       </div>
 

@@ -559,3 +559,10 @@ Supabase auth.users와 patient_accounts를 연결. Google OAuth 가입 시 생�
 - `consult_asset_category_items` — 담기 매핑: category_id·asset_id·display_order·added_by, unique(category_id,asset_id). 전역 자료 참조 가능, 복수 카테고리 허용.
 - `permission_overrides` — 개인 권한 오버라이드(EO 모델): member_id(→institution_members)·feature_id·allowed, unique(member_id,feature_id). RLS 정책 0(서버 전용). 판정=개인 오버라이드>역할 기본값(lib/permissions.ts).
 - migration: `20260708000005_asset_mgmt_permissions.sql`
+
+## 상담 품질 평가 🧪 테스트중 (spec 034)
+- `eval_templates` — 평가 체크리스트. `institution_id`(uuid null → institutions cascade, **NULL=전역**/파트너 템플릿 대비) · `name` · `items`(jsonb `[{id,label,guide,type:'auto'|'manual',weight}]` — auto=AI 본문 판정 / manual=사람이 녹음 듣고 판정, weight=실험 배점) · `active` · `created_by` · `created_at` · `updated_at`.
+- `eval_runs` — 상담 1건 평가 결과. `institution_id` · `consultation_id`(bigint → consultation cascade) · `template_id`(→ eval_templates set null) · `status`(done|error) · `ai_result`/`manual_result`(jsonb `[{item_id,verdict:'met'|'partial'|'unmet'|'na',evidence,comment}]`) · `score`(numeric **실험값** — 표시 시 '실험' 라벨 필수) · `summary` · `error` · `model` · `created_by`. 인덱스: (consultation_id, created_at desc), (institution_id, created_at desc).
+- `eval_grants` — 열람·평가 권한 개방 대비(상담자 당사자·기획공장). `institution_id` · `grantee_email` · `can_view` · `can_evaluate` · `note`, unique(institution_id, grantee_email). **v1은 비어 있음(슈퍼어드민 전용)**.
+- RLS: 3테이블 enable + 정책 0 — service_role(슈퍼어드민 서버 액션)만. 권한 개방 시 grants 기반 정책 추가.
+- migration: `20261019000001_consult_eval.sql`

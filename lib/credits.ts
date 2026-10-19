@@ -22,6 +22,7 @@ export const CREDIT_PRICES = {
   transcribe_chunk_segment: 1, // 청크 구간 1개 전사
   summarize_chunk: 2, // 청크 전체 요약 1회
   interpret_realtime: 1, // 실시간 통역 1분 (spec 030 — units=경과 분으로 정산)
+  consult_eval: 3, // 상담 품질 평가 1회 (spec 034 — 🧪 테스트중, 슈퍼어드민 실행)
 } as const;
 export type CreditFeature = keyof typeof CREDIT_PRICES;
 
@@ -35,6 +36,7 @@ export const FEATURE_LABEL: Record<string, string> = {
   transcribe_chunk_segment: "긴 상담 구간 전사",
   summarize_chunk: "긴 상담 요약",
   interpret_realtime: "실시간 통역(분당)",
+  consult_eval: "상담 품질 평가",
   grant: "크레딧 충전",
 };
 export function featureLabel(feature: string): string {

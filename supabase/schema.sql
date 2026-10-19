@@ -696,3 +696,29 @@ alter table public.patient_push_subscriptions enable row level security;
 -- 배선: /admin/assets(전역 발행), 설정 '상담 자료'(2패널 큐레이션+Library 브라우저)·'기능 권한',
 --    픽커=카테고리 뷰+전체 Library(우리 기관/Carelog 제공 탭).
 -- ───────────────────────────────────────────────────────────────────────────
+
+-- ───────────────────────────────────────────────────────────────────────────
+-- 상담 품질 평가 🧪 테스트중 (spec 034) — migration: 20261019000001_consult_eval.sql
+-- 기획공장 협업 — 상담 기록 본문(요약)을 체크리스트와 대조해 AI 판정 + 음성 항목(어조·경청)은
+--   사람이 녹음 듣고 수동 판정. 점수는 실험 필드(시뮬레이션으로 정교화). 코칭 보조 — 인사평가 아님.
+--   create table public.eval_templates(
+--     id uuid pk, institution_id uuid→institutions cascade null,  -- NULL=전역(파트너 템플릿 대비)
+--     name text not null,
+--     items jsonb default '[]',  -- [{id,label,guide,type:'auto'|'manual',weight}]
+--     active bool default true, created_by text, created_at, updated_at);
+--   create table public.eval_runs(
+--     id uuid pk, institution_id uuid→institutions cascade,
+--     consultation_id bigint→consultation cascade, template_id uuid→eval_templates set null,
+--     status text default 'done',              -- done | error
+--     ai_result jsonb, manual_result jsonb,    -- [{item_id,verdict:'met'|'partial'|'unmet'|'na',evidence,comment}]
+--     score numeric,                           -- 실험값(자동 항목 가중 합) — 표시 시 '실험' 라벨 필수
+--     summary text, error text, model text, created_by text, created_at, updated_at);
+--   index: (consultation_id, created_at desc), (institution_id, created_at desc).
+--   create table public.eval_grants(            -- 열람·평가 권한 개방 대비(당사자·기획공장) — v1 비어 있음
+--     id uuid pk, institution_id uuid→institutions cascade, grantee_email text not null,
+--     can_view bool default true, can_evaluate bool default false, note text, created_at,
+--     unique(institution_id, grantee_email));
+-- RLS: 3테이블 enable + 정책 0 — service_role(슈퍼어드민 서버액션)만. 개방 시 grants 기반 정책 추가.
+-- 배선: app/actions/consult-eval.ts(가드=슈퍼어드민+eval_grants 인지형), /admin/eval,
+--   components/admin/eval-manager.tsx. 크레딧 consult_eval=3(비차단). 모델 claude-sonnet-4-6.
+-- ───────────────────────────────────────────────────────────────────────────
