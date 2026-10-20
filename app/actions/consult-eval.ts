@@ -252,6 +252,7 @@ export type EvalConsultationRow = {
   content_chars: number; // 본문 텍스트 길이(평가 가능성 가늠)
   has_audio: boolean; // 음성 보관 여부 — 원문 확보 가능성
   has_transcript: boolean; // 전사 원문 보유 여부 — true면 원문 기반 평가
+  transcript_chars: number | null; // 원문 글자수(보유 시) — 평가 가능성 가늠
   capture_status: "in_progress" | "failed" | null; // 원문 확보 job 상태(원문 미보유 시)
   last_run: { id: string; created_at: string; score: number | null } | null;
 };
@@ -284,9 +285,13 @@ export async function getEvalConsultations(
   const ids = consults.map((c) => c.id);
   const { data: transcripts } = await admin
     .from("consultation_transcripts")
-    .select("consultation_id")
+    .select("consultation_id, transcript")
     .in("consultation_id", ids);
-  const transcriptSet = new Set((transcripts ?? []).map((t) => t.consultation_id as number));
+  const transcriptChars = new Map<number, number>();
+  for (const t of transcripts ?? []) {
+    transcriptChars.set(t.consultation_id as number, String(t.transcript ?? "").trim().length);
+  }
+  const transcriptSet = new Set(transcriptChars.keys());
 
   // 원문 확보 job 진행 상태 — [원문 확보]는 1분 주기 워커가 처리하므로 시차를 UI에 보여준다.
   const { data: captureJobs } = await admin
@@ -330,11 +335,39 @@ export async function getEvalConsultations(
       content_chars: htmlToText(String(c.content ?? "")).length,
       has_audio: Boolean(c.audio_path),
       has_transcript: transcriptSet.has(c.id as number),
+      transcript_chars: transcriptChars.get(c.id as number) ?? null,
       capture_status: transcriptSet.has(c.id as number)
         ? null
         : (captureMap.get(c.id as number) ?? null),
       last_run: lastRunMap.get(c.id as number) ?? null,
     })),
+  };
+}
+
+// ── 내용 보기 (spec 034) — 평가 전 상담 내용·전사 원문 확인 ──
+// 대표 요청: "원문을 확인할 수 있어야 평가가 잘 되었는지도 확인한다". 접근은 평가 권한자만.
+export async function getEvalConsultationDetail(
+  consultationId: number,
+): Promise<
+  | { ok: true; contentText: string; transcript: string | null }
+  | Fail
+> {
+  const admin = createAdminSupabaseClient();
+  const { data: c } = await admin
+    .from("consultation")
+    .select("id, institution_id, content")
+    .eq("id", consultationId)
+    .maybeSingle();
+  if (!c) return { ok: false, message: "상담 기록을 찾을 수 없습니다." };
+
+  const access = await resolveEvalAccess(c.institution_id as string);
+  if (!access?.canView) return { ok: false, message: "접근 권한이 없습니다." };
+
+  const transcript = await getConsultationTranscript(consultationId);
+  return {
+    ok: true,
+    contentText: htmlToText(String(c.content ?? "")),
+    transcript,
   };
 }
 
@@ -439,12 +472,18 @@ export async function runEvaluation(
   const autoItems = items.filter((it) => it.type === "auto");
   if (autoItems.length === 0) return { ok: false, message: "자동 판정 항목이 없는 템플릿입니다." };
 
-  // spec 034 — 전사 원문 우선: 원문이 보관돼 있으면 원문으로 평가(정확), 없으면 요약 본문 폴백.
+  // spec 034 — 전사 원문 우선: 원문이 충분하면 원문으로 평가(정확), 원문이 없거나
+  // 너무 짧으면(짧은 녹음 — 구조 라벨 붙은 요약이 원문보다 길 수 있음) 요약 본문 폴백.
   const transcript = await getConsultationTranscript(consultationId);
-  const basis: "transcript" | "summary" = transcript ? "transcript" : "summary";
-  const text = transcript ?? htmlToText(String(consult.content ?? ""));
+  const contentText = htmlToText(String(consult.content ?? ""));
+  const basis: "transcript" | "summary" =
+    transcript && transcript.length >= 50 ? "transcript" : "summary";
+  const text = basis === "transcript" ? (transcript as string) : contentText;
   if (text.length < 50) {
-    return { ok: false, message: "본문이 너무 짧아 평가할 수 없습니다(50자 미만)." };
+    return {
+      ok: false,
+      message: `평가할 내용이 너무 짧습니다 — 원문 ${transcript?.length ?? 0}자 · 본문 ${contentText.length}자 (최소 50자). [내용 보기]로 확인해 보세요.`,
+    };
   }
 
   const anthropicKey = process.env.ANTHROPIC_API_KEY;

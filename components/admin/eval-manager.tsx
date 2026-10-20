@@ -12,6 +12,7 @@ import {
   getEvalRun,
   saveManualResult,
   requestTranscriptCapture,
+  getEvalConsultationDetail,
   updateEvalTemplate,
   createEvalTemplate,
   deleteEvalTemplate,
@@ -68,6 +69,12 @@ export function EvalManager({ institutions }: Props) {
   // 결과 뷰
   const [activeRun, setActiveRun] = useState<EvalRun | null>(null);
   const [runningId, setRunningId] = useState<number | null>(null);
+  // 내용 보기 — 평가 전 본문·원문 확인(대표 요청)
+  const [detail, setDetail] = useState<{
+    id: number;
+    contentText: string;
+    transcript: string | null;
+  } | null>(null);
 
   const template = useMemo(
     () => templates.find((t) => t.id === templateId) ?? null,
@@ -101,15 +108,19 @@ export function EvalManager({ institutions }: Props) {
       return;
     }
     const row = consults.find((c) => c.id === consultationId);
-    // 원문 미보유 시 경고 — 요약 기반은 '판정불가'가 많다(첫 실측 교훈)
-    const warn =
-      row && !row.has_transcript
-        ? row.capture_status === "in_progress"
-          ? "⚠️ 원문 확보가 아직 진행 중입니다 — 지금 평가하면 '요약 기반'(판정불가 다수)으로 판정됩니다. 원문 보유 표시가 뜬 뒤 평가하는 것을 권장합니다.\n\n그래도 지금 "
-          : row.has_audio
-            ? "⚠️ 이 기록은 아직 원문이 없습니다 — '요약 기반'(판정불가 다수)으로 판정됩니다. [원문 확보] 후 평가하는 것을 권장합니다.\n\n그래도 지금 "
-            : "ℹ️ 이 기록은 음성이 없어 요약 본문 기반으로만 판정됩니다.\n\n"
-        : "";
+    // 원문 미보유·부족 시 경고 — 요약 기반은 '판정불가'가 많다(첫 실측 교훈)
+    const shortTranscript = row?.has_transcript && (row.transcript_chars ?? 0) < 50;
+    const warn = !row
+      ? ""
+      : shortTranscript
+        ? `ℹ️ 확보된 원문이 ${row!.transcript_chars}자로 너무 짧아(짧은 녹음) 요약 본문 기반으로 판정됩니다. [내용 보기]로 확인해 보세요.\n\n`
+        : !row.has_transcript
+          ? row.capture_status === "in_progress"
+            ? "⚠️ 원문 확보가 아직 진행 중입니다 — 지금 평가하면 '요약 기반'(판정불가 다수)으로 판정됩니다. 원문 보유 표시가 뜬 뒤 평가하는 것을 권장합니다.\n\n그래도 지금 "
+            : row.has_audio
+              ? "⚠️ 이 기록은 아직 원문이 없습니다 — '요약 기반'(판정불가 다수)으로 판정됩니다. [원문 확보] 후 평가하는 것을 권장합니다.\n\n그래도 지금 "
+              : "ℹ️ 이 기록은 음성이 없어 요약 본문 기반으로만 판정됩니다.\n\n"
+          : "";
     if (!confirm(`${warn}이 상담 기록을 AI로 평가할까요? (3크레딧 · 🧪 테스트중)`)) return;
     setRunningId(consultationId);
     startTransition(async () => {
@@ -129,6 +140,20 @@ export function EvalManager({ institutions }: Props) {
       const r = await getEvalRun(runId);
       if (r.ok) {
         setActiveRun(r.run);
+        setMsg("");
+      } else setMsg(r.message);
+    });
+  };
+
+  const handleDetail = (consultationId: number) => {
+    if (detail?.id === consultationId) {
+      setDetail(null); // 토글 닫기
+      return;
+    }
+    startTransition(async () => {
+      const r = await getEvalConsultationDetail(consultationId);
+      if (r.ok) {
+        setDetail({ id: consultationId, contentText: r.contentText, transcript: r.transcript });
         setMsg("");
       } else setMsg(r.message);
     });
@@ -236,7 +261,8 @@ export function EvalManager({ institutions }: Props) {
             ) : (
               <div className="divide-y divide-slate-100 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
                 {consults.map((c) => (
-                  <div key={c.id} className="flex flex-wrap items-center gap-3 px-4 py-3">
+                  <div key={c.id}>
+                  <div className="flex flex-wrap items-center gap-3 px-4 py-3">
                     <div className="min-w-0 flex-1">
                       <div className="text-sm font-medium text-slate-800">
                         {c.patient_name ?? "환자 미연결"}
@@ -251,7 +277,7 @@ export function EvalManager({ institutions }: Props) {
                         </span>
                         {c.has_transcript ? (
                           <span className="rounded-full border border-emerald-200 bg-emerald-50 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-700">
-                            원문 보유
+                            원문 보유 · {(c.transcript_chars ?? 0).toLocaleString()}자
                           </span>
                         ) : c.capture_status === "in_progress" ? (
                           <span className="animate-pulse rounded-full border border-sky-200 bg-sky-50 px-1.5 py-0.5 text-[10px] font-semibold text-sky-700">
@@ -268,6 +294,18 @@ export function EvalManager({ institutions }: Props) {
                         )}
                       </div>
                     </div>
+                    <button
+                      onClick={() => handleDetail(c.id)}
+                      disabled={isPending}
+                      className={`rounded-lg border px-2.5 py-1.5 text-xs transition disabled:opacity-40 ${
+                        detail?.id === c.id
+                          ? "border-slate-400 bg-slate-100 text-slate-700"
+                          : "border-slate-200 text-slate-600 hover:bg-slate-50"
+                      }`}
+                      title="평가 전에 상담 본문·전사 원문을 확인합니다"
+                    >
+                      {detail?.id === c.id ? "내용 닫기" : "내용 보기"}
+                    </button>
                     {!c.has_transcript && c.has_audio && c.capture_status !== "in_progress" && (
                       <button
                         onClick={() => handleCapture(c.id)}
@@ -289,12 +327,51 @@ export function EvalManager({ institutions }: Props) {
                     )}
                     <button
                       onClick={() => handleRun(c.id)}
-                      disabled={isPending || c.content_chars < 50}
+                      disabled={isPending || (c.content_chars < 50 && (c.transcript_chars ?? 0) < 50)}
                       className="rounded-lg bg-slate-900 px-3 py-1.5 text-xs font-medium text-white transition hover:bg-slate-700 disabled:opacity-40"
-                      title={c.content_chars < 50 ? "본문이 짧아 평가 불가" : ""}
+                      title={
+                        c.content_chars < 50 && (c.transcript_chars ?? 0) < 50
+                          ? "원문·본문 모두 짧아 평가 불가(50자 미만)"
+                          : ""
+                      }
                     >
                       {runningId === c.id ? "평가 중…" : "AI 평가 실행"}
                     </button>
+                  </div>
+                  {detail?.id === c.id && (
+                    <div className="space-y-3 border-t border-slate-100 bg-slate-50/60 px-4 py-3">
+                      <div>
+                        <div className="mb-1 flex items-center gap-2 text-xs font-semibold text-slate-600">
+                          전사 원문
+                          {detail.transcript ? (
+                            <span className="font-normal text-slate-400">
+                              {detail.transcript.length.toLocaleString()}자 — 음성 인식 오타가 있을 수 있어요
+                            </span>
+                          ) : null}
+                        </div>
+                        {detail.transcript ? (
+                          <pre className="max-h-64 overflow-y-auto whitespace-pre-wrap break-words rounded-lg border border-slate-200 bg-white p-3 text-xs leading-relaxed text-slate-700">
+                            {detail.transcript}
+                          </pre>
+                        ) : (
+                          <p className="rounded-lg border border-slate-200 bg-white p-3 text-xs text-slate-400">
+                            원문이 없습니다 — 음성이 보관된 기록이면 [원문 확보]로 만들 수 있어요.
+                          </p>
+                        )}
+                      </div>
+                      <div>
+                        <div className="mb-1 text-xs font-semibold text-slate-600">
+                          상담 기록 본문(요약){" "}
+                          <span className="font-normal text-slate-400">
+                            {detail.contentText.length.toLocaleString()}자
+                          </span>
+                        </div>
+                        <pre className="max-h-48 overflow-y-auto whitespace-pre-wrap break-words rounded-lg border border-slate-200 bg-white p-3 text-xs leading-relaxed text-slate-700">
+                          {detail.contentText || "(본문 없음)"}
+                        </pre>
+                      </div>
+                    </div>
+                  )}
                   </div>
                 ))}
               </div>
