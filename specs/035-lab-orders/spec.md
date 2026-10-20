@@ -92,3 +92,9 @@ env `EO_LAB_GATEWAY=on` (Vercel) — 테오의 EO EP(§2-1·2-2) 배포 후. 그
   계약서에 kind 열거가 없어 양쪽이 다르게 정했다. ★wire에서 `sketch→drawing` 매핑(sender)으로 해소.
   내부 저장·UI는 sketch 유지(기존 행 호환).
 - 거절 메시지가 성공(초록) 톤으로 뜨던 표시 버그 수정 — failed는 빨간 톤.
+
+### 재실측 결과 (2026-10-20 · #1973 회신 증빙)
+- #b84f9f8e: 첫 실측 — display 0·첨부 0(미부착) = "통과할 게 없어서 통과"(버그 아님, payload로 증빙)
+- #a0d08d34: display 7행 + values(오스템·Hex·Supra·SCRP·Hook·EA) + 손그림 1건(27,288b) — sketch→drawing 매핑 후 재전송 성공
+- #9bd0dbd8: 첨부 2건 — photo 2477.webp(145,544b) + 손그림 png(41,414b) 전송 성공
+- 계약 보강 제안: attachments.kind 열거 명문화(photo|video|drawing) · 수정 재전송은 EO 멱등이 흡수(revision 규칙 합의 필요 재확인)
