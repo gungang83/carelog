@@ -8,6 +8,7 @@ import { createAdminSupabaseClient } from "@/lib/supabase/admin";
 import { getMyInstitutionId, getMyAuthorInfo } from "@/lib/auth/institution";
 import { gatewayFetchLabs, labGatewayEnabled } from "@/lib/eo/lab-gateway";
 import { sendLabOrderById, labBucket } from "@/lib/lab-order-sender";
+import { getClinicMembers } from "@/app/actions/clinic-members";
 import {
   DEFAULT_LAB_FORM_DEF,
   DEFAULT_LAB_FORM_NAME,
@@ -44,6 +45,7 @@ export type LabOrderContext = {
   gatewayOn: boolean;
   forms: LabOrderFormRow[];
   recentLabs: string[]; // 우리가 거래해 본 기공소(보낸 기공지에서 추출, 최근순) — 선택 편의
+  staff: { name: string; role: string | null }[]; // 구성원(설정 '우리 병원 사람들') — Dr./담당자 선택 편의
 };
 
 export async function getLabOrderContext(): Promise<{ ok: true; ctx: LabOrderContext } | Fail> {
@@ -81,7 +83,10 @@ export async function getLabOrderContext(): Promise<{ ok: true; ctx: LabOrderCon
     .limit(100);
   const recentLabs = [...new Set((recent ?? []).map((r) => r.lab_name as string))].slice(0, 10);
 
-  const labs = await gatewayFetchLabs(auth.institutionId);
+  const [labs, members] = await Promise.all([
+    gatewayFetchLabs(auth.institutionId),
+    getClinicMembers().catch(() => []),
+  ]);
   return {
     ok: true,
     ctx: {
@@ -89,6 +94,7 @@ export async function getLabOrderContext(): Promise<{ ok: true; ctx: LabOrderCon
       gatewayOn: labGatewayEnabled(),
       forms: (forms ?? []) as LabOrderFormRow[],
       recentLabs,
+      staff: members.map((m) => ({ name: m.name, role: m.role ?? null })),
     },
   };
 }

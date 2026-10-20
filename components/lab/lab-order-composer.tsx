@@ -30,9 +30,21 @@ function fieldInputCls() {
   return "w-full rounded-lg border border-slate-200 px-2.5 py-1.5 text-sm";
 }
 
-function todayStr() {
-  const d = new Date();
+function toDateStr(d: Date) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+function todayStr() {
+  return toDateStr(new Date());
+}
+function addDays(base: string, days: number) {
+  const d = base ? new Date(`${base}T00:00:00`) : new Date();
+  d.setDate(d.getDate() + days);
+  return toDateStr(d);
+}
+/** "Crown (Zirconia)" → "Zirconia" — 보철 종류에 재료가 포함된 경우 재료 자동 채움용 */
+function materialFromProsthesis(label: string): string {
+  const m = label.match(/\(([^)]+)\)$/);
+  return m ? m[1].trim() : "";
 }
 
 type ItemState = LabOrderItemInput;
@@ -332,12 +344,40 @@ export function LabOrderComposer({
       {/* 담당·날짜 */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         <div className="space-y-1.5">
-          <label className="text-sm font-semibold text-slate-700">Dr. (원장)</label>
-          <input value={doctor} onChange={(e) => setDoctor(e.target.value)} className={fieldInputCls()} />
+          <label className="text-sm font-semibold text-slate-700">Dr. (진료 의사)</label>
+          <input
+            list="staff-doctors"
+            value={doctor}
+            onChange={(e) => setDoctor(e.target.value)}
+            placeholder="선택 또는 입력"
+            className={fieldInputCls()}
+          />
+          <datalist id="staff-doctors">
+            {[...ctx.staff.filter((s) => s.role?.includes("원장")), ...ctx.staff.filter((s) => !s.role?.includes("원장"))].map(
+              (s) => (
+                <option key={s.name} value={s.name}>
+                  {s.role ? `${s.name} (${s.role})` : s.name}
+                </option>
+              ),
+            )}
+          </datalist>
         </div>
         <div className="space-y-1.5">
-          <label className="text-sm font-semibold text-slate-700">D.H. (작성자)</label>
-          <input value={hygienist} onChange={(e) => setHygienist(e.target.value)} className={fieldInputCls()} />
+          <label className="text-sm font-semibold text-slate-700">담당자 (작성자)</label>
+          <input
+            list="staff-all"
+            value={hygienist}
+            onChange={(e) => setHygienist(e.target.value)}
+            placeholder="선택 또는 입력"
+            className={fieldInputCls()}
+          />
+          <datalist id="staff-all">
+            {ctx.staff.map((s) => (
+              <option key={s.name} value={s.name}>
+                {s.role ? `${s.name} (${s.role})` : s.name}
+              </option>
+            ))}
+          </datalist>
         </div>
         <div className="space-y-1.5">
           <label className="text-sm font-semibold text-slate-700">의뢰일</label>
@@ -346,6 +386,38 @@ export function LabOrderComposer({
         <div className="space-y-1.5">
           <label className="text-sm font-semibold text-slate-700">완료 희망(납기)일 *</label>
           <input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} className={fieldInputCls()} />
+          <div className="flex flex-wrap items-center gap-1">
+            {[3, 7, 10].map((d) => (
+              <button
+                key={d}
+                type="button"
+                onClick={() => setDueDate(addDays(orderDate, d))}
+                className={`rounded-full border px-2 py-0.5 text-xs transition ${
+                  dueDate && dueDate === addDays(orderDate, d)
+                    ? "border-indigo-500 bg-indigo-600 text-white"
+                    : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
+                }`}
+              >
+                +{d}일
+              </button>
+            ))}
+            <span className="mx-0.5" />
+            <button
+              type="button"
+              onClick={() => dueDate && setDueDate(addDays(dueDate, -1))}
+              disabled={!dueDate}
+              className="rounded-full border border-slate-200 bg-white px-2 py-0.5 text-xs text-slate-600 transition hover:bg-slate-50 disabled:opacity-40"
+            >
+              −1일
+            </button>
+            <button
+              type="button"
+              onClick={() => setDueDate(dueDate ? addDays(dueDate, 1) : addDays(orderDate, 1))}
+              className="rounded-full border border-slate-200 bg-white px-2 py-0.5 text-xs text-slate-600 transition hover:bg-slate-50"
+            >
+              +1일
+            </button>
+          </div>
         </div>
       </div>
 
@@ -394,7 +466,22 @@ export function LabOrderComposer({
             <div className="grid gap-3 sm:grid-cols-2">
               <div className="space-y-1">
                 <label className="text-xs font-semibold text-slate-600">보철 종류 *</label>
-                <select value={it.prosthesis} onChange={(e) => setItem(idx, { prosthesis: e.target.value })} className={fieldInputCls()}>
+                <select
+                  value={it.prosthesis}
+                  onChange={(e) => {
+                    const next = e.target.value;
+                    // 보철 종류에 재료가 포함되면(Crown (Zirconia) 등) 재료 자동 채움 —
+                    // 사용자가 직접 적은 재료는 건드리지 않는다(빈 값·직전 자동값일 때만 교체).
+                    const auto = materialFromProsthesis(next);
+                    const prevAuto = materialFromProsthesis(it.prosthesis);
+                    const cur = (it.material ?? "").trim();
+                    setItem(idx, {
+                      prosthesis: next,
+                      ...(auto && (cur === "" || cur === prevAuto) ? { material: auto } : {}),
+                    });
+                  }}
+                  className={fieldInputCls()}
+                >
                   <option value="">선택…</option>
                   {(form?.def.prosthesis_options ?? []).map((o) => (
                     <option key={o} value={o}>
