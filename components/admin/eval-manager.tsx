@@ -100,7 +100,17 @@ export function EvalManager({ institutions }: Props) {
       setMsg("평가 템플릿을 선택하세요.");
       return;
     }
-    if (!confirm("이 상담 기록을 AI로 평가할까요? (3크레딧 · 🧪 테스트중)")) return;
+    const row = consults.find((c) => c.id === consultationId);
+    // 원문 미보유 시 경고 — 요약 기반은 '판정불가'가 많다(첫 실측 교훈)
+    const warn =
+      row && !row.has_transcript
+        ? row.capture_status === "in_progress"
+          ? "⚠️ 원문 확보가 아직 진행 중입니다 — 지금 평가하면 '요약 기반'(판정불가 다수)으로 판정됩니다. 원문 보유 표시가 뜬 뒤 평가하는 것을 권장합니다.\n\n그래도 지금 "
+          : row.has_audio
+            ? "⚠️ 이 기록은 아직 원문이 없습니다 — '요약 기반'(판정불가 다수)으로 판정됩니다. [원문 확보] 후 평가하는 것을 권장합니다.\n\n그래도 지금 "
+            : "ℹ️ 이 기록은 음성이 없어 요약 본문 기반으로만 판정됩니다.\n\n"
+        : "";
+    if (!confirm(`${warn}이 상담 기록을 AI로 평가할까요? (3크레딧 · 🧪 테스트중)`)) return;
     setRunningId(consultationId);
     startTransition(async () => {
       const r = await runEvaluation(consultationId, templateId);
@@ -209,7 +219,16 @@ export function EvalManager({ institutions }: Props) {
 
           {/* 상담 목록 */}
           <section className="space-y-2">
-            <h2 className="text-base font-semibold text-slate-800">최근 상담 기록 (20건)</h2>
+            <div className="flex items-center justify-between">
+              <h2 className="text-base font-semibold text-slate-800">최근 상담 기록 (20건)</h2>
+              <button
+                onClick={reload}
+                disabled={isPending}
+                className="rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-xs text-slate-500 transition hover:bg-slate-50 disabled:opacity-40"
+              >
+                {isPending ? "불러오는 중…" : "↻ 새로고침"}
+              </button>
+            </div>
             {consults.length === 0 ? (
               <div className="rounded-2xl border border-slate-200 bg-white px-5 py-8 text-center text-sm text-slate-400 shadow-sm">
                 {isPending ? "불러오는 중…" : "상담 기록이 없습니다."}
@@ -234,6 +253,14 @@ export function EvalManager({ institutions }: Props) {
                           <span className="rounded-full border border-emerald-200 bg-emerald-50 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-700">
                             원문 보유
                           </span>
+                        ) : c.capture_status === "in_progress" ? (
+                          <span className="animate-pulse rounded-full border border-sky-200 bg-sky-50 px-1.5 py-0.5 text-[10px] font-semibold text-sky-700">
+                            원문 확보 중…
+                          </span>
+                        ) : c.capture_status === "failed" ? (
+                          <span className="rounded-full border border-rose-200 bg-rose-50 px-1.5 py-0.5 text-[10px] font-semibold text-rose-600">
+                            원문 확보 실패
+                          </span>
                         ) : (
                           <span className="rounded-full border border-slate-200 bg-slate-50 px-1.5 py-0.5 text-[10px] text-slate-400">
                             요약만
@@ -241,14 +268,14 @@ export function EvalManager({ institutions }: Props) {
                         )}
                       </div>
                     </div>
-                    {!c.has_transcript && c.has_audio && (
+                    {!c.has_transcript && c.has_audio && c.capture_status !== "in_progress" && (
                       <button
                         onClick={() => handleCapture(c.id)}
                         disabled={isPending}
                         className="rounded-lg border border-emerald-200 px-2.5 py-1.5 text-xs text-emerald-700 transition hover:bg-emerald-50 disabled:opacity-40"
                         title="보관된 음성을 전사해 원문을 확보합니다(본문 불변)"
                       >
-                        원문 확보
+                        {c.capture_status === "failed" ? "원문 확보 재시도" : "원문 확보"}
                       </button>
                     )}
                     {c.last_run && (

@@ -252,6 +252,7 @@ export type EvalConsultationRow = {
   content_chars: number; // 본문 텍스트 길이(평가 가능성 가늠)
   has_audio: boolean; // 음성 보관 여부 — 원문 확보 가능성
   has_transcript: boolean; // 전사 원문 보유 여부 — true면 원문 기반 평가
+  capture_status: "in_progress" | "failed" | null; // 원문 확보 job 상태(원문 미보유 시)
   last_run: { id: string; created_at: string; score: number | null } | null;
 };
 
@@ -287,6 +288,21 @@ export async function getEvalConsultations(
     .in("consultation_id", ids);
   const transcriptSet = new Set((transcripts ?? []).map((t) => t.consultation_id as number));
 
+  // 원문 확보 job 진행 상태 — [원문 확보]는 1분 주기 워커가 처리하므로 시차를 UI에 보여준다.
+  const { data: captureJobs } = await admin
+    .from("transcription_jobs")
+    .select("consultation_id, status, created_at")
+    .in("consultation_id", ids)
+    .eq("engine", "transcript_only")
+    .order("created_at", { ascending: false });
+  const captureMap = new Map<number, "in_progress" | "failed">();
+  for (const j of captureJobs ?? []) {
+    const cid = j.consultation_id as number;
+    if (captureMap.has(cid)) continue; // 최신 job만
+    if (j.status === "pending" || j.status === "processing") captureMap.set(cid, "in_progress");
+    else if (j.status === "error") captureMap.set(cid, "failed");
+  }
+
   const { data: runs } = await admin
     .from("eval_runs")
     .select("id, consultation_id, created_at, score")
@@ -314,6 +330,9 @@ export async function getEvalConsultations(
       content_chars: htmlToText(String(c.content ?? "")).length,
       has_audio: Boolean(c.audio_path),
       has_transcript: transcriptSet.has(c.id as number),
+      capture_status: transcriptSet.has(c.id as number)
+        ? null
+        : (captureMap.get(c.id as number) ?? null),
       last_run: lastRunMap.get(c.id as number) ?? null,
     })),
   };
