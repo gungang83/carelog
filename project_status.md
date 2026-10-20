@@ -14,7 +14,7 @@
 - **데이터**: `lab_order_forms`(양식=데이터 정의, 전역/기공소별, 지플란트 실물 첫 시드 자동) · `lab_orders`(id=carelog_order_id 멱등 키, payload=계약 §2-2 스냅샷, status queued→sent/failed) · 비공개 버킷 `lab-orders`.
 - **전송**: lab-gateway(EO_LAB_GATEWAY=on 스위치·never-throw) — 저장=복사·전달=참조(24h 서명 URL→EO pull), form.display 사람용 스냅샷 동봉(EO 무해석), share ✗ 필드는 애초에 미송신, 10분 cron 재전송(기공지 유실 0).
 - **UI**: `/lab-orders` 목록(상태·재전송)+작성 — 기공소 선택(EO 정본, 미발효 시 직접 입력), 환자 검색, 치식도(FDI), 보철/Shade/납기/구분, 동적 양식 렌더, 첨부(사진 webp 압축·동영상 30초·손그림 SketchPad, 서명 업로드 URL로 25MB 한도 우회). 보드 [🦷 기공지] 진입.
-- **마이그레이션** `20261020000001_lab_orders.sql` 실행 완료 ✅. 발효 = 테오 EP 배포 후 env `EO_LAB_GATEWAY=on`.
+- **마이그레이션** `20261020000001_lab_orders.sql` 실행 완료 ✅. **✅ 발효 완료(2026-10-20 · 카드 #1965~#1969)**: 계약 v1 정합(2xx·signed_url·{error}·서명 URL 15분·share ⓐ·고지 문구)+기공소 선택 가드(portal_enabled만·원문 전송) 후 env `EO_LAB_GATEWAY=on` → **왕복 실측 성공**(EO 의뢰 생성 #b84f9f8e, 첨부 pull 통과). 입력 편의: 의사·담당자 구성원 선택, 납기 프리셋(+3/7/10·±1일), 보철→재료 자동.
 - **v2(같은 날, 대표 피드백)**: ①[+ 기공물 추가] 세트 의뢰(장별 멱등 키·set_id 묶음·payload set additive) ②의뢰일(기본 오늘)+"완료 희망(납기)일" ③보낸 뒤 [수정·첨부] — revision·edit_log(누가·언제·전송 후 여부), 목록 "v2 수정됨 · 전송 후" 경고 뱃지, 수정본 재전송(EO측 revision 업데이트 규칙은 마르코 합의 필요) ④기공소 선택 = EO 목록+거래 이력 칩·자동완성+직접 입력. 마이그레이션 `20261020000002` 실행 필요.
 
 ## 2026-10-19 세션 68 (feat) — 상담 품질 평가 🧪 테스트중 (spec 034 · 기획공장 협업)
