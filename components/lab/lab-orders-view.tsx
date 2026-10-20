@@ -39,7 +39,9 @@ export function LabOrdersView({
     startTransition(async () => {
       const r = await retryLabOrder(id);
       if (r.ok) {
-        setInfo(r.message);
+        // 거절(failed)은 빨간 톤 — 성공·대기만 초록
+        if (r.status === "failed") setMsg(r.message);
+        else setInfo(r.message);
         router.refresh();
       } else setMsg(r.message);
     });
