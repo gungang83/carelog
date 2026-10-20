@@ -488,6 +488,12 @@ export function LabOrderComposer({
         )}
       </div>
 
+      {/* 계약 ⓐ-2 고지 — 042 동의 범위에 자유기재·첨부가 포함됨을 문구로 명시 */}
+      <p className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+        기타 주문사항과 사진·동영상·손그림은 기공소에 <b>그대로 전달</b>됩니다 — 환자 이름 등
+        식별정보를 적거나 찍지 마세요.
+      </p>
+
       {/* 기타 주문사항 */}
       <div className="space-y-1.5">
         <label className="text-sm font-semibold text-slate-700">기타 주문사항 (환자분 요구사항 포함)</label>

@@ -199,13 +199,19 @@ export async function submitLabOrderSet(
     .maybeSingle();
   const def = (form?.def ?? DEFAULT_LAB_FORM_DEF) as LabOrderFormDef;
 
-  // share 정책(계약 §2-1): ✗ 필드는 애초에 보내지 않는다. 목록 미발효 시 보수 기본값.
+  // share 정책(계약 §2-1 + ⓐ free_text·attachments): ✗ 필드는 애초에 보내지 않는다.
+  // 목록 미발효 시 보수 기본값(free_text·attachments는 계약 기본 ON).
   const labs = await gatewayFetchLabs(auth.institutionId);
   const share = labs?.find((l) => l.lab_name === labName)?.share ?? {
     patient_name: true,
     chart_no: false,
     doctor: true,
+    free_text: true,
+    attachments: true,
   };
+  const shareFree = share.free_text !== false;
+  const shareAtt = share.attachments !== false;
+  const sendAttachments = shareAtt ? input.attachments : []; // ⓐ — ✗면 첨부를 아예 안 보낸다
 
   // 수정 감지 — 기존 행의 revision·edit_log를 승계(접수·제작 후 수정 식별용)
   const { data: existingRows } = await admin
@@ -261,8 +267,8 @@ export async function submitLabOrderSet(
       order_type: input.orderType,
       ...(input.remakeReason?.trim() ? { remake_reason: input.remakeReason.trim() } : {}),
       form: { key: def.key, version: form?.version ?? 1, values: it.values ?? {}, display },
-      ...(input.instructions?.trim() ? { instructions: input.instructions.trim() } : {}),
-      attachments: input.attachments, // 세트 공통 — 전송기에서 서명 URL로 치환
+      ...(shareFree && input.instructions?.trim() ? { instructions: input.instructions.trim() } : {}),
+      attachments: sendAttachments, // 세트 공통 — 전송기에서 전송 직전 15분 서명 URL로 치환(ⓒ)
       // 세트 묶음(additive — EO는 무해석·표시만) + 수정 회차(같은 id의 더 높은 revision = 업데이트)
       set: { id: input.setId, index: index + 1, total: items.length },
       revision,

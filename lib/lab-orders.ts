@@ -44,11 +44,18 @@ export type LabOrderFormRow = {
   active: boolean;
 };
 
-/** EO 거래처(기공소) — 계약 §2-1. share ✗ 필드는 Carelog가 애초에 보내지 않는다. */
+/** EO 거래처(기공소) — 계약 §2-1(+ⓐ free_text·attachments). share ✗ 필드는 Carelog가 애초에 보내지 않는다. */
+export type EoLabShare = {
+  patient_name: boolean;
+  chart_no: boolean;
+  doctor: boolean;
+  free_text?: boolean; // ⓐ — false면 instructions(기타 주문사항)를 아예 안 보냄
+  attachments?: boolean; // ⓐ — false면 첨부를 아예 안 보냄
+};
 export type EoLab = {
   lab_name: string;
   portal_enabled: boolean;
-  share: { patient_name: boolean; chart_no: boolean; doctor: boolean };
+  share: EoLabShare;
   shade_system?: string | null;
 };
 
