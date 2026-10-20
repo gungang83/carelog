@@ -7,7 +7,6 @@
 import { useMemo, useRef, useState, useTransition } from "react";
 import { createBrowserSupabaseClient } from "@/lib/supabase/client";
 import { compressImageFile } from "@/lib/image/optimize";
-import { searchPatients } from "@/app/actions/patients";
 import {
   createLabAttachmentUpload,
   submitLabOrderSet,
@@ -21,7 +20,7 @@ import {
   type LabAttachmentMeta,
   type LabOrderFormRow,
 } from "@/lib/lab-orders";
-import type { PatientRow } from "@/lib/types/database";
+import { PatientPicker, type PickedPatient } from "@/components/patients/patient-picker";
 import { ToothChart } from "@/components/lab/tooth-chart";
 import { SketchPad } from "@/components/lab/sketch-pad";
 
@@ -69,11 +68,9 @@ export function LabOrderComposer({
   }, [ctx.labs, ctx.recentLabs]);
   const [labName, setLabName] = useState(initial?.labName ?? labSuggestions[0] ?? "");
 
-  // 환자
-  const [patientQuery, setPatientQuery] = useState("");
-  const [patientResults, setPatientResults] = useState<PatientRow[]>([]);
-  const [patient, setPatient] = useState<PatientRow | null>(null);
-  const [manualPatientName, setManualPatientName] = useState(initial?.patientName ?? "");
+  // 환자 — 공용 픽커(상담카드 환자 연결과 동일 형식)
+  const [patient, setPatient] = useState<PickedPatient | null>(null);
+  const [editPatientName, setEditPatientName] = useState(initial?.patientName ?? ""); // 수정 모드 기존 환자 표시
 
   // 공통 필드
   const [doctor, setDoctor] = useState(initial?.doctor ?? "");
@@ -113,14 +110,6 @@ export function LabOrderComposer({
     setLabName(name);
     const f = pickForm(ctx.forms, name);
     if (f && !editing) setFormId(f.id);
-  };
-
-  const doSearch = () => {
-    startTransition(async () => {
-      const r = await searchPatients(patientQuery);
-      if (r.ok) setPatientResults(r.patients.slice(0, 8));
-      else setMsg(r.message);
-    });
   };
 
   // ── 첨부 업로드(서명 업로드 URL — 액션 바디 한도 우회) ──
@@ -196,7 +185,7 @@ export function LabOrderComposer({
     await uploadBlob(blob, `sketch_${Date.now()}.png`, "sketch");
   };
 
-  const patientName = patient?.name ?? manualPatientName.trim();
+  const patientName = patient?.name ?? editPatientName.trim();
   const itemsReady = items.every((it) => it.prosthesis.trim());
 
   const submit = () => {
@@ -281,7 +270,7 @@ export function LabOrderComposer({
         )}
       </div>
 
-      {/* 환자 — 케어로그 환자에서 선택 */}
+      {/* 환자 — 공용 픽커(상담카드 환자 연결과 동일: 즉시 검색 + 새 환자 등록) */}
       <div className="space-y-1.5">
         <label className="text-sm font-semibold text-slate-700">환자</label>
         {patient || (editing && patientName) ? (
@@ -293,7 +282,7 @@ export function LabOrderComposer({
             <button
               onClick={() => {
                 setPatient(null);
-                setManualPatientName("");
+                setEditPatientName("");
               }}
               className="ml-auto text-xs text-emerald-600 hover:underline"
             >
@@ -301,44 +290,9 @@ export function LabOrderComposer({
             </button>
           </div>
         ) : (
-          <>
-            <div className="flex gap-2">
-              <input
-                value={patientQuery}
-                onChange={(e) => setPatientQuery(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), doSearch())}
-                placeholder="이름·차트번호·전화로 검색"
-                className={fieldInputCls()}
-              />
-              <button onClick={doSearch} disabled={isPending} className="shrink-0 rounded-lg bg-slate-900 px-3 py-1.5 text-sm text-white hover:bg-slate-700 disabled:opacity-40">
-                검색
-              </button>
-            </div>
-            {patientResults.length > 0 && (
-              <div className="divide-y divide-slate-100 rounded-lg border border-slate-200">
-                {patientResults.map((p) => (
-                  <button
-                    key={p.id}
-                    onClick={() => {
-                      setPatient(p);
-                      setPatientResults([]);
-                    }}
-                    className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-slate-50"
-                  >
-                    <span className="font-medium text-slate-800">{p.name}</span>
-                    {p.chart_no && <span className="text-xs text-slate-400">차트 {p.chart_no}</span>}
-                    {p.phone && <span className="text-xs text-slate-400">{p.phone}</span>}
-                  </button>
-                ))}
-              </div>
-            )}
-            <input
-              value={manualPatientName}
-              onChange={(e) => setManualPatientName(e.target.value)}
-              placeholder="또는 환자명 직접 입력(미등록 환자)"
-              className={fieldInputCls()}
-            />
-          </>
+          <div className="rounded-xl border border-slate-200 bg-slate-50/50 p-3">
+            <PatientPicker onPick={(p) => setPatient(p)} />
+          </div>
         )}
       </div>
 

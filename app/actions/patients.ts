@@ -407,3 +407,34 @@ export async function updatePatient(formData: FormData): Promise<
     return { ok: false, message };
   }
 }
+
+// ─── createPatientQuick (공용 환자 픽커용 — spec 035) ─────────────────────────
+// 이름만으로 빠른 등록(연결 없이 환자만 생성). 상담카드 연결·기공지 등 픽커가 공용 사용.
+export type QuickPatient = { id: number; name: string; chart_no: string | null; phone: string | null };
+
+export async function createPatientQuick(params: {
+  name: string;
+  chartNo?: string;
+  phone?: string;
+}): Promise<{ ok: true; patient: QuickPatient } | { ok: false; message: string }> {
+  const supabase = await createServerSupabaseClient();
+  const institutionId = await getMyInstitutionId();
+  if (!institutionId) return { ok: false, message: "기관 정보를 찾을 수 없습니다." };
+
+  const name = params.name.trim();
+  if (!name) return { ok: false, message: "이름을 입력해 주세요." };
+
+  const { data, error } = await supabase
+    .from("patient")
+    .insert({
+      institution_id: institutionId,
+      name,
+      chart_no: params.chartNo?.trim() || null,
+      phone: params.phone?.trim() || null,
+    })
+    .select("id, name, chart_no, phone")
+    .single();
+
+  if (error || !data) return { ok: false, message: "환자 등록에 실패했습니다." };
+  return { ok: true, patient: data as QuickPatient };
+}
