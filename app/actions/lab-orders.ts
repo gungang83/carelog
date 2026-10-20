@@ -167,9 +167,10 @@ export async function submitLabOrderSet(
   const uuidRe = /^[0-9a-f-]{36}$/;
   if (!uuidRe.test(input.setId)) return { ok: false, message: "잘못된 세트 ID입니다." };
 
-  const labName = input.labName.trim();
+  // 카드 #1968 ② — lab_name은 선택한 목록 문자열 ★원문 그대로(EO 매칭 키, 변형 금지)
+  const labName = input.labName;
   const patientName = input.patientName.trim();
-  if (!labName) return { ok: false, message: "기공소를 선택(입력)해 주세요." };
+  if (!labName.trim()) return { ok: false, message: "기공소를 선택(입력)해 주세요." };
   if (!patientName) return { ok: false, message: "환자를 선택해 주세요." };
   if (!input.dueDate) return { ok: false, message: "완료 희망(납기)일을 입력해 주세요." };
   if (input.orderType === "재제작" && !input.remakeReason?.trim()) {

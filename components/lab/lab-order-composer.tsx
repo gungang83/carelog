@@ -58,14 +58,18 @@ export function LabOrderComposer({
   const [isPending, startTransition] = useTransition();
   const [msg, setMsg] = useState("");
 
-  // 기공소 — EO 목록(정본) > 거래했던 기공소(최근) > 직접 입력
-  const labSuggestions = useMemo(() => {
-    const names = [
-      ...(ctx.labs?.map((l) => l.lab_name) ?? []),
-      ...ctx.recentLabs,
-    ];
-    return [...new Set(names)];
-  }, [ctx.labs, ctx.recentLabs]);
+  // 기공소 — 카드 #1968: EO 목록이 살아 있으면 ★portal_enabled=true만 선택지로(「지플란트」/
+  // 「지플란트기공소」 두 표기 함정 차단 — 거래원장 유래 이름은 공유 설정이 없어 거절된다),
+  // 자유 입력도 막는다. lab_name은 목록 문자열 ★원문 그대로(매칭 키 — 변형 금지).
+  // 게이트웨이 미발효(null)일 때만 거래 이력 제안 + 직접 입력 폴백.
+  const eoLabs = useMemo(
+    () => (ctx.labs ? ctx.labs.filter((l) => l.portal_enabled) : null),
+    [ctx.labs],
+  );
+  const labSuggestions = useMemo(
+    () => (eoLabs ? eoLabs.map((l) => l.lab_name) : [...new Set(ctx.recentLabs)]),
+    [eoLabs, ctx.recentLabs],
+  );
   const [labName, setLabName] = useState(initial?.labName ?? labSuggestions[0] ?? "");
 
   // 환자 — 공용 픽커(상담카드 환자 연결과 동일 형식)
@@ -230,43 +234,72 @@ export function LabOrderComposer({
       )}
       {msg && <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-2.5 text-sm text-rose-700">{msg}</div>}
 
-      {/* 기공소 — 거래했던 목록 제안 + 직접 입력 */}
+      {/* 기공소 */}
       <div className="space-y-1.5">
         <label className="text-sm font-semibold text-slate-700">기공소</label>
-        <input
-          list="lab-suggestions"
-          value={labName}
-          onChange={(e) => handleLabChange(e.target.value)}
-          placeholder="기공소 선택 또는 직접 입력"
-          className={fieldInputCls()}
-        />
-        <datalist id="lab-suggestions">
-          {labSuggestions.map((n) => (
-            <option key={n} value={n} />
-          ))}
-        </datalist>
-        {labSuggestions.length > 0 && (
-          <div className="flex flex-wrap gap-1.5">
-            {labSuggestions.slice(0, 6).map((n) => (
-              <button
-                key={n}
-                type="button"
-                onClick={() => handleLabChange(n)}
-                className={`rounded-full border px-2.5 py-1 text-xs transition ${
-                  labName === n
-                    ? "border-indigo-500 bg-indigo-600 text-white"
-                    : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
-                }`}
+        {eoLabs ? (
+          eoLabs.length > 0 || (editing && labName) ? (
+            <>
+              <select
+                value={labName}
+                onChange={(e) => handleLabChange(e.target.value)}
+                className={fieldInputCls()}
               >
-                {n}
-              </button>
-            ))}
-          </div>
-        )}
-        {!ctx.labs && (
-          <p className="text-xs text-slate-400">
-            목록은 지금까지 거래한 기공소 기준입니다 — 새 기공소는 EO 거래처명과 같게 입력해 주세요.
-          </p>
+                {!labSuggestions.includes(labName) && labName && (
+                  <option value={labName}>{labName} (포탈 설정 확인 필요)</option>
+                )}
+                {eoLabs.map((l) => (
+                  <option key={l.lab_name} value={l.lab_name}>
+                    {l.lab_name}
+                  </option>
+                ))}
+              </select>
+              <p className="text-xs text-slate-400">
+                EO에서 포탈을 켠 기공소만 보입니다 — 새 기공소는 EO 기공소 포탈 설정에서 먼저 켜 주세요.
+              </p>
+            </>
+          ) : (
+            <p className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+              포탈이 켜진 기공소가 없습니다 — EO → 기공소 포탈 설정에서 기공소를 연결하고 켠 뒤 다시
+              열어주세요.
+            </p>
+          )
+        ) : (
+          <>
+            <input
+              list="lab-suggestions"
+              value={labName}
+              onChange={(e) => handleLabChange(e.target.value)}
+              placeholder="기공소 선택 또는 직접 입력"
+              className={fieldInputCls()}
+            />
+            <datalist id="lab-suggestions">
+              {labSuggestions.map((n) => (
+                <option key={n} value={n} />
+              ))}
+            </datalist>
+            {labSuggestions.length > 0 && (
+              <div className="flex flex-wrap gap-1.5">
+                {labSuggestions.slice(0, 6).map((n) => (
+                  <button
+                    key={n}
+                    type="button"
+                    onClick={() => handleLabChange(n)}
+                    className={`rounded-full border px-2.5 py-1 text-xs transition ${
+                      labName === n
+                        ? "border-indigo-500 bg-indigo-600 text-white"
+                        : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
+                    }`}
+                  >
+                    {n}
+                  </button>
+                ))}
+              </div>
+            )}
+            <p className="text-xs text-slate-400">
+              목록은 지금까지 거래한 기공소 기준입니다 — 새 기공소는 EO 거래처명과 같게 입력해 주세요.
+            </p>
+          </>
         )}
       </div>
 
