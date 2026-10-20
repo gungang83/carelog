@@ -55,9 +55,12 @@ function templateOptionLabel(t: EvalTemplate): string {
   return `[${templateSource(t)}] ${t.name}${t.active ? "" : " (비활성)"}`;
 }
 
-type Props = { institutions: { id: string; name: string }[] };
+type Props = {
+  institutions: { id: string; name: string; canEvaluate: boolean }[];
+  superAdmin: boolean;
+};
 
-export function EvalManager({ institutions }: Props) {
+export function EvalManager({ institutions, superAdmin }: Props) {
   const [tab, setTab] = useState<"run" | "template" | "grants">("run");
   const [instId, setInstId] = useState(institutions[0]?.id ?? "");
   const [templates, setTemplates] = useState<EvalTemplate[]>([]);
@@ -81,6 +84,8 @@ export function EvalManager({ institutions }: Props) {
     () => templates.find((t) => t.id === templateId) ?? null,
     [templates, templateId],
   );
+  // 선택 기관에 대한 평가(실행·수동 입력·원문 확보) 권한 — 슈퍼어드민은 전권
+  const canEvaluate = superAdmin || (institutions.find((i) => i.id === instId)?.canEvaluate ?? false);
 
   const reload = useCallback(() => {
     if (!instId) return;
@@ -237,6 +242,7 @@ export function EvalManager({ institutions }: Props) {
             </option>
           ))}
         </select>
+        {superAdmin && (
         <div className="flex gap-1 rounded-xl border border-slate-200 bg-white p-1 shadow-sm">
           {(
             [
@@ -256,6 +262,7 @@ export function EvalManager({ institutions }: Props) {
             </button>
           ))}
         </div>
+        )}
       </div>
 
       {msg && (
@@ -307,6 +314,7 @@ export function EvalManager({ institutions }: Props) {
             <RunView
               run={activeRun}
               template={template}
+              canEvaluate={canEvaluate}
               onClose={() => setActiveRun(null)}
               onSaved={(updated) => setActiveRun(updated)}
             />
@@ -380,7 +388,7 @@ export function EvalManager({ institutions }: Props) {
                     >
                       {detail?.id === c.id ? "내용 닫기" : "내용 보기"}
                     </button>
-                    {!c.has_transcript && c.has_audio && c.capture_status !== "pending" && c.capture_status !== "processing" && (
+                    {canEvaluate && !c.has_transcript && c.has_audio && c.capture_status !== "pending" && c.capture_status !== "processing" && (
                       <button
                         onClick={() => handleCapture(c.id)}
                         disabled={isPending}
@@ -399,6 +407,7 @@ export function EvalManager({ institutions }: Props) {
                         {c.last_run.score !== null ? ` · ${c.last_run.score}점(실험)` : ""}
                       </button>
                     )}
+                    {canEvaluate && (
                     <button
                       onClick={() => handleRun(c.id)}
                       disabled={isPending || (c.content_chars < 50 && (c.transcript_chars ?? 0) < 50)}
@@ -411,6 +420,7 @@ export function EvalManager({ institutions }: Props) {
                     >
                       {runningId === c.id ? `평가 중 ${evalElapsed}초…` : "AI 평가 실행"}
                     </button>
+                    )}
                   </div>
                   {detail?.id === c.id && (
                     <div className="space-y-3 border-t border-slate-100 bg-slate-50/60 px-4 py-3">
@@ -496,11 +506,13 @@ export function EvalManager({ institutions }: Props) {
 function RunView({
   run,
   template,
+  canEvaluate,
   onClose,
   onSaved,
 }: {
   run: EvalRun;
   template: EvalTemplate;
+  canEvaluate: boolean;
   onClose: () => void;
   onSaved: (run: EvalRun) => void;
 }) {
@@ -597,7 +609,25 @@ function RunView({
         </p>
       </div>
 
-      {manualItems.length > 0 && (
+      {manualItems.length > 0 && !canEvaluate && (
+        <div className="space-y-2">
+          <h4 className="text-sm font-semibold text-slate-700">수동 평가 (녹음 기반 — 열람 전용)</h4>
+          {manualItems.map((it) => {
+            const r = (run.manual_result ?? []).find((m) => m.item_id === it.id);
+            return (
+              <div key={it.id} className="rounded-xl border border-slate-200 bg-white px-4 py-3">
+                <div className="flex items-center gap-2">
+                  <span className="text-sm font-medium text-slate-800">{it.label}</span>
+                  <VerdictChip verdict={(r?.verdict as EvalVerdict) ?? "na"} />
+                </div>
+                {r?.comment && <p className="mt-1 text-xs text-slate-600">{r.comment}</p>}
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {manualItems.length > 0 && canEvaluate && (
         <div className="space-y-2">
           <h4 className="text-sm font-semibold text-slate-700">
             수동 평가 (녹음을 듣고 판정 — 어조·경청 등)
@@ -959,8 +989,11 @@ function GrantsPanel({ instId }: { instId: string }) {
   return (
     <section className="space-y-3">
       <p className="rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-600">
-        v1은 슈퍼어드민만 평가·열람합니다. 상담자 당사자나 기획공장 평가자에게 개방할 때 여기에
-        이메일을 추가하세요. <span className="text-slate-400">(기획공장 열람은 계약·동의 설계 확정 후)</span>
+        상담자 당사자나 기획공장 평가자에게 개방할 때 여기에 이메일을 추가하세요. 추가된 사람은{" "}
+        <b>그 이메일로 케어로그에 가입/로그인</b> 후 <code className="rounded bg-slate-100 px-1">/admin/eval</code>
+        에 들어오면 부여된 기관의 평가 화면만 보입니다(열람만이면 결과 검토 전용, 평가 권한을 주면 AI
+        실행·수동 입력 가능). <span className="text-slate-400">원문·상담 내용이 노출되므로 외부인(기획공장)은
+        비밀유지·데이터 처리 계약 후에 추가하세요.</span>
       </p>
 
       <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-sm">
