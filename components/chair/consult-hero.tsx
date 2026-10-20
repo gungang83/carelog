@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import {
   useChairContext,
   DRAFT_CHAIR_KEY,
@@ -78,6 +79,14 @@ export function ConsultHero() {
         >
           ✏️ 녹음 없이 기록만
         </button>
+        {/* spec 035 — 기공지 진입(위생사 동선: 진료 중 바로) */}
+        <Link
+          href="/lab-orders?new=1"
+          className="w-full rounded-2xl border border-slate-200 bg-white px-5 py-4 text-center text-sm font-medium text-slate-600 transition hover:bg-slate-50 sm:w-auto sm:py-3.5"
+          title="기공 의뢰서를 작성해 기공소로 보냅니다"
+        >
+          🦷 기공지 작성
+        </Link>
       </div>
     </section>
   );

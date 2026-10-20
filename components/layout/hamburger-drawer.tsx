@@ -129,6 +129,9 @@ export function HamburgerDrawer({
           <NavItem href="/portal/records" icon={<RecordsIcon />} onClick={() => setOpen(false)}>
             내 상담 기록
           </NavItem>
+          <NavItem href="/lab-orders" icon={<LabIcon />} onClick={() => setOpen(false)}>
+            기공지
+          </NavItem>
 
           <div className="my-2 border-t border-slate-100" />
 
@@ -239,6 +242,15 @@ function RecordsIcon() {
   return (
     <svg viewBox="0 0 20 20" fill="currentColor" className="size-4">
       <path fillRule="evenodd" d="M4 4a2 2 0 0 1 2-2h4.586A2 2 0 0 1 12 2.586L15.414 6A2 2 0 0 1 16 7.414V16a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V4Zm2 6a1 1 0 0 1 1-1h6a1 1 0 1 1 0 2H7a1 1 0 0 1-1-1Zm1 3a1 1 0 1 0 0 2h6a1 1 0 1 0 0-2H7Z" clipRule="evenodd" />
+    </svg>
+  );
+}
+
+function LabIcon() {
+  // 치아 실루엣 — 기공지(spec 035)
+  return (
+    <svg viewBox="0 0 20 20" fill="currentColor" className="size-4">
+      <path d="M6.3 2.5c1.1 0 1.9.4 2.6.8.4.2.8.4 1.1.4.3 0 .7-.2 1.1-.4.7-.4 1.5-.8 2.6-.8 2 0 3.3 1.7 3.3 4 0 1.6-.6 2.9-1.1 4-.3.7-.6 1.3-.7 1.9-.2 1-.3 2.3-.5 3.4-.1.7-.3 1.3-.5 1.8-.2.5-.6 1-1.2 1-.6 0-1-.4-1.2-.9-.2-.5-.3-1.1-.4-1.7-.2-1.3-.5-2.6-1.4-2.6-.9 0-1.2 1.3-1.4 2.6-.1.6-.2 1.2-.4 1.7-.2.5-.6.9-1.2.9-.6 0-1-.5-1.2-1-.2-.5-.4-1.1-.5-1.8-.2-1.1-.3-2.4-.5-3.4-.1-.6-.4-1.2-.7-1.9-.5-1.1-1.1-2.4-1.1-4 0-2.3 1.3-4 3.3-4Z" />
     </svg>
   );
 }
