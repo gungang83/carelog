@@ -738,3 +738,27 @@ alter table public.patient_push_subscriptions enable row level security;
 --   transcript 파라미터, 보드·오버레이 transcriptRef, 서버 워커 job.transcript_mode) ·
 --   엔진 'transcript_only'(워커 — 본문 불변 원문만 확보, 1크레딧) · runEvaluation 원문 우선+basis 기록.
 -- ───────────────────────────────────────────────────────────────────────────
+
+-- ───────────────────────────────────────────────────────────────────────────
+-- 기공지 (spec 035 · EO spec-138 연동) — migration: 20261020000001_lab_orders.sql
+-- Carelog = 쓰는 곳(양식·작성·첨부) / EO = 거래로 받는 곳(의뢰·/lab-work·정산). 카드 #1957/#1959.
+--   create table public.lab_order_forms(          -- 양식 = 코드 아닌 데이터 정의
+--     id uuid pk, institution_id uuid→institutions cascade null,  -- NULL=전역
+--     lab_name text null,  -- NULL=공통 / 지정=기공소 전용(EO 거래처명 매칭)
+--     name text, version int default 1,
+--     def jsonb,  -- {key, prosthesis_options, shade_systems, sections:[{id,title,fields:[...]}]}
+--     active bool, created_by text, created_at, updated_at);  -- 첫 시드=지플란트 실물
+--   create table public.lab_orders(               -- 의뢰 레코드 겸 전송 큐
+--     id uuid pk,  -- = carelog_order_id(클라 생성, 멱등 키)
+--     institution_id uuid→institutions cascade, consultation_id bigint→consultation set null,
+--     patient_id bigint→patient set null, lab_name text, form_id uuid→lab_order_forms set null,
+--     payload jsonb,  -- 계약 §2-2 스냅샷(form.values+form.display, 첨부는 path — 서명 URL은 전송 시 생성)
+--     status text default 'queued',  -- queued(재시도) | sent | failed(영구)
+--     eo_order_id text, portal_status text, attempts int, error text, sent_at, created_by, created_at, updated_at);
+--   index: (institution_id, created_at desc), (status, updated_at).
+--   storage bucket 'lab-orders' (private) — 사진·동영상·손그림, 서명 URL 접근만.
+-- RLS: 2테이블 enable + 정책 0 — 멤버십 가드 서버 액션(app/actions/lab-orders.ts)만.
+-- 배선: lib/lab-orders.ts(타입·시드·display 빌더) · lib/eo/lab-gateway.ts(EO_LAB_GATEWAY=on 스위치)
+--   · lib/lab-order-sender.ts(전송기 — 액션·cron 공용) · /api/cron/process-lab-orders(10분 재전송)
+--   · /lab-orders + components/lab/*(치식도 FDI·SketchPad·컴포저) · 보드 [🦷 기공지] 진입.
+-- ───────────────────────────────────────────────────────────────────────────

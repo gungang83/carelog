@@ -1291,6 +1291,15 @@ function BoardContent({
               >
                 버리기
               </button>
+              {/* spec 035 — 기공지: 진료 중 그 자리에서 작성(새 탭 — 보드 상태 유지) */}
+              <button
+                type="button"
+                onClick={() => window.open("/lab-orders?new=1", "_blank", "noopener")}
+                className="rounded-xl border border-indigo-200 bg-indigo-50 px-3 py-2.5 text-sm font-medium text-indigo-700 transition hover:bg-indigo-100"
+                title="기공지 작성 (새 탭)"
+              >
+                🦷 기공지
+              </button>
             </div>
           </div>
         </div>

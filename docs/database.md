@@ -573,3 +573,10 @@ Supabase auth.users와 patient_accounts를 연결. Google OAuth 가입 시 생�
 - `transcription_jobs.transcript_mode`(text) — 워커의 원문 저장 방식: `replace`(같은 음성 재전사 — 재요약·원문확보) | `append`(이어서 상담 새 녹음).
 - 엔진 `transcript_only` — 워커가 전사만 수행해 원문 저장, 본문 불변(기존 기록 원문 확보용, 크레딧 transcribe_quick=1).
 - migration: `20261019000003_consult_transcripts.sql`
+
+## 기공지 (spec 035 · EO spec-138 연동)
+- `lab_order_forms` — 기공지 양식(코드 아닌 데이터 정의). `institution_id`(NULL=전역) · `lab_name`(NULL=공통/지정=기공소 전용) · `def`(jsonb: key·prosthesis_options·shade_systems·sections[fields], field type text/textarea/select/multi/check/number/date/ea) · `version` · `active`. 첫 시드 = 지플란트 실물(자동).
+- `lab_orders` — 의뢰 레코드 겸 전송 큐. `id` = carelog_order_id(클라 uuid, **멱등 키**) · `payload`(계약 §2-2 스냅샷 — form.values+**form.display**, 첨부 path) · `status`(queued→sent/failed) · `eo_order_id` · `attempts` · `error`. 인덱스 (institution_id, created_at desc)/(status, updated_at).
+- storage `lab-orders` — **비공개** 버킷(사진·동영상·손그림). 전송 시 24h 서명 URL → EO가 pull 복사(저장=복사·전달=참조).
+- RLS: 2테이블 enable+정책 0(서버 전용). env 스위치 `EO_LAB_GATEWAY=on`(+`CARELOG_GATEWAY_SECRET` 재사용).
+- migration: `20261020000001_lab_orders.sql`
