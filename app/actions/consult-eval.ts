@@ -253,7 +253,7 @@ export type EvalConsultationRow = {
   has_audio: boolean; // 음성 보관 여부 — 원문 확보 가능성
   has_transcript: boolean; // 전사 원문 보유 여부 — true면 원문 기반 평가
   transcript_chars: number | null; // 원문 글자수(보유 시) — 평가 가능성 가늠
-  capture_status: "in_progress" | "failed" | null; // 원문 확보 job 상태(원문 미보유 시)
+  capture_status: "pending" | "processing" | "failed" | null; // 원문 확보 job 상태(원문 미보유 시)
   last_run: { id: string; created_at: string; score: number | null } | null;
 };
 
@@ -300,11 +300,12 @@ export async function getEvalConsultations(
     .in("consultation_id", ids)
     .eq("engine", "transcript_only")
     .order("created_at", { ascending: false });
-  const captureMap = new Map<number, "in_progress" | "failed">();
+  const captureMap = new Map<number, "pending" | "processing" | "failed">();
   for (const j of captureJobs ?? []) {
     const cid = j.consultation_id as number;
     if (captureMap.has(cid)) continue; // 최신 job만
-    if (j.status === "pending" || j.status === "processing") captureMap.set(cid, "in_progress");
+    if (j.status === "pending") captureMap.set(cid, "pending");
+    else if (j.status === "processing") captureMap.set(cid, "processing");
     else if (j.status === "error") captureMap.set(cid, "failed");
   }
 

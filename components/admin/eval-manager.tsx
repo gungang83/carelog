@@ -4,7 +4,7 @@
 // 기관 선택 → 최근 상담 → [AI 평가 실행] → 결과(verdict 칩+근거+수동 입력+실험 점수)
 // 탭: 평가 | 템플릿 편집 | 열람·평가 권한(당사자·기획공장 개방 대비)
 
-import { useCallback, useEffect, useMemo, useState, useTransition } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import {
   getEvalTemplates,
   getEvalConsultations,
@@ -63,7 +63,8 @@ export function EvalManager({ institutions }: Props) {
   const [templates, setTemplates] = useState<EvalTemplate[]>([]);
   const [templateId, setTemplateId] = useState("");
   const [consults, setConsults] = useState<EvalConsultationRow[]>([]);
-  const [msg, setMsg] = useState("");
+  const [msg, setMsg] = useState(""); // 오류(rose)
+  const [info, setInfo] = useState(""); // 안내·완료(emerald)
   const [isPending, startTransition] = useTransition();
 
   // 결과 뷰
@@ -102,6 +103,55 @@ export function EvalManager({ institutions }: Props) {
     reload();
   }, [reload]);
 
+  // 목록만 조용히 갱신 — 열려 있는 결과·내용 보기 패널은 유지(자동 폴링용)
+  const refreshConsults = useCallback(async () => {
+    if (!instId) return;
+    const c = await getEvalConsultations(instId);
+    if (c.ok) setConsults(c.rows);
+  }, [instId]);
+
+  // ── 원문 확보 자동 추적 — 진행 중이면 5초마다 목록 갱신, 완료/실패를 감지해 알림 ──
+  const trackedCaptureRef = useRef<Set<number>>(new Set());
+  useEffect(() => {
+    const inProgress = consults
+      .filter((c) => c.capture_status === "pending" || c.capture_status === "processing")
+      .map((c) => c.id);
+
+    // 직전까지 추적하던 기록의 완료/실패 감지
+    const doneIds: number[] = [];
+    const failedIds: number[] = [];
+    for (const id of trackedCaptureRef.current) {
+      const row = consults.find((c) => c.id === id);
+      if (!row) continue;
+      if (row.has_transcript) doneIds.push(id);
+      else if (row.capture_status === "failed") failedIds.push(id);
+    }
+    if (doneIds.length > 0) {
+      setInfo(
+        `✅ ${doneIds.map((i) => `#${i}`).join(", ")} 원문 확보 완료 — 이제 [AI 평가 실행]을 누르면 원문 기반으로 판정됩니다.`,
+      );
+    }
+    if (failedIds.length > 0) {
+      setMsg(`${failedIds.map((i) => `#${i}`).join(", ")} 원문 확보 실패 — [원문 확보 재시도]를 눌러주세요.`);
+    }
+    trackedCaptureRef.current = new Set(inProgress);
+
+    if (inProgress.length === 0) return;
+    const t = setTimeout(() => {
+      void refreshConsults();
+    }, 5000);
+    return () => clearTimeout(t);
+  }, [consults, refreshConsults]);
+
+  // ── 평가 진행 경과 타이머 ──
+  const [evalElapsed, setEvalElapsed] = useState(0);
+  useEffect(() => {
+    if (runningId === null) return;
+    setEvalElapsed(0);
+    const iv = setInterval(() => setEvalElapsed((s) => s + 1), 1000);
+    return () => clearInterval(iv);
+  }, [runningId]);
+
   const handleRun = (consultationId: number) => {
     if (!templateId) {
       setMsg("평가 템플릿을 선택하세요.");
@@ -115,8 +165,8 @@ export function EvalManager({ institutions }: Props) {
       : shortTranscript
         ? `ℹ️ 확보된 원문이 ${row!.transcript_chars}자로 너무 짧아(짧은 녹음) 요약 본문 기반으로 판정됩니다. [내용 보기]로 확인해 보세요.\n\n`
         : !row.has_transcript
-          ? row.capture_status === "in_progress"
-            ? "⚠️ 원문 확보가 아직 진행 중입니다 — 지금 평가하면 '요약 기반'(판정불가 다수)으로 판정됩니다. 원문 보유 표시가 뜬 뒤 평가하는 것을 권장합니다.\n\n그래도 지금 "
+          ? row.capture_status === "pending" || row.capture_status === "processing"
+            ? "⚠️ 원문 확보가 아직 진행 중입니다 — 지금 평가하면 '요약 기반'(판정불가 다수)으로 판정됩니다. 완료 알림이 뜬 뒤 평가하는 것을 권장합니다.\n\n그래도 지금 "
             : row.has_audio
               ? "⚠️ 이 기록은 아직 원문이 없습니다 — '요약 기반'(판정불가 다수)으로 판정됩니다. [원문 확보] 후 평가하는 것을 권장합니다.\n\n그래도 지금 "
               : "ℹ️ 이 기록은 음성이 없어 요약 본문 기반으로만 판정됩니다.\n\n"
@@ -164,11 +214,11 @@ export function EvalManager({ institutions }: Props) {
     if (!confirm("보관된 음성을 전사해 원문을 확보할까요? (1크레딧 · 수 분 소요, 본문은 바뀌지 않습니다)")) return;
     startTransition(async () => {
       const r = await requestTranscriptCapture(consultationId);
-      setMsg(
-        r.ok
-          ? "원문 확보 작업을 등록했어요 — 수 분 뒤 목록을 새로고침하면 '원문' 표시가 붙고, 그때 평가를 실행하면 원문 기반으로 판정됩니다."
-          : r.message,
-      );
+      if (r.ok) {
+        setMsg("");
+        setInfo(`#${consultationId} 원문 확보를 시작했어요 — 진행 상태를 자동으로 확인합니다(새로고침 불필요).`);
+        await refreshConsults(); // 뱃지를 '대기 중'으로 즉시 전환 → 자동 폴링 시작
+      } else setMsg(r.message);
     });
   };
 
@@ -211,6 +261,26 @@ export function EvalManager({ institutions }: Props) {
       {msg && (
         <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-2.5 text-sm text-rose-700">
           {msg}
+        </div>
+      )}
+      {info && (
+        <div className="flex items-start justify-between gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-2.5 text-sm text-emerald-800">
+          <span>{info}</span>
+          <button onClick={() => setInfo("")} className="shrink-0 text-xs text-emerald-500 hover:underline">
+            닫기
+          </button>
+        </div>
+      )}
+      {consults.some((c) => c.capture_status === "pending" || c.capture_status === "processing") && (
+        <div className="flex items-center gap-2 rounded-xl border border-sky-200 bg-sky-50 px-4 py-2.5 text-sm text-sky-800">
+          <span className="inline-block h-2 w-2 animate-pulse rounded-full bg-sky-500" />
+          원문 확보 진행 중 — 5초마다 자동 확인하고 있어요. 완료되면 바로 알려드립니다(새로고침 불필요).
+        </div>
+      )}
+      {runningId !== null && (
+        <div className="flex items-center gap-2 rounded-xl border border-indigo-200 bg-indigo-50 px-4 py-2.5 text-sm text-indigo-800">
+          <span className="inline-block h-2 w-2 animate-pulse rounded-full bg-indigo-500" />
+          상담 #{runningId} 평가 중 — AI가 체크리스트와 대조해 항목별 판정하고 있어요. 보통 10~30초 걸립니다 (경과 {evalElapsed}초). 완료되면 결과가 바로 열립니다.
         </div>
       )}
 
@@ -279,9 +349,13 @@ export function EvalManager({ institutions }: Props) {
                           <span className="rounded-full border border-emerald-200 bg-emerald-50 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-700">
                             원문 보유 · {(c.transcript_chars ?? 0).toLocaleString()}자
                           </span>
-                        ) : c.capture_status === "in_progress" ? (
+                        ) : c.capture_status === "pending" ? (
                           <span className="animate-pulse rounded-full border border-sky-200 bg-sky-50 px-1.5 py-0.5 text-[10px] font-semibold text-sky-700">
-                            원문 확보 중…
+                            원문 확보 대기 중…
+                          </span>
+                        ) : c.capture_status === "processing" ? (
+                          <span className="animate-pulse rounded-full border border-sky-200 bg-sky-50 px-1.5 py-0.5 text-[10px] font-semibold text-sky-700">
+                            원문 전사 중…
                           </span>
                         ) : c.capture_status === "failed" ? (
                           <span className="rounded-full border border-rose-200 bg-rose-50 px-1.5 py-0.5 text-[10px] font-semibold text-rose-600">
@@ -306,7 +380,7 @@ export function EvalManager({ institutions }: Props) {
                     >
                       {detail?.id === c.id ? "내용 닫기" : "내용 보기"}
                     </button>
-                    {!c.has_transcript && c.has_audio && c.capture_status !== "in_progress" && (
+                    {!c.has_transcript && c.has_audio && c.capture_status !== "pending" && c.capture_status !== "processing" && (
                       <button
                         onClick={() => handleCapture(c.id)}
                         disabled={isPending}
@@ -335,7 +409,7 @@ export function EvalManager({ institutions }: Props) {
                           : ""
                       }
                     >
-                      {runningId === c.id ? "평가 중…" : "AI 평가 실행"}
+                      {runningId === c.id ? `평가 중 ${evalElapsed}초…` : "AI 평가 실행"}
                     </button>
                   </div>
                   {detail?.id === c.id && (
