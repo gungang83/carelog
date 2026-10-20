@@ -84,3 +84,11 @@ env `EO_LAB_GATEWAY=on` (Vercel) — 테오의 EO EP(§2-1·2-2) 배포 후. 그
   "(포탈 설정 확인 필요)" 표기로 유지.
 - `lab_name`은 목록 문자열 ★원문 그대로 전송(trim 등 변형 금지 — EO 매칭 키). 송신부 검증만 trim.
 - 게이트웨이 미발효(null) 동안은 기존 폴백(거래 이력 제안+직접 입력) 유지.
+
+## 3.8 재실측 적발 — 첨부 kind 표준 (2026-10-20 · 카드 #1973)
+
+첫 실측은 display 0·첨부 0이라 "통과할 게 없어서 통과"(마르코 적발). 재실측에서 실제 불일치 1건:
+- **첨부 kind**: EO 수신 정본 = `photo|video|drawing`, Carelog 내부 = `photo|video|sketch` —
+  계약서에 kind 열거가 없어 양쪽이 다르게 정했다. ★wire에서 `sketch→drawing` 매핑(sender)으로 해소.
+  내부 저장·UI는 sketch 유지(기존 행 호환).
+- 거절 메시지가 성공(초록) 톤으로 뜨던 표시 버그 수정 — failed는 빨간 톤.

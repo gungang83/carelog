@@ -79,10 +79,12 @@ export function LabOrdersView({
           key={editSnapshot?.setId ?? "new"}
           ctx={ctx}
           initial={editSnapshot}
-          onDone={(message) => {
+          onDone={(message, status) => {
             setComposing(false);
             setEditSnapshot(null);
-            setInfo(message);
+            // 거절(failed)은 빨간 톤으로 — 성공·대기만 초록
+            if (status === "failed") setMsg(message);
+            else setInfo(message);
             router.refresh();
           }}
           onCancel={() => {

@@ -43,7 +43,9 @@ export async function sendLabOrderById(orderId: string): Promise<SendOutcome> {
           .eq("id", orderId);
         return { status: "queued", error: msg };
       }
-      attachments.push({ kind: a.kind, name: a.name, bytes: a.bytes, signed_url: signed.signedUrl });
+      // EO가 받는 kind는 photo|video|drawing(정본) — Carelog 내부 'sketch'(손그림)는 wire에서 drawing으로
+      const wireKind = a.kind === "sketch" ? "drawing" : a.kind;
+      attachments.push({ kind: wireKind, name: a.name, bytes: a.bytes, signed_url: signed.signedUrl });
     }
 
     const result = await gatewaySubmitLabOrder({ ...payload, attachments });

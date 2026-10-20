@@ -62,7 +62,7 @@ export function LabOrderComposer({
   ctx: LabOrderContext;
   /** 수정 모드 — 기존 세트 스냅샷. 없으면 신규 작성. */
   initial?: LabOrderSetSnapshot | null;
-  onDone: (message: string) => void;
+  onDone: (message: string, status: "sent" | "queued" | "failed") => void;
   onCancel: () => void;
 }) {
   const editing = Boolean(initial);
@@ -224,7 +224,7 @@ export function LabOrderComposer({
         attachments,
         items,
       });
-      if (r.ok) onDone(r.message);
+      if (r.ok) onDone(r.message, r.status);
       else setMsg(r.message);
     });
   };
