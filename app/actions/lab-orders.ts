@@ -43,6 +43,7 @@ export type LabOrderContext = {
   labs: EoLab[] | null; // null = 게이트웨이 미발효(기공소명 직접 입력 폴백)
   gatewayOn: boolean;
   forms: LabOrderFormRow[];
+  recentLabs: string[]; // 우리가 거래해 본 기공소(보낸 기공지에서 추출, 최근순) — 선택 편의
 };
 
 export async function getLabOrderContext(): Promise<{ ok: true; ctx: LabOrderContext } | Fail> {
@@ -71,6 +72,15 @@ export async function getLabOrderContext(): Promise<{ ok: true; ctx: LabOrderCon
     ({ data: forms } = await fetchForms());
   }
 
+  // 거래해 본 기공소(최근순 distinct) — EO 목록 미발효에도 쉽게 재선택
+  const { data: recent } = await admin
+    .from("lab_orders")
+    .select("lab_name, created_at")
+    .eq("institution_id", auth.institutionId)
+    .order("created_at", { ascending: false })
+    .limit(100);
+  const recentLabs = [...new Set((recent ?? []).map((r) => r.lab_name as string))].slice(0, 10);
+
   const labs = await gatewayFetchLabs(auth.institutionId);
   return {
     ok: true,
@@ -78,6 +88,7 @@ export async function getLabOrderContext(): Promise<{ ok: true; ctx: LabOrderCon
       labs,
       gatewayOn: labGatewayEnabled(),
       forms: (forms ?? []) as LabOrderFormRow[],
+      recentLabs,
     },
   };
 }
@@ -114,10 +125,20 @@ export async function createLabAttachmentUpload(
   return { ok: true, path, token: data.token };
 }
 
-// ── 의뢰 제출 ────────────────────────────────────────────────
+// ── 의뢰 제출 (세트 — 기공물 여러 개를 한 번에, 장마다 1행) ──
 
-export type SubmitLabOrderInput = {
-  orderId: string; // 클라 생성 uuid = carelog_order_id(멱등 키)
+export type LabOrderItemInput = {
+  orderId: string; // 장별 uuid = carelog_order_id(멱등 키 — 수정 시 유지)
+  tooth: string[];
+  prosthesis: string;
+  material?: string;
+  shadeSystem?: string;
+  shade?: string;
+  values: Record<string, unknown>;
+};
+
+export type SubmitLabOrderSetInput = {
+  setId: string; // 세트 uuid — 첨부 업로드 경로·묶음 식별
   labName: string;
   consultationId?: number | null;
   patientId?: number | null;
@@ -125,57 +146,58 @@ export type SubmitLabOrderInput = {
   chartNo?: string;
   doctor?: string;
   hygienist?: string;
-  tooth: string[];
-  prosthesis: string;
-  material?: string;
-  shadeSystem?: string;
-  shade?: string;
-  dueDate: string; // YYYY-MM-DD
+  orderDate: string; // 의뢰일(기본 오늘)
+  dueDate: string; // 완료 희망(납기)일
   orderType: "의뢰" | "수정" | "재제작";
   remakeReason?: string;
   formId: string;
-  values: Record<string, unknown>;
   instructions?: string;
-  attachments: LabAttachmentMeta[];
+  attachments: LabAttachmentMeta[]; // 세트 공통 첨부
+  items: LabOrderItemInput[];
 };
 
-export async function submitLabOrder(
-  input: SubmitLabOrderInput,
-): Promise<{ ok: true; status: "sent" | "queued" | "failed"; message: string } | Fail> {
+export async function submitLabOrderSet(
+  input: SubmitLabOrderSetInput,
+): Promise<
+  | { ok: true; status: "sent" | "queued" | "failed"; message: string }
+  | Fail
+> {
   const auth = await requireMember();
   if (!auth.ok) return auth;
-  if (!/^[0-9a-f-]{36}$/.test(input.orderId)) return { ok: false, message: "잘못된 의뢰 ID입니다." };
+  const uuidRe = /^[0-9a-f-]{36}$/;
+  if (!uuidRe.test(input.setId)) return { ok: false, message: "잘못된 세트 ID입니다." };
 
   const labName = input.labName.trim();
   const patientName = input.patientName.trim();
-  const prosthesis = input.prosthesis.trim();
   if (!labName) return { ok: false, message: "기공소를 선택(입력)해 주세요." };
   if (!patientName) return { ok: false, message: "환자를 선택해 주세요." };
-  if (!prosthesis) return { ok: false, message: "보철 종류를 선택해 주세요." };
-  if (!input.dueDate) return { ok: false, message: "완료(납기)일을 입력해 주세요." };
+  if (!input.dueDate) return { ok: false, message: "완료 희망(납기)일을 입력해 주세요." };
   if (input.orderType === "재제작" && !input.remakeReason?.trim()) {
     return { ok: false, message: "재제작 사유를 입력해 주세요." };
+  }
+  const items = (input.items ?? []).filter((it) => uuidRe.test(it.orderId));
+  if (items.length === 0) return { ok: false, message: "기공물을 1개 이상 입력해 주세요." };
+  for (const [i, it] of items.entries()) {
+    if (!it.prosthesis.trim()) return { ok: false, message: `기공물 ${i + 1}의 보철 종류를 선택해 주세요.` };
   }
   const totalBytes = input.attachments.reduce((s, a) => s + (a.bytes || 0), 0);
   if (totalBytes > LAB_ATTACH_LIMITS.total) {
     return { ok: false, message: "첨부 합계가 100MB를 초과합니다 — 일부를 빼 주세요." };
   }
-  // 경로 위조 방지 — 내 기관·이 의뢰의 업로드만 허용
-  const prefix = `${auth.institutionId}/${input.orderId}/`;
+  // 경로 위조 방지 — 내 기관·이 세트의 업로드만 허용
+  const prefix = `${auth.institutionId}/${input.setId}/`;
   if (input.attachments.some((a) => !a.path.startsWith(prefix))) {
     return { ok: false, message: "첨부 경로가 올바르지 않습니다." };
   }
 
   const admin = createAdminSupabaseClient();
 
-  // 양식 조회 + display 스냅샷(사람용 — EO·기공소는 이것만 렌더, 카드 #1957 제안)
   const { data: form } = await admin
     .from("lab_order_forms")
     .select("id, name, version, def")
     .eq("id", input.formId)
     .maybeSingle();
   const def = (form?.def ?? DEFAULT_LAB_FORM_DEF) as LabOrderFormDef;
-  const display: LabDisplayRow[] = buildFormDisplay(def, input.values ?? {});
 
   // share 정책(계약 §2-1): ✗ 필드는 애초에 보내지 않는다. 목록 미발효 시 보수 기본값.
   const labs = await gatewayFetchLabs(auth.institutionId);
@@ -185,76 +207,222 @@ export async function submitLabOrder(
     doctor: true,
   };
 
-  const payload = {
-    institution_id: auth.institutionId,
-    carelog_order_id: input.orderId,
-    lab_name: labName,
-    patient: {
-      ...(share.patient_name ? { name: patientName } : { name: "(비공개)" }),
-      ...(share.chart_no && input.chartNo?.trim() ? { chart_no: input.chartNo.trim() } : {}),
-    },
-    ...(share.doctor && input.doctor?.trim() ? { doctor: input.doctor.trim() } : {}),
-    ...(input.hygienist?.trim() ? { hygienist: input.hygienist.trim() } : {}),
-    tooth: input.tooth,
-    prosthesis,
-    ...(input.material?.trim() ? { material: input.material.trim() } : {}),
-    ...(input.shade?.trim()
-      ? { shade: { system: input.shadeSystem?.trim() || null, values: input.shade.trim() } }
-      : {}),
-    due_date: input.dueDate,
-    order_type: input.orderType,
-    ...(input.remakeReason?.trim() ? { remake_reason: input.remakeReason.trim() } : {}),
-    form: {
-      key: def.key,
-      version: form?.version ?? 1,
-      values: input.values ?? {},
-      display,
-    },
-    ...(input.instructions?.trim() ? { instructions: input.instructions.trim() } : {}),
-    attachments: input.attachments, // path 보관 — 전송기에서 서명 URL로 치환
-  };
+  // 수정 감지 — 기존 행의 revision·edit_log를 승계(접수·제작 후 수정 식별용)
+  const { data: existingRows } = await admin
+    .from("lab_orders")
+    .select("id, institution_id, status, portal_status, revision, edit_log")
+    .in("id", items.map((it) => it.orderId));
+  const existingMap = new Map((existingRows ?? []).map((r) => [r.id as string, r]));
+  for (const row of existingRows ?? []) {
+    if (row.institution_id !== auth.institutionId) {
+      return { ok: false, message: "수정 권한이 없는 의뢰가 포함돼 있습니다." };
+    }
+  }
 
-  const { error } = await admin.from("lab_orders").upsert(
-    {
-      id: input.orderId,
+  const editor = auth.authorName ?? auth.email;
+  const now = new Date().toISOString();
+  const outcomes: ("sent" | "queued" | "failed")[] = [];
+  let lastError = "";
+
+  for (const [index, it] of items.entries()) {
+    const existing = existingMap.get(it.orderId);
+    const revision = existing ? ((existing.revision as number) ?? 1) + 1 : 1;
+    const editLog = existing
+      ? [
+          ...(((existing.edit_log as unknown[]) ?? []) as object[]),
+          {
+            at: now,
+            by: editor,
+            status_before: existing.status, // sent 이후 수정이면 여기 'sent'가 남는다
+            portal_status_before: existing.portal_status ?? null,
+          },
+        ]
+      : [];
+
+    const display: LabDisplayRow[] = buildFormDisplay(def, it.values ?? {});
+    const payload = {
       institution_id: auth.institutionId,
-      consultation_id: input.consultationId ?? null,
-      patient_id: input.patientId ?? null,
+      carelog_order_id: it.orderId,
       lab_name: labName,
-      form_id: form?.id ?? null,
-      payload,
-      status: "queued",
-      created_by: auth.authorName ?? auth.email,
-      updated_at: new Date().toISOString(),
-    },
-    { onConflict: "id" },
-  );
-  if (error) return { ok: false, message: `기공지 저장 실패: ${error.message}` };
+      patient: {
+        ...(share.patient_name ? { name: patientName } : { name: "(비공개)" }),
+        ...(share.chart_no && input.chartNo?.trim() ? { chart_no: input.chartNo.trim() } : {}),
+      },
+      ...(share.doctor && input.doctor?.trim() ? { doctor: input.doctor.trim() } : {}),
+      ...(input.hygienist?.trim() ? { hygienist: input.hygienist.trim() } : {}),
+      tooth: it.tooth,
+      prosthesis: it.prosthesis.trim(),
+      ...(it.material?.trim() ? { material: it.material.trim() } : {}),
+      ...(it.shade?.trim()
+        ? { shade: { system: it.shadeSystem?.trim() || null, values: it.shade.trim() } }
+        : {}),
+      order_date: input.orderDate,
+      due_date: input.dueDate,
+      order_type: input.orderType,
+      ...(input.remakeReason?.trim() ? { remake_reason: input.remakeReason.trim() } : {}),
+      form: { key: def.key, version: form?.version ?? 1, values: it.values ?? {}, display },
+      ...(input.instructions?.trim() ? { instructions: input.instructions.trim() } : {}),
+      attachments: input.attachments, // 세트 공통 — 전송기에서 서명 URL로 치환
+      // 세트 묶음(additive — EO는 무해석·표시만) + 수정 회차(같은 id의 더 높은 revision = 업데이트)
+      set: { id: input.setId, index: index + 1, total: items.length },
+      revision,
+    };
 
-  // 즉시 전송 시도 — 실패해도 큐에 남아 cron이 재전송(기공지는 유실되지 않는다)
-  const sent = await sendLabOrderById(input.orderId);
+    const { error } = await admin.from("lab_orders").upsert(
+      {
+        id: it.orderId,
+        set_id: input.setId,
+        institution_id: auth.institutionId,
+        consultation_id: input.consultationId ?? null,
+        patient_id: input.patientId ?? null,
+        lab_name: labName,
+        form_id: form?.id ?? null,
+        payload,
+        status: "queued", // 수정이면 재전송 대상으로 복귀
+        revision,
+        edit_log: editLog,
+        attempts: 0,
+        error: null,
+        created_by: existing ? undefined : editor,
+        updated_at: now,
+      },
+      { onConflict: "id" },
+    );
+    if (error) return { ok: false, message: `기공지 저장 실패: ${error.message}` };
+
+    const sent = await sendLabOrderById(it.orderId);
+    outcomes.push(sent.status);
+    if (sent.error) lastError = sent.error;
+  }
+
+  const status = outcomes.every((s) => s === "sent")
+    ? "sent"
+    : outcomes.some((s) => s === "failed")
+      ? "failed"
+      : "queued";
   const message =
-    sent.status === "sent"
-      ? "기공소로 전송했습니다."
-      : sent.status === "queued"
-        ? `기공지는 저장됐고 전송 대기열에 있습니다 — 자동으로 재전송됩니다. (${sent.error ?? ""})`
-        : `전송이 거절됐습니다: ${sent.error ?? "원인 미상"}`;
-  return { ok: true, status: sent.status, message };
+    status === "sent"
+      ? `기공소로 전송했습니다 (기공물 ${items.length}건).`
+      : status === "queued"
+        ? `기공지 ${items.length}건이 저장됐고 전송 대기열에 있습니다 — 자동으로 재전송됩니다. (${lastError})`
+        : `일부 전송이 거절됐습니다: ${lastError}`;
+  return { ok: true, status, message };
+}
+
+// ── 수정용 조회 — 세트 전체를 컴포저 초기값으로 ─────────────
+
+export type LabOrderSetSnapshot = {
+  setId: string;
+  labName: string;
+  patientId: number | null;
+  patientName: string;
+  chartNo: string;
+  doctor: string;
+  hygienist: string;
+  orderDate: string;
+  dueDate: string;
+  orderType: "의뢰" | "수정" | "재제작";
+  remakeReason: string;
+  formId: string;
+  instructions: string;
+  attachments: LabAttachmentMeta[];
+  anySent: boolean; // 전송(접수) 이후 수정 여부 안내용
+  items: LabOrderItemInput[];
+};
+
+export async function getLabOrderSet(
+  orderId: string,
+): Promise<{ ok: true; snapshot: LabOrderSetSnapshot } | Fail> {
+  const auth = await requireMember();
+  if (!auth.ok) return auth;
+  const admin = createAdminSupabaseClient();
+
+  const { data: base } = await admin
+    .from("lab_orders")
+    .select("id, set_id, institution_id")
+    .eq("id", orderId)
+    .maybeSingle();
+  if (!base || base.institution_id !== auth.institutionId) {
+    return { ok: false, message: "의뢰를 찾을 수 없습니다." };
+  }
+
+  const query = admin
+    .from("lab_orders")
+    .select("id, set_id, patient_id, lab_name, form_id, payload, status, created_at")
+    .eq("institution_id", auth.institutionId);
+  const { data: rows } = base.set_id
+    ? await query.eq("set_id", base.set_id).order("created_at", { ascending: true })
+    : await query.eq("id", orderId);
+  if (!rows || rows.length === 0) return { ok: false, message: "의뢰를 찾을 수 없습니다." };
+
+  type P = {
+    patient?: { name?: string; chart_no?: string };
+    doctor?: string;
+    hygienist?: string;
+    tooth?: string[];
+    prosthesis?: string;
+    material?: string;
+    shade?: { system?: string | null; values?: string };
+    order_date?: string;
+    due_date?: string;
+    order_type?: string;
+    remake_reason?: string;
+    instructions?: string;
+    form?: { values?: Record<string, unknown> };
+    attachments?: LabAttachmentMeta[];
+  };
+  const first = (rows[0].payload ?? {}) as P;
+  return {
+    ok: true,
+    snapshot: {
+      setId: (rows[0].set_id as string) ?? orderId,
+      labName: rows[0].lab_name as string,
+      patientId: (rows[0].patient_id as number | null) ?? null,
+      patientName: first.patient?.name ?? "",
+      chartNo: first.patient?.chart_no ?? "",
+      doctor: first.doctor ?? "",
+      hygienist: first.hygienist ?? "",
+      orderDate: first.order_date ?? "",
+      dueDate: first.due_date ?? "",
+      orderType: (first.order_type as "의뢰" | "수정" | "재제작") ?? "의뢰",
+      remakeReason: first.remake_reason ?? "",
+      formId: (rows[0].form_id as string) ?? "",
+      instructions: first.instructions ?? "",
+      attachments: first.attachments ?? [],
+      anySent: rows.some((r) => r.status === "sent"),
+      items: rows.map((r) => {
+        const p = (r.payload ?? {}) as P;
+        return {
+          orderId: r.id as string,
+          tooth: p.tooth ?? [],
+          prosthesis: p.prosthesis ?? "",
+          material: p.material ?? "",
+          shadeSystem: p.shade?.system ?? "",
+          shade: p.shade?.values ?? "",
+          values: p.form?.values ?? {},
+        };
+      }),
+    },
+  };
 }
 
 // ── 목록·재전송 ──────────────────────────────────────────────
 
 export type LabOrderListRow = {
   id: string;
+  set_id: string | null;
   lab_name: string;
   patient_name: string;
   tooth: string[];
   prosthesis: string;
+  order_date: string;
   due_date: string;
   status: string;
   eo_order_id: string | null;
   error: string | null;
   attempts: number;
+  revision: number;
+  last_edit: { at: string; by: string; after_sent: boolean } | null;
   created_by: string | null;
   created_at: string;
 };
@@ -265,10 +433,12 @@ export async function getMyLabOrders(): Promise<{ ok: true; rows: LabOrderListRo
   const admin = createAdminSupabaseClient();
   const { data, error } = await admin
     .from("lab_orders")
-    .select("id, lab_name, payload, status, eo_order_id, error, attempts, created_by, created_at")
+    .select(
+      "id, set_id, lab_name, payload, status, eo_order_id, error, attempts, revision, edit_log, created_by, created_at",
+    )
     .eq("institution_id", auth.institutionId)
     .order("created_at", { ascending: false })
-    .limit(30);
+    .limit(40);
   if (error) return { ok: false, message: "목록 조회에 실패했습니다." };
   return {
     ok: true,
@@ -277,19 +447,36 @@ export async function getMyLabOrders(): Promise<{ ok: true; rows: LabOrderListRo
         patient?: { name?: string };
         tooth?: string[];
         prosthesis?: string;
+        order_date?: string;
         due_date?: string;
       };
+      const log = ((r.edit_log as unknown[]) ?? []) as {
+        at?: string;
+        by?: string;
+        status_before?: string;
+      }[];
+      const last = log.length > 0 ? log[log.length - 1] : null;
       return {
         id: r.id as string,
+        set_id: (r.set_id as string | null) ?? null,
         lab_name: r.lab_name as string,
         patient_name: p.patient?.name ?? "(미상)",
         tooth: p.tooth ?? [],
         prosthesis: p.prosthesis ?? "",
+        order_date: p.order_date ?? "",
         due_date: p.due_date ?? "",
         status: r.status as string,
         eo_order_id: (r.eo_order_id as string | null) ?? null,
         error: (r.error as string | null) ?? null,
         attempts: (r.attempts as number) ?? 0,
+        revision: (r.revision as number) ?? 1,
+        last_edit: last
+          ? {
+              at: last.at ?? "",
+              by: last.by ?? "",
+              after_sent: last.status_before === "sent", // 전송(접수) 이후 수정 — 명확 표시용
+            }
+          : null,
         created_by: (r.created_by as string | null) ?? null,
         created_at: r.created_at as string,
       };

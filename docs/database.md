@@ -580,3 +580,4 @@ Supabase auth.users와 patient_accounts를 연결. Google OAuth 가입 시 생�
 - storage `lab-orders` — **비공개** 버킷(사진·동영상·손그림). 전송 시 24h 서명 URL → EO가 pull 복사(저장=복사·전달=참조).
 - RLS: 2테이블 enable+정책 0(서버 전용). env 스위치 `EO_LAB_GATEWAY=on`(+`CARELOG_GATEWAY_SECRET` 재사용).
 - migration: `20261020000001_lab_orders.sql`
+- v2(`20261020000002`): `lab_orders.set_id`(uuid — 세트 묶음) · `revision`(int) · `edit_log`(jsonb `[{at,by,status_before,portal_status_before}]` — 전송 후 수정 식별). payload에 `order_date`·`set`·`revision` 추가(additive).

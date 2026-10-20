@@ -6,8 +6,10 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import {
   retryLabOrder,
+  getLabOrderSet,
   type LabOrderContext,
   type LabOrderListRow,
+  type LabOrderSetSnapshot,
 } from "@/app/actions/lab-orders";
 import { LabOrderComposer } from "@/components/lab/lab-order-composer";
 
@@ -28,6 +30,7 @@ export function LabOrdersView({
 }) {
   const router = useRouter();
   const [composing, setComposing] = useState(openNew);
+  const [editSnapshot, setEditSnapshot] = useState<LabOrderSetSnapshot | null>(null);
   const [info, setInfo] = useState("");
   const [msg, setMsg] = useState("");
   const [isPending, startTransition] = useTransition();
@@ -38,6 +41,18 @@ export function LabOrdersView({
       if (r.ok) {
         setInfo(r.message);
         router.refresh();
+      } else setMsg(r.message);
+    });
+  };
+
+  // 보낸 기공지 수정·첨부 추가 — 세트 전체를 불러와 컴포저로
+  const edit = (id: string) => {
+    startTransition(async () => {
+      const r = await getLabOrderSet(id);
+      if (r.ok) {
+        setEditSnapshot(r.snapshot);
+        setComposing(true);
+        setMsg("");
       } else setMsg(r.message);
     });
   };
@@ -61,13 +76,19 @@ export function LabOrdersView({
 
       {composing ? (
         <LabOrderComposer
+          key={editSnapshot?.setId ?? "new"}
           ctx={ctx}
+          initial={editSnapshot}
           onDone={(message) => {
             setComposing(false);
+            setEditSnapshot(null);
             setInfo(message);
             router.refresh();
           }}
-          onCancel={() => setComposing(false)}
+          onCancel={() => {
+            setComposing(false);
+            setEditSnapshot(null);
+          }}
         />
       ) : (
         <button
@@ -97,19 +118,49 @@ export function LabOrdersView({
                       <span className={`rounded-full border px-2 py-0.5 text-[11px] font-semibold ${meta.cls}`}>
                         {meta.label}
                       </span>
+                      {r.revision > 1 && (
+                        <span
+                          className={`rounded-full border px-2 py-0.5 text-[11px] font-semibold ${
+                            r.last_edit?.after_sent
+                              ? "border-amber-300 bg-amber-50 text-amber-700"
+                              : "border-slate-200 bg-slate-50 text-slate-500"
+                          }`}
+                          title={
+                            r.last_edit
+                              ? `${new Date(r.last_edit.at).toLocaleString("ko-KR")} · ${r.last_edit.by} 수정${r.last_edit.after_sent ? " (전송 후)" : ""}`
+                              : ""
+                          }
+                        >
+                          v{r.revision} 수정됨{r.last_edit?.after_sent ? " · 전송 후" : ""}
+                        </span>
+                      )}
                     </div>
                     <div className="mt-0.5 text-xs text-slate-400">
                       {r.prosthesis}
                       {r.tooth.length > 0 ? ` · #${r.tooth.join(",")}` : ""}
+                      {r.order_date ? ` · 의뢰 ${r.order_date}` : ""}
                       {r.due_date ? ` · 납기 ${r.due_date}` : ""}
-                      {` · ${new Date(r.created_at).toLocaleString("ko-KR")}`}
                       {r.created_by ? ` · ${r.created_by}` : ""}
                       {r.eo_order_id ? ` · EO #${r.eo_order_id}` : ""}
                     </div>
+                    {r.last_edit && (
+                      <div className="mt-0.5 text-xs text-slate-400">
+                        최근 수정: {new Date(r.last_edit.at).toLocaleString("ko-KR")} · {r.last_edit.by}
+                        {r.last_edit.after_sent ? " · ⚠️ 전송(접수) 후 수정" : ""}
+                      </div>
+                    )}
                     {r.error && r.status !== "sent" && (
                       <div className="mt-0.5 text-xs text-rose-500">{r.error}</div>
                     )}
                   </div>
+                  <button
+                    onClick={() => edit(r.id)}
+                    disabled={isPending}
+                    className="rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs text-slate-600 transition hover:bg-slate-50 disabled:opacity-40"
+                    title="내용 수정·사진/동영상 추가 (수정 이력이 남습니다)"
+                  >
+                    수정·첨부
+                  </button>
                   {r.status !== "sent" && (
                     <button
                       onClick={() => retry(r.id)}

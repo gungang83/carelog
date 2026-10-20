@@ -1,8 +1,8 @@
 "use client";
 
-// spec 035 — 기공지 작성 화면. 위생사가 진료 중 그 자리에서 쓴다(종이 대체).
-// 기공소 선택(EO 정본, 미발효 시 직접 입력) · 환자 검색 · 치식도 · 고정 필드 ·
-// 동적 양식(데이터 정의) · 첨부(사진 압축·동영상·손그림) · 보내기(큐 — 유실 없음).
+// spec 035 v2 — 기공지 작성·수정 화면. 위생사가 진료 중 그 자리에서 쓴다(종이 대체).
+// 기공물 여러 개 = 한 세트([+ 기공물 추가]) · 의뢰일(기본 오늘)·완료 희망(납기)일 ·
+// 거래했던 기공소 자동 제안 · 보낸 뒤 수정/첨부 추가(수정 이력 기록 — 전송 후 수정 명확 표시).
 
 import { useMemo, useRef, useState, useTransition } from "react";
 import { createBrowserSupabaseClient } from "@/lib/supabase/client";
@@ -10,8 +10,10 @@ import { compressImageFile } from "@/lib/image/optimize";
 import { searchPatients } from "@/app/actions/patients";
 import {
   createLabAttachmentUpload,
-  submitLabOrder,
+  submitLabOrderSet,
   type LabOrderContext,
+  type LabOrderItemInput,
+  type LabOrderSetSnapshot,
 } from "@/app/actions/lab-orders";
 import {
   LAB_ATTACH_LIMITS,
@@ -29,59 +31,88 @@ function fieldInputCls() {
   return "w-full rounded-lg border border-slate-200 px-2.5 py-1.5 text-sm";
 }
 
+function todayStr() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+type ItemState = LabOrderItemInput;
+
+function newItem(): ItemState {
+  return { orderId: crypto.randomUUID(), tooth: [], prosthesis: "", material: "", shadeSystem: "", shade: "", values: {} };
+}
+
 export function LabOrderComposer({
   ctx,
+  initial,
   onDone,
   onCancel,
 }: {
   ctx: LabOrderContext;
+  /** 수정 모드 — 기존 세트 스냅샷. 없으면 신규 작성. */
+  initial?: LabOrderSetSnapshot | null;
   onDone: (message: string) => void;
   onCancel: () => void;
 }) {
-  const orderIdRef = useRef<string>(crypto.randomUUID());
+  const editing = Boolean(initial);
+  const setIdRef = useRef<string>(initial?.setId ?? crypto.randomUUID());
   const [isPending, startTransition] = useTransition();
   const [msg, setMsg] = useState("");
 
-  // 기공소
-  const [labName, setLabName] = useState(ctx.labs?.[0]?.lab_name ?? "");
+  // 기공소 — EO 목록(정본) > 거래했던 기공소(최근) > 직접 입력
+  const labSuggestions = useMemo(() => {
+    const names = [
+      ...(ctx.labs?.map((l) => l.lab_name) ?? []),
+      ...ctx.recentLabs,
+    ];
+    return [...new Set(names)];
+  }, [ctx.labs, ctx.recentLabs]);
+  const [labName, setLabName] = useState(initial?.labName ?? labSuggestions[0] ?? "");
+
   // 환자
   const [patientQuery, setPatientQuery] = useState("");
   const [patientResults, setPatientResults] = useState<PatientRow[]>([]);
   const [patient, setPatient] = useState<PatientRow | null>(null);
-  const [manualPatientName, setManualPatientName] = useState("");
-  // 담당
-  const [doctor, setDoctor] = useState("");
-  const [hygienist, setHygienist] = useState("");
-  // 치식·보철·고정 필드
-  const [tooth, setTooth] = useState<string[]>([]);
-  const [prosthesis, setProsthesis] = useState("");
-  const [material, setMaterial] = useState("");
-  const [shadeSystem, setShadeSystem] = useState("");
-  const [shade, setShade] = useState("");
-  const [dueDate, setDueDate] = useState("");
-  const [orderType, setOrderType] = useState<"의뢰" | "수정" | "재제작">("의뢰");
-  const [remakeReason, setRemakeReason] = useState("");
-  const [instructions, setInstructions] = useState("");
+  const [manualPatientName, setManualPatientName] = useState(initial?.patientName ?? "");
+
+  // 공통 필드
+  const [doctor, setDoctor] = useState(initial?.doctor ?? "");
+  const [hygienist, setHygienist] = useState(initial?.hygienist ?? "");
+  const [orderDate, setOrderDate] = useState(initial?.orderDate || todayStr());
+  const [dueDate, setDueDate] = useState(initial?.dueDate ?? "");
+  const [orderType, setOrderType] = useState<"의뢰" | "수정" | "재제작">(initial?.orderType ?? "의뢰");
+  const [remakeReason, setRemakeReason] = useState(initial?.remakeReason ?? "");
+  const [instructions, setInstructions] = useState(initial?.instructions ?? "");
+
   // 양식
-  const [formId, setFormId] = useState(pickForm(ctx.forms, labName)?.id ?? ctx.forms[0]?.id ?? "");
+  const pickForm = (forms: LabOrderFormRow[], lab: string) =>
+    forms.find((f) => f.lab_name === lab) ?? forms.find((f) => !f.lab_name);
+  const [formId, setFormId] = useState(
+    initial?.formId || (pickForm(ctx.forms, labName)?.id ?? ctx.forms[0]?.id ?? ""),
+  );
   const form = useMemo(
     () => ctx.forms.find((f) => f.id === formId) ?? ctx.forms[0] ?? null,
     [ctx.forms, formId],
   );
-  const [values, setValues] = useState<Record<string, unknown>>({});
-  // 첨부
-  const [attachments, setAttachments] = useState<LabAttachmentMeta[]>([]);
+
+  // 기공물(장) 배열 — 세트
+  const [items, setItems] = useState<ItemState[]>(initial?.items?.length ? initial.items : [newItem()]);
+  const setItem = (idx: number, patch: Partial<ItemState>) =>
+    setItems((prev) => prev.map((it, i) => (i === idx ? { ...it, ...patch } : it)));
+  const setItemValue = (idx: number, fieldId: string, v: unknown) =>
+    setItems((prev) =>
+      prev.map((it, i) => (i === idx ? { ...it, values: { ...it.values, [fieldId]: v } } : it)),
+    );
+
+  // 첨부(세트 공통)
+  const [attachments, setAttachments] = useState<LabAttachmentMeta[]>(initial?.attachments ?? []);
   const [uploading, setUploading] = useState(false);
   const [sketchOpen, setSketchOpen] = useState(false);
-
-  function pickForm(forms: LabOrderFormRow[], lab: string): LabOrderFormRow | undefined {
-    return forms.find((f) => f.lab_name === lab) ?? forms.find((f) => !f.lab_name);
-  }
 
   const handleLabChange = (name: string) => {
     setLabName(name);
     const f = pickForm(ctx.forms, name);
-    if (f) setFormId(f.id);
+    if (f && !editing) setFormId(f.id);
   };
 
   const doSearch = () => {
@@ -91,8 +122,6 @@ export function LabOrderComposer({
       else setMsg(r.message);
     });
   };
-
-  const setValue = (id: string, v: unknown) => setValues((prev) => ({ ...prev, [id]: v }));
 
   // ── 첨부 업로드(서명 업로드 URL — 액션 바디 한도 우회) ──
   const uploadBlob = async (blob: Blob, name: string, kind: LabAttachmentKind) => {
@@ -104,7 +133,7 @@ export function LabOrderComposer({
     setUploading(true);
     setMsg("");
     try {
-      const prep = await createLabAttachmentUpload(orderIdRef.current, name, kind, blob.size);
+      const prep = await createLabAttachmentUpload(setIdRef.current, name, kind, blob.size);
       if (!prep.ok) {
         setMsg(prep.message);
         return;
@@ -141,7 +170,6 @@ export function LabOrderComposer({
       setMsg("동영상은 50MB 이하(약 30초)로 올려주세요.");
       return;
     }
-    // 30초 제한(합의) — 메타데이터로 길이 확인(실패 시 용량 제한만 적용)
     const seconds = await new Promise<number | null>((res) => {
       try {
         const v = document.createElement("video");
@@ -169,30 +197,27 @@ export function LabOrderComposer({
   };
 
   const patientName = patient?.name ?? manualPatientName.trim();
+  const itemsReady = items.every((it) => it.prosthesis.trim());
 
   const submit = () => {
     setMsg("");
     startTransition(async () => {
-      const r = await submitLabOrder({
-        orderId: orderIdRef.current,
+      const r = await submitLabOrderSet({
+        setId: setIdRef.current,
         labName,
-        patientId: patient ? Number(patient.id) : null,
+        patientId: patient ? Number(patient.id) : (initial?.patientId ?? null),
         patientName,
-        chartNo: patient?.chart_no ?? undefined,
+        chartNo: patient?.chart_no ?? initial?.chartNo ?? undefined,
         doctor: doctor || undefined,
         hygienist: hygienist || undefined,
-        tooth,
-        prosthesis,
-        material: material || undefined,
-        shadeSystem: shadeSystem || undefined,
-        shade: shade || undefined,
+        orderDate,
         dueDate,
         orderType,
         remakeReason: remakeReason || undefined,
         formId: form?.id ?? "",
-        values,
         instructions: instructions || undefined,
         attachments,
+        items,
       });
       if (r.ok) onDone(r.message);
       else setMsg(r.message);
@@ -202,49 +227,76 @@ export function LabOrderComposer({
   return (
     <section className="space-y-5 rounded-2xl border border-indigo-200 bg-white p-5 shadow-sm">
       <div className="flex items-center justify-between">
-        <h2 className="text-lg font-bold text-slate-900">새 기공지</h2>
+        <h2 className="text-lg font-bold text-slate-900">{editing ? "기공지 수정" : "새 기공지"}</h2>
         <button onClick={onCancel} className="rounded-lg border border-slate-200 px-2.5 py-1 text-xs text-slate-500 hover:bg-slate-50">
           닫기
         </button>
       </div>
 
+      {editing && initial?.anySent && (
+        <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-2.5 text-sm text-amber-800">
+          이미 전송된 기공지입니다 — 수정 내용은 수정본으로 다시 전송되며, 누가 언제 수정했는지
+          이력이 남고 기공소에도 수정임이 표시됩니다.
+        </div>
+      )}
       {msg && <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-2.5 text-sm text-rose-700">{msg}</div>}
 
-      {/* 기공소 */}
+      {/* 기공소 — 거래했던 목록 제안 + 직접 입력 */}
       <div className="space-y-1.5">
         <label className="text-sm font-semibold text-slate-700">기공소</label>
-        {ctx.labs && ctx.labs.length > 0 ? (
-          <select value={labName} onChange={(e) => handleLabChange(e.target.value)} className={fieldInputCls()}>
-            {ctx.labs.map((l) => (
-              <option key={l.lab_name} value={l.lab_name}>
-                {l.lab_name}
-                {l.portal_enabled ? "" : " (포탈 미사용)"}
-              </option>
+        <input
+          list="lab-suggestions"
+          value={labName}
+          onChange={(e) => handleLabChange(e.target.value)}
+          placeholder="기공소 선택 또는 직접 입력"
+          className={fieldInputCls()}
+        />
+        <datalist id="lab-suggestions">
+          {labSuggestions.map((n) => (
+            <option key={n} value={n} />
+          ))}
+        </datalist>
+        {labSuggestions.length > 0 && (
+          <div className="flex flex-wrap gap-1.5">
+            {labSuggestions.slice(0, 6).map((n) => (
+              <button
+                key={n}
+                type="button"
+                onClick={() => handleLabChange(n)}
+                className={`rounded-full border px-2.5 py-1 text-xs transition ${
+                  labName === n
+                    ? "border-indigo-500 bg-indigo-600 text-white"
+                    : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
+                }`}
+              >
+                {n}
+              </button>
             ))}
-          </select>
-        ) : (
-          <>
-            <input
-              value={labName}
-              onChange={(e) => handleLabChange(e.target.value)}
-              placeholder="기공소 이름 (예: 지플란트기공소)"
-              className={fieldInputCls()}
-            />
-            <p className="text-xs text-slate-400">
-              EO 기공소 목록 연동 전이라 이름을 직접 입력합니다 — EO 거래처명과 같게 적어주세요.
-            </p>
-          </>
+          </div>
+        )}
+        {!ctx.labs && (
+          <p className="text-xs text-slate-400">
+            목록은 지금까지 거래한 기공소 기준입니다 — 새 기공소는 EO 거래처명과 같게 입력해 주세요.
+          </p>
         )}
       </div>
 
-      {/* 환자 */}
+      {/* 환자 — 케어로그 환자에서 선택 */}
       <div className="space-y-1.5">
         <label className="text-sm font-semibold text-slate-700">환자</label>
-        {patient ? (
+        {patient || (editing && patientName) ? (
           <div className="flex items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm">
-            <span className="font-medium text-emerald-800">{patient.name}</span>
-            {patient.chart_no && <span className="text-xs text-emerald-600">차트 {patient.chart_no}</span>}
-            <button onClick={() => setPatient(null)} className="ml-auto text-xs text-emerald-600 hover:underline">
+            <span className="font-medium text-emerald-800">{patient?.name ?? patientName}</span>
+            {(patient?.chart_no ?? initial?.chartNo) && (
+              <span className="text-xs text-emerald-600">차트 {patient?.chart_no ?? initial?.chartNo}</span>
+            )}
+            <button
+              onClick={() => {
+                setPatient(null);
+                setManualPatientName("");
+              }}
+              className="ml-auto text-xs text-emerald-600 hover:underline"
+            >
               변경
             </button>
           </div>
@@ -290,8 +342,8 @@ export function LabOrderComposer({
         )}
       </div>
 
-      {/* 담당 */}
-      <div className="grid grid-cols-2 gap-3">
+      {/* 담당·날짜 */}
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         <div className="space-y-1.5">
           <label className="text-sm font-semibold text-slate-700">Dr. (원장)</label>
           <input value={doctor} onChange={(e) => setDoctor(e.target.value)} className={fieldInputCls()} />
@@ -300,47 +352,12 @@ export function LabOrderComposer({
           <label className="text-sm font-semibold text-slate-700">D.H. (작성자)</label>
           <input value={hygienist} onChange={(e) => setHygienist(e.target.value)} className={fieldInputCls()} />
         </div>
-      </div>
-
-      {/* 치식도 */}
-      <div className="space-y-1.5">
-        <label className="text-sm font-semibold text-slate-700">치식</label>
-        <ToothChart selected={tooth} onChange={setTooth} />
-      </div>
-
-      {/* 보철·재료·Shade·납기·구분 */}
-      <div className="grid gap-3 sm:grid-cols-2">
         <div className="space-y-1.5">
-          <label className="text-sm font-semibold text-slate-700">보철 종류 *</label>
-          <select value={prosthesis} onChange={(e) => setProsthesis(e.target.value)} className={fieldInputCls()}>
-            <option value="">선택…</option>
-            {(form?.def.prosthesis_options ?? []).map((o) => (
-              <option key={o} value={o}>
-                {o}
-              </option>
-            ))}
-          </select>
+          <label className="text-sm font-semibold text-slate-700">의뢰일</label>
+          <input type="date" value={orderDate} onChange={(e) => setOrderDate(e.target.value)} className={fieldInputCls()} />
         </div>
         <div className="space-y-1.5">
-          <label className="text-sm font-semibold text-slate-700">재료</label>
-          <input value={material} onChange={(e) => setMaterial(e.target.value)} className={fieldInputCls()} />
-        </div>
-        <div className="space-y-1.5">
-          <label className="text-sm font-semibold text-slate-700">Shade</label>
-          <div className="flex gap-2">
-            <select value={shadeSystem} onChange={(e) => setShadeSystem(e.target.value)} className="w-40 rounded-lg border border-slate-200 px-2 py-1.5 text-sm">
-              <option value="">체계…</option>
-              {(form?.def.shade_systems ?? []).map((s) => (
-                <option key={s} value={s}>
-                  {s}
-                </option>
-              ))}
-            </select>
-            <input value={shade} onChange={(e) => setShade(e.target.value)} placeholder="예: A2 / 치경부 A3" className={fieldInputCls()} />
-          </div>
-        </div>
-        <div className="space-y-1.5">
-          <label className="text-sm font-semibold text-slate-700">완료(납기)일 *</label>
+          <label className="text-sm font-semibold text-slate-700">완료 희망(납기)일 *</label>
           <input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} className={fieldInputCls()} />
         </div>
       </div>
@@ -363,126 +380,159 @@ export function LabOrderComposer({
         )}
       </div>
 
-      {/* 동적 양식 — 데이터 정의 렌더 */}
-      {form && (
-        <div className="space-y-3">
-          {ctx.forms.length > 1 && (
-            <div className="flex items-center gap-2 text-xs text-slate-500">
-              양식:
-              <select value={formId} onChange={(e) => setFormId(e.target.value)} className="rounded-lg border border-slate-200 px-2 py-1 text-xs">
-                {ctx.forms.map((f) => (
-                  <option key={f.id} value={f.id}>
-                    {f.lab_name ? `[${f.lab_name}] ` : "[공통] "}
-                    {f.name}
-                  </option>
-                ))}
-              </select>
+      {/* 기공물(장) — 한 장 = 한 종류, [+ 추가]로 세트 구성 */}
+      <div className="space-y-4">
+        {items.map((it, idx) => (
+          <div key={it.orderId} className="space-y-4 rounded-2xl border border-slate-200 bg-slate-50/40 p-4">
+            <div className="flex items-center justify-between">
+              <h3 className="text-sm font-bold text-slate-800">
+                기공물 {idx + 1}
+                <span className="ml-2 font-normal text-slate-400">{items.length > 1 ? `/ ${items.length}` : ""}</span>
+              </h3>
+              {!editing && items.length > 1 && (
+                <button
+                  onClick={() => setItems((prev) => prev.filter((_, i) => i !== idx))}
+                  className="rounded-lg border border-rose-200 px-2 py-1 text-xs text-rose-500 hover:bg-rose-50"
+                >
+                  삭제
+                </button>
+              )}
             </div>
-          )}
-          {form.def.sections.map((section) => (
-            <details key={section.id} open className="rounded-xl border border-slate-200 bg-slate-50/50 p-3">
-              <summary className="cursor-pointer text-sm font-semibold text-slate-700">{section.title}</summary>
-              <div className="mt-2 grid gap-3 sm:grid-cols-2">
-                {section.fields.map((field) => (
-                  <div key={field.id} className="space-y-1">
-                    <label className="text-xs font-medium text-slate-600">
-                      {field.label}
-                      {field.unit ? ` (${field.unit})` : ""}
-                    </label>
-                    {field.type === "select" && (
-                      <select
-                        value={(values[field.id] as string) ?? ""}
-                        onChange={(e) => setValue(field.id, e.target.value)}
-                        className={fieldInputCls()}
-                      >
-                        <option value="">—</option>
-                        {(field.options ?? []).map((o) => (
-                          <option key={o} value={o}>
-                            {o}
-                          </option>
-                        ))}
-                      </select>
-                    )}
-                    {field.type === "multi" && (
-                      <div className="flex flex-wrap gap-1.5">
-                        {(field.options ?? []).map((o) => {
-                          const cur = (values[field.id] as string[]) ?? [];
-                          const on = cur.includes(o);
-                          return (
-                            <button
-                              key={o}
-                              type="button"
-                              onClick={() => setValue(field.id, on ? cur.filter((x) => x !== o) : [...cur, o])}
-                              className={`rounded-full border px-2.5 py-1 text-xs transition ${
-                                on ? "border-indigo-500 bg-indigo-600 text-white" : "border-slate-200 bg-white text-slate-600"
-                              }`}
-                            >
-                              {o}
-                            </button>
-                          );
-                        })}
-                      </div>
-                    )}
-                    {field.type === "check" && (
-                      <label className="flex items-center gap-1.5 text-sm text-slate-600">
-                        <input
-                          type="checkbox"
-                          checked={values[field.id] === true}
-                          onChange={(e) => setValue(field.id, e.target.checked)}
-                        />
-                        해당
-                      </label>
-                    )}
-                    {field.type === "ea" && (
-                      <input
-                        type="number"
-                        min={0}
-                        value={(values[field.id] as number) ?? ""}
-                        onChange={(e) => setValue(field.id, e.target.value === "" ? "" : Number(e.target.value))}
-                        placeholder="EA"
-                        className={fieldInputCls()}
-                      />
-                    )}
-                    {field.type === "number" && (
-                      <input
-                        type="number"
-                        value={(values[field.id] as number) ?? ""}
-                        onChange={(e) => setValue(field.id, e.target.value === "" ? "" : Number(e.target.value))}
-                        className={fieldInputCls()}
-                      />
-                    )}
-                    {field.type === "date" && (
-                      <input
-                        type="date"
-                        value={(values[field.id] as string) ?? ""}
-                        onChange={(e) => setValue(field.id, e.target.value)}
-                        className={fieldInputCls()}
-                      />
-                    )}
-                    {(field.type === "text" || field.type === "textarea") &&
-                      (field.type === "textarea" ? (
-                        <textarea
-                          value={(values[field.id] as string) ?? ""}
-                          onChange={(e) => setValue(field.id, e.target.value)}
-                          rows={2}
-                          placeholder={field.hint}
-                          className={fieldInputCls()}
-                        />
-                      ) : (
-                        <input
-                          value={(values[field.id] as string) ?? ""}
-                          onChange={(e) => setValue(field.id, e.target.value)}
-                          placeholder={field.hint}
-                          className={fieldInputCls()}
-                        />
-                      ))}
-                  </div>
-                ))}
+
+            <div className="space-y-1.5">
+              <label className="text-xs font-semibold text-slate-600">치식</label>
+              <ToothChart selected={it.tooth} onChange={(next) => setItem(idx, { tooth: next })} />
+            </div>
+
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div className="space-y-1">
+                <label className="text-xs font-semibold text-slate-600">보철 종류 *</label>
+                <select value={it.prosthesis} onChange={(e) => setItem(idx, { prosthesis: e.target.value })} className={fieldInputCls()}>
+                  <option value="">선택…</option>
+                  {(form?.def.prosthesis_options ?? []).map((o) => (
+                    <option key={o} value={o}>
+                      {o}
+                    </option>
+                  ))}
+                </select>
               </div>
-            </details>
-          ))}
-        </div>
-      )}
+              <div className="space-y-1">
+                <label className="text-xs font-semibold text-slate-600">재료</label>
+                <input value={it.material ?? ""} onChange={(e) => setItem(idx, { material: e.target.value })} className={fieldInputCls()} />
+              </div>
+              <div className="space-y-1 sm:col-span-2">
+                <label className="text-xs font-semibold text-slate-600">Shade</label>
+                <div className="flex gap-2">
+                  <select
+                    value={it.shadeSystem ?? ""}
+                    onChange={(e) => setItem(idx, { shadeSystem: e.target.value })}
+                    className="w-44 rounded-lg border border-slate-200 px-2 py-1.5 text-sm"
+                  >
+                    <option value="">체계…</option>
+                    {(form?.def.shade_systems ?? []).map((s) => (
+                      <option key={s} value={s}>
+                        {s}
+                      </option>
+                    ))}
+                  </select>
+                  <input
+                    value={it.shade ?? ""}
+                    onChange={(e) => setItem(idx, { shade: e.target.value })}
+                    placeholder="예: A2 / 치경부 A3"
+                    className={fieldInputCls()}
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* 동적 양식 — 데이터 정의 렌더(장별 값) */}
+            {form &&
+              form.def.sections.map((section) => (
+                <details key={section.id} className="rounded-xl border border-slate-200 bg-white p-3">
+                  <summary className="cursor-pointer text-sm font-semibold text-slate-700">{section.title}</summary>
+                  <div className="mt-2 grid gap-3 sm:grid-cols-2">
+                    {section.fields.map((field) => {
+                      const v = it.values[field.id];
+                      return (
+                        <div key={field.id} className="space-y-1">
+                          <label className="text-xs font-medium text-slate-600">
+                            {field.label}
+                            {field.unit ? ` (${field.unit})` : ""}
+                          </label>
+                          {field.type === "select" && (
+                            <select value={(v as string) ?? ""} onChange={(e) => setItemValue(idx, field.id, e.target.value)} className={fieldInputCls()}>
+                              <option value="">—</option>
+                              {(field.options ?? []).map((o) => (
+                                <option key={o} value={o}>
+                                  {o}
+                                </option>
+                              ))}
+                            </select>
+                          )}
+                          {field.type === "multi" && (
+                            <div className="flex flex-wrap gap-1.5">
+                              {(field.options ?? []).map((o) => {
+                                const cur = (v as string[]) ?? [];
+                                const on = cur.includes(o);
+                                return (
+                                  <button
+                                    key={o}
+                                    type="button"
+                                    onClick={() => setItemValue(idx, field.id, on ? cur.filter((x) => x !== o) : [...cur, o])}
+                                    className={`rounded-full border px-2.5 py-1 text-xs transition ${
+                                      on ? "border-indigo-500 bg-indigo-600 text-white" : "border-slate-200 bg-white text-slate-600"
+                                    }`}
+                                  >
+                                    {o}
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          )}
+                          {field.type === "check" && (
+                            <label className="flex items-center gap-1.5 text-sm text-slate-600">
+                              <input type="checkbox" checked={v === true} onChange={(e) => setItemValue(idx, field.id, e.target.checked)} />
+                              해당
+                            </label>
+                          )}
+                          {(field.type === "ea" || field.type === "number") && (
+                            <input
+                              type="number"
+                              min={field.type === "ea" ? 0 : undefined}
+                              value={(v as number) ?? ""}
+                              onChange={(e) => setItemValue(idx, field.id, e.target.value === "" ? "" : Number(e.target.value))}
+                              placeholder={field.type === "ea" ? "EA" : undefined}
+                              className={fieldInputCls()}
+                            />
+                          )}
+                          {field.type === "date" && (
+                            <input type="date" value={(v as string) ?? ""} onChange={(e) => setItemValue(idx, field.id, e.target.value)} className={fieldInputCls()} />
+                          )}
+                          {field.type === "textarea" && (
+                            <textarea value={(v as string) ?? ""} onChange={(e) => setItemValue(idx, field.id, e.target.value)} rows={2} placeholder={field.hint} className={fieldInputCls()} />
+                          )}
+                          {field.type === "text" && (
+                            <input value={(v as string) ?? ""} onChange={(e) => setItemValue(idx, field.id, e.target.value)} placeholder={field.hint} className={fieldInputCls()} />
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </details>
+              ))}
+          </div>
+        ))}
+
+        {!editing && (
+          <button
+            type="button"
+            onClick={() => setItems((prev) => [...prev, newItem()])}
+            className="w-full rounded-xl border-2 border-dashed border-slate-300 px-4 py-2.5 text-sm font-medium text-slate-500 transition hover:border-indigo-300 hover:text-indigo-600"
+          >
+            + 기공물 추가 (같은 세트로 함께 의뢰)
+          </button>
+        )}
+      </div>
 
       {/* 기타 주문사항 */}
       <div className="space-y-1.5">
@@ -496,7 +546,7 @@ export function LabOrderComposer({
         />
       </div>
 
-      {/* 첨부 */}
+      {/* 첨부(세트 공통) */}
       <div className="space-y-2">
         <label className="text-sm font-semibold text-slate-700">첨부 (사진·동영상·손그림)</label>
         <div className="flex flex-wrap gap-2">
@@ -536,10 +586,16 @@ export function LabOrderComposer({
         </button>
         <button
           onClick={submit}
-          disabled={isPending || uploading || !labName.trim() || !patientName || !prosthesis || !dueDate}
+          disabled={isPending || uploading || !labName.trim() || !patientName || !itemsReady || !dueDate}
           className="rounded-lg bg-indigo-600 px-5 py-2 text-sm font-semibold text-white hover:bg-indigo-500 disabled:opacity-40"
         >
-          {isPending ? "보내는 중…" : "기공소로 보내기"}
+          {isPending
+            ? "보내는 중…"
+            : editing
+              ? "수정본 보내기"
+              : items.length > 1
+                ? `기공소로 보내기 (${items.length}건)`
+                : "기공소로 보내기"}
         </button>
       </div>
 
