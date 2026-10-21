@@ -113,3 +113,9 @@ env `EO_LAB_GATEWAY=on` (Vercel) — 테오의 EO EP(§2-1·2-2) 배포 후. 그
 - 409: {retryable:false, portal_status} — billed/completed로 재제작 안내 문구 분기, 행 portal_status 갱신
 - 400: {allowed_kinds} 있으면 사유에 병기. 4xx retryable 필드 오면 그대로 따름(문구 휴리스틱은 폴백으로 강등)
 - 첨부는 수정 재전송 시 전체 그대로 전송(EO가 기존 pull분 중복 제거) — 기존 구조 그대로
+
+### #1986 발효 실측 (2026-10-21 · EO main@638474c6 — Carelog 무수정)
+- revision↑ 재전송 3건 전부 200 {updated:true}: b84f9f8e v2(A3 — 첫 실측 때 조용히 버려졌던 건) ·
+  a0d08d34 v2(사진 추가 → 첨부 drawing+photo 2건, A3) · 9bd0dbd8 v2→v3(shade 미입력 → 필드 생략)
+- 같은 revision 재전송(9bd0dbd8 v3, SQL로 큐 복귀 후 [다시 보내기]) → 200 {idempotent:true} "변경 없음"
+- 수정 왕복(🔄)·shade 도달·updated/idempotent 분기 전부 실데이터로 증명
