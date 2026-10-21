@@ -236,6 +236,10 @@ export async function submitLabOrderSet(
   const now = new Date().toISOString();
   const outcomes: ("sent" | "queued" | "failed")[] = [];
   let lastError = "";
+  let anyUpdated = false; // 200 {updated:true} — 수정 반영(🔄)
+  let allIdempotent = true; // 전부 {idempotent:true} — 변경 없음
+  let conflictStatus: string | null = null; // 409 portal_status
+  let isRevision = false;
 
   for (const [index, it] of items.entries()) {
     const existing = existingMap.get(it.orderId);
@@ -303,9 +307,13 @@ export async function submitLabOrderSet(
     );
     if (error) return { ok: false, message: `기공지 저장 실패: ${error.message}` };
 
+    if (revision > 1) isRevision = true;
     const sent = await sendLabOrderById(it.orderId);
     outcomes.push(sent.status);
     if (sent.error) lastError = sent.error;
+    if (sent.updated) anyUpdated = true;
+    if (!sent.idempotent) allIdempotent = false;
+    if (sent.conflict) conflictStatus = sent.portalStatus ?? "completed";
   }
 
   const status = outcomes.every((s) => s === "sent")
@@ -313,12 +321,21 @@ export async function submitLabOrderSet(
     : outcomes.some((s) => s === "failed")
       ? "failed"
       : "queued";
+  // 카드 #1983 — 200 두 종류·409 포탈 상태로 문구 분기
   const message =
     status === "sent"
-      ? `기공소로 전송했습니다 (기공물 ${items.length}건).`
+      ? isRevision && anyUpdated
+        ? `수정이 기공소로 전달됐습니다 — 기공소 화면에 🔄 수정 표시가 뜹니다.`
+        : isRevision && allIdempotent
+          ? `변경된 내용이 없어 기공소에는 이미 반영된 그대로입니다.`
+          : `기공소로 전송했습니다 (기공물 ${items.length}건).`
       : status === "queued"
         ? `기공지 ${items.length}건이 저장됐고 전송 대기열에 있습니다 — 자동으로 재전송됩니다. (${lastError})`
-        : `일부 전송이 거절됐습니다: ${lastError}`;
+        : conflictStatus
+          ? conflictStatus === "billed"
+            ? `청구까지 완료된 의뢰라 수정할 수 없습니다 — 목록의 [재제작으로 보내기]로 이어가세요.`
+            : `이미 완료된 의뢰라 수정할 수 없습니다 — 목록의 [재제작으로 보내기]로 이어가세요.`
+          : `일부 전송이 거절됐습니다: ${lastError}`;
   return { ok: true, status, message };
 }
 
@@ -521,6 +538,16 @@ export async function retryLabOrder(
     ok: true,
     status: sent.status,
     message:
-      sent.status === "sent" ? "전송 완료" : sent.status === "queued" ? "대기열 보관(자동 재전송)" : `거절: ${sent.error}`,
+      sent.status === "sent"
+        ? sent.updated
+          ? "수정이 기공소로 전달됐습니다 (🔄)"
+          : sent.idempotent
+            ? "이미 반영된 내용입니다 (변경 없음)"
+            : "전송 완료"
+        : sent.status === "queued"
+          ? "대기열 보관(자동 재전송)"
+          : sent.conflict
+            ? `${sent.portalStatus === "billed" ? "청구까지 완료된" : "이미 완료된"} 의뢰라 수정할 수 없습니다 — [재제작으로 보내기]로 이어가세요.`
+            : `거절: ${sent.error}`,
   };
 }

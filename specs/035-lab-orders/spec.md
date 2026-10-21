@@ -107,3 +107,9 @@ env `EO_LAB_GATEWAY=on` (Vercel) — 테오의 EO EP(§2-1·2-2) 배포 후. 그
   내용·첨부를 승계한 새 세트(새 id·order_type 재제작·사유 필수·별도 청구)로 전환. 첨부 경로 검증을
   기관 prefix로 완화(세트 간 승계 허용).
 - **ⓖ-2**: EO 목록이 살아 있는데 목록에 없는 기공소명(수정 모드 과거 표기 등)이면 **보내기 차단 + 재선택 강제**.
+
+### #1983 응답 규격 보충 반영 (2026-10-21 · EO main@e206ed44 revision 배포)
+- 200 두 종류: {updated:true}=수정 반영(UX "🔄 수정이 전달됐습니다") / {idempotent:true}=같은 revision(UX "변경 없음")
+- 409: {retryable:false, portal_status} — billed/completed로 재제작 안내 문구 분기, 행 portal_status 갱신
+- 400: {allowed_kinds} 있으면 사유에 병기. 4xx retryable 필드 오면 그대로 따름(문구 휴리스틱은 폴백으로 강등)
+- 첨부는 수정 재전송 시 전체 그대로 전송(EO가 기존 pull분 중복 제거) — 기존 구조 그대로

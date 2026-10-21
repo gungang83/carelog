@@ -40,8 +40,22 @@ export async function gatewayFetchLabs(institutionId: string): Promise<EoLab[] |
 }
 
 export type GatewaySubmitResult =
-  | { ok: true; eo_order_id: string; portal_status?: string }
-  | { ok: false; retryable: boolean; error: string };
+  | {
+      ok: true;
+      eo_order_id: string;
+      portal_status?: string;
+      /** 카드 #1983 — 200 두 종류: updated=수정 반영 / idempotent=같은 revision 재전송(무시) */
+      updated?: boolean;
+      idempotent?: boolean;
+    }
+  | {
+      ok: false;
+      retryable: boolean;
+      error: string;
+      /** 409 — 완료·청구 건 수정 거절(재제작 안내용). portal_status로 문구 분기 */
+      conflict?: boolean;
+      portal_status?: string;
+    };
 
 /**
  * §2-2 의뢰 생성(단방향·멱등) — carelog_order_id가 멱등 키라 재전송 안전(내부 1회 재시도).
@@ -66,27 +80,52 @@ export async function gatewaySubmitLabOrder(
         signal: AbortSignal.timeout(40000), // EO가 첨부를 pull(건당 30s 상한)한 뒤 응답 — 넉넉히
       });
       if (res.ok) {
-        // 201 = 신규 · 200 = 멱등 중복(idempotent:true) — 둘 다 성공
+        // 201 = 신규 · 200 = {updated:true}(수정 반영) 또는 {idempotent:true}(같은 revision — 무시)
         const data = (await res.json().catch(() => null)) as {
           ok?: boolean;
           eo_order_id?: string;
           portal_status?: string;
+          updated?: boolean;
+          idempotent?: boolean;
         } | null;
         if (data?.eo_order_id) {
-          return { ok: true, eo_order_id: data.eo_order_id, portal_status: data.portal_status };
+          return {
+            ok: true,
+            eo_order_id: data.eo_order_id,
+            portal_status: data.portal_status,
+            updated: data.updated === true,
+            idempotent: data.idempotent === true,
+          };
         }
         lastError = "응답에 eo_order_id 없음";
       } else {
-        // 계약 ⓓ — 실패 본문은 { error } 단일 키(사람이 읽는 사유)
-        const data = (await res.json().catch(() => null)) as { error?: string } | null;
-        const reason = data?.error ?? `EO 응답 ${res.status}`;
+        // 계약 ⓓ — 실패 본문 { error } + 보강(#1983): 409 {retryable,portal_status} · 400 {allowed_kinds}
+        const data = (await res.json().catch(() => null)) as {
+          error?: string;
+          retryable?: boolean;
+          portal_status?: string;
+          allowed_kinds?: string[];
+        } | null;
+        let reason = data?.error ?? `EO 응답 ${res.status}`;
+        if (Array.isArray(data?.allowed_kinds) && data.allowed_kinds.length > 0) {
+          reason += ` (허용: ${data.allowed_kinds.join(", ")})`;
+        }
+        if (res.status === 409) {
+          // 완료·청구 건 수정 거절 — 재제작 안내(ⓘ-②)
+          return {
+            ok: false,
+            retryable: false,
+            conflict: true,
+            portal_status: data?.portal_status,
+            error: `EO 거절(409): ${reason}`,
+          };
+        }
         if (res.status >= 400 && res.status < 500) {
-          // 4xx 중에서도 일시 상태는 재시도: 첨부 pull 실패("다시 보내 주세요" — 서명 URL은
-          // 전송마다 새로 발급되므로 재전송이 곧 복구)는 영구 거절이 아니다(계약 ⓒ-1).
-          const transient = reason.includes("다시 보내 주세요");
+          // retryable 필드가 오면 그대로 따르고(ⓔ 코드 분리 후 기본), 없으면 보수 폴백(문구 휴리스틱)
+          const transient = data?.retryable === true || (data?.retryable === undefined && reason.includes("다시 보내 주세요"));
           return { ok: false, retryable: transient, error: `EO 거절(${res.status}): ${reason}` };
         }
-        // 5xx(503 = 설정 미비 등 아직 준비 안 된 상태 — 계약 ⓓ 보강) — 재시도
+        // 5xx(503 = 설정 미비·첨부 pull 일시 실패 등 — 계약 ⓓ·ⓔ) — 재시도
         lastError = `EO(${res.status}): ${reason}`;
       }
     } catch (e) {

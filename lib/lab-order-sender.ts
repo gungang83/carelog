@@ -11,7 +11,16 @@ export const labBucket = "lab-orders";
 const SIGNED_URL_TTL = 15 * 60;
 const MAX_ATTEMPTS = 20; // 게이트웨이 미발효 기간을 버티는 여유(10분 cron × 20 ≈ 3시간+). 초과 시 failed.
 
-export type SendOutcome = { status: "sent" | "queued" | "failed"; error?: string };
+export type SendOutcome = {
+  status: "sent" | "queued" | "failed";
+  error?: string;
+  /** 카드 #1983 — 200 두 종류: updated=수정 반영(🔄) / idempotent=같은 revision(변경 없음) */
+  updated?: boolean;
+  idempotent?: boolean;
+  /** 409 — 완료·청구 건 수정 거절(재제작 안내) + 그 시점 포탈 상태 */
+  conflict?: boolean;
+  portalStatus?: string;
+};
 
 export async function sendLabOrderById(orderId: string): Promise<SendOutcome> {
   const admin = createAdminSupabaseClient();
@@ -62,7 +71,7 @@ export async function sendLabOrderById(orderId: string): Promise<SendOutcome> {
           updated_at: now(),
         })
         .eq("id", orderId);
-      return { status: "sent" };
+      return { status: "sent", updated: result.updated, idempotent: result.idempotent };
     }
 
     const attempts = (order.attempts ?? 0) + 1;
@@ -73,10 +82,17 @@ export async function sendLabOrderById(orderId: string): Promise<SendOutcome> {
         status: terminal ? "failed" : "queued",
         attempts,
         error: result.error,
+        // 409면 그 시점 포탈 상태(completed/billed)를 남겨 재제작 안내 문구 분기에 쓴다
+        ...(result.conflict && result.portal_status ? { portal_status: result.portal_status } : {}),
         updated_at: now(),
       })
       .eq("id", orderId);
-    return { status: terminal ? "failed" : "queued", error: result.error };
+    return {
+      status: terminal ? "failed" : "queued",
+      error: result.error,
+      conflict: result.conflict,
+      portalStatus: result.portal_status,
+    };
   } catch (e) {
     return { status: "queued", error: e instanceof Error ? e.message : "unknown" };
   }
