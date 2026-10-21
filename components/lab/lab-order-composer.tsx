@@ -56,16 +56,19 @@ function newItem(): ItemState {
 export function LabOrderComposer({
   ctx,
   initial,
+  remake = false,
   onDone,
   onCancel,
 }: {
   ctx: LabOrderContext;
   /** 수정 모드 — 기존 세트 스냅샷. 없으면 신규 작성. */
   initial?: LabOrderSetSnapshot | null;
+  /** 재제작(계약 ⓘ-②) — 완료·청구 건 내용을 승계한 '새 의뢰'. initial이 있어도 신규처럼 동작. */
+  remake?: boolean;
   onDone: (message: string, status: "sent" | "queued" | "failed") => void;
   onCancel: () => void;
 }) {
-  const editing = Boolean(initial);
+  const editing = Boolean(initial) && !remake;
   const setIdRef = useRef<string>(initial?.setId ?? crypto.randomUUID());
   const [isPending, startTransition] = useTransition();
   const [msg, setMsg] = useState("");
@@ -203,6 +206,9 @@ export function LabOrderComposer({
 
   const patientName = patient?.name ?? editPatientName.trim();
   const itemsReady = items.every((it) => it.prosthesis.trim());
+  // 계약 ⓖ-2 — EO 목록이 살아 있는데 목록에 없는 기공소명이면 재선택을 강제(EO 400에 맡기지 않는다)
+  const labInvalid =
+    eoLabs !== null && labName !== "" && !eoLabs.some((l) => l.lab_name === labName);
 
   const submit = () => {
     setMsg("");
@@ -232,12 +238,20 @@ export function LabOrderComposer({
   return (
     <section className="space-y-5 rounded-2xl border border-indigo-200 bg-white p-5 shadow-sm">
       <div className="flex items-center justify-between">
-        <h2 className="text-lg font-bold text-slate-900">{editing ? "기공지 수정" : "새 기공지"}</h2>
+        <h2 className="text-lg font-bold text-slate-900">
+          {remake ? "재제작 의뢰" : editing ? "기공지 수정" : "새 기공지"}
+        </h2>
         <button onClick={onCancel} className="rounded-lg border border-slate-200 px-2.5 py-1 text-xs text-slate-500 hover:bg-slate-50">
           닫기
         </button>
       </div>
 
+      {remake && (
+        <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-2.5 text-sm text-amber-800">
+          이미 완료·청구된 의뢰는 수정할 수 없어 <b>재제작 의뢰(새 건 · 별도 청구)</b>로 보냅니다 —
+          내용·첨부는 그대로 가져왔으니 재제작 사유를 적어주세요.
+        </div>
+      )}
       {editing && initial?.anySent && (
         <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-2.5 text-sm text-amber-800">
           이미 전송된 기공지입니다 — 수정 내용은 수정본으로 다시 전송되며, 누가 언제 수정했는지
@@ -266,9 +280,15 @@ export function LabOrderComposer({
                   </option>
                 ))}
               </select>
-              <p className="text-xs text-slate-400">
-                EO에서 포탈을 켠 기공소만 보입니다 — 새 기공소는 EO 기공소 포탈 설정에서 먼저 켜 주세요.
-              </p>
+              {labInvalid ? (
+                <p className="text-xs font-medium text-rose-600">
+                  「{labName}」은(는) 현재 포탈 목록에 없습니다 — 목록에서 기공소를 다시 선택해야 보낼 수 있어요.
+                </p>
+              ) : (
+                <p className="text-xs text-slate-400">
+                  EO에서 포탈을 켠 기공소만 보입니다 — 새 기공소는 EO 기공소 포탈 설정에서 먼저 켜 주세요.
+                </p>
+              )}
             </>
           ) : (
             <p className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
@@ -666,7 +686,7 @@ export function LabOrderComposer({
         </button>
         <button
           onClick={submit}
-          disabled={isPending || uploading || !labName.trim() || !patientName || !itemsReady || !dueDate}
+          disabled={isPending || uploading || !labName.trim() || labInvalid || !patientName || !itemsReady || !dueDate}
           className="rounded-lg bg-indigo-600 px-5 py-2 text-sm font-semibold text-white hover:bg-indigo-500 disabled:opacity-40"
         >
           {isPending

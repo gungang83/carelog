@@ -98,3 +98,12 @@ env `EO_LAB_GATEWAY=on` (Vercel) — 테오의 EO EP(§2-1·2-2) 배포 후. 그
 - #a0d08d34: display 7행 + values(오스템·Hex·Supra·SCRP·Hook·EA) + 손그림 1건(27,288b) — sketch→drawing 매핑 후 재전송 성공
 - #9bd0dbd8: 첨부 2건 — photo 2477.webp(145,544b) + 손그림 png(41,414b) 전송 성공
 - 계약 보강 제안: attachments.kind 열거 명문화(photo|video|drawing) · 수정 재전송은 EO 멱등이 흡수(revision 규칙 합의 필요 재확인)
+
+## 3.9 수정 재전송·재제작 (2026-10-21 · 카드 #1976 — 계약 ⓘ 확정)
+
+- **revision 업데이트**: 같은 carelog_order_id + revision↑ = EO가 같은 행 갱신(🔄 수정 배지), 멱등 키 =
+  (id, revision) 쌍. Carelog는 v2부터 payload에 revision을 싣고 있어 추가 변경 없음. 첨부는 추가만.
+- **completed·billed 409**: EO가 409로 거절 → 목록에서 [다시 보내기] 대신 **[재제작으로 보내기]** 노출 —
+  내용·첨부를 승계한 새 세트(새 id·order_type 재제작·사유 필수·별도 청구)로 전환. 첨부 경로 검증을
+  기관 prefix로 완화(세트 간 승계 허용).
+- **ⓖ-2**: EO 목록이 살아 있는데 목록에 없는 기공소명(수정 모드 과거 표기 등)이면 **보내기 차단 + 재선택 강제**.

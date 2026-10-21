@@ -191,8 +191,8 @@ export async function submitLabOrderSet(
   if (totalBytes > LAB_ATTACH_LIMITS.total) {
     return { ok: false, message: "첨부 합계가 100MB를 초과합니다 — 일부를 빼 주세요." };
   }
-  // 경로 위조 방지 — 내 기관·이 세트의 업로드만 허용
-  const prefix = `${auth.institutionId}/${input.setId}/`;
+  // 경로 위조 방지 — 내 기관 업로드만 허용(세트 간 재사용 허용: 수정·재제작이 기존 첨부를 승계)
+  const prefix = `${auth.institutionId}/`;
   if (input.attachments.some((a) => !a.path.startsWith(prefix))) {
     return { ok: false, message: "첨부 경로가 올바르지 않습니다." };
   }

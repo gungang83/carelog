@@ -47,12 +47,35 @@ export function LabOrdersView({
     });
   };
 
+  const [remakeMode, setRemakeMode] = useState(false);
+
   // 보낸 기공지 수정·첨부 추가 — 세트 전체를 불러와 컴포저로
   const edit = (id: string) => {
     startTransition(async () => {
       const r = await getLabOrderSet(id);
       if (r.ok) {
         setEditSnapshot(r.snapshot);
+        setRemakeMode(false);
+        setComposing(true);
+        setMsg("");
+      } else setMsg(r.message);
+    });
+  };
+
+  // 재제작(계약 ⓘ-②) — 완료·청구된 의뢰(EO 409)는 수정 불가 → 새 의뢰로. 내용·첨부는 승계, id는 새로.
+  const remake = (id: string) => {
+    startTransition(async () => {
+      const r = await getLabOrderSet(id);
+      if (r.ok) {
+        setEditSnapshot({
+          ...r.snapshot,
+          setId: crypto.randomUUID(),
+          items: r.snapshot.items.map((it) => ({ ...it, orderId: crypto.randomUUID() })),
+          orderType: "재제작",
+          remakeReason: "",
+          anySent: false,
+        });
+        setRemakeMode(true);
         setComposing(true);
         setMsg("");
       } else setMsg(r.message);
@@ -81,9 +104,11 @@ export function LabOrdersView({
           key={editSnapshot?.setId ?? "new"}
           ctx={ctx}
           initial={editSnapshot}
+          remake={remakeMode}
           onDone={(message, status) => {
             setComposing(false);
             setEditSnapshot(null);
+            setRemakeMode(false);
             // 거절(failed)은 빨간 톤으로 — 성공·대기만 초록
             if (status === "failed") setMsg(message);
             else setInfo(message);
@@ -92,6 +117,7 @@ export function LabOrdersView({
           onCancel={() => {
             setComposing(false);
             setEditSnapshot(null);
+            setRemakeMode(false);
           }}
         />
       ) : (
@@ -157,22 +183,36 @@ export function LabOrdersView({
                       <div className="mt-0.5 text-xs text-rose-500">{r.error}</div>
                     )}
                   </div>
-                  <button
-                    onClick={() => edit(r.id)}
-                    disabled={isPending}
-                    className="rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs text-slate-600 transition hover:bg-slate-50 disabled:opacity-40"
-                    title="내용 수정·사진/동영상 추가 (수정 이력이 남습니다)"
-                  >
-                    수정·첨부
-                  </button>
-                  {r.status !== "sent" && (
+                  {/* 계약 ⓘ-②: 완료·청구(EO 409) 건은 수정 불가 — 재제작(새 의뢰)으로 안내 */}
+                  {r.error?.includes("(409)") ? (
                     <button
-                      onClick={() => retry(r.id)}
+                      onClick={() => remake(r.id)}
                       disabled={isPending}
-                      className="rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs text-slate-600 transition hover:bg-slate-50 disabled:opacity-40"
+                      className="rounded-lg border border-amber-300 bg-amber-50 px-2.5 py-1.5 text-xs font-medium text-amber-700 transition hover:bg-amber-100 disabled:opacity-40"
+                      title="이미 완료·청구된 의뢰는 수정할 수 없습니다 — 내용을 승계한 재제작 의뢰(새 건·별도 청구)로 보냅니다"
                     >
-                      다시 보내기
+                      재제작으로 보내기
                     </button>
+                  ) : (
+                    <>
+                      <button
+                        onClick={() => edit(r.id)}
+                        disabled={isPending}
+                        className="rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs text-slate-600 transition hover:bg-slate-50 disabled:opacity-40"
+                        title="내용 수정·사진/동영상 추가 (수정 이력이 남습니다)"
+                      >
+                        수정·첨부
+                      </button>
+                      {r.status !== "sent" && (
+                        <button
+                          onClick={() => retry(r.id)}
+                          disabled={isPending}
+                          className="rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs text-slate-600 transition hover:bg-slate-50 disabled:opacity-40"
+                        >
+                          다시 보내기
+                        </button>
+                      )}
+                    </>
                   )}
                 </div>
               );
