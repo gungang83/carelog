@@ -5,12 +5,13 @@
 
 import { useMemo, useRef, useState } from "react";
 import {
-  DEFAULT_BRUSH_SIZES,
+  BRUSH_LINES,
   LOWER_TEETH,
   UPPER_TEETH,
+  resolveKey,
+  sizeSpec,
   summarize,
   interdentalText,
-  type BrushSize,
   type InterdentalResult,
 } from "@/lib/care-templates";
 
@@ -78,25 +79,31 @@ function todayLabel() {
 }
 
 export function InterdentalChart({
-  sizes = DEFAULT_BRUSH_SIZES,
   onDone,
   onClose,
 }: {
-  sizes?: BrushSize[];
   /** 기록에 담기 — PNG 이미지 + 텍스트 블록 */
   onDone: (image: File, text: string) => Promise<void> | void;
   onClose: () => void;
 }) {
   const [result, setResult] = useState<InterdentalResult>({});
-  const [current, setCurrent] = useState<string>(sizes[0]?.id ?? "");
+  const [lineId, setLineId] = useState<string>(BRUSH_LINES[0]?.id ?? "");
+  const line = BRUSH_LINES.find((l) => l.id === lineId) ?? BRUSH_LINES[0];
+  // 현재 칠할 값 = "제품군id:사이즈id" · 빈 문자열 = 지우개
+  const [current, setCurrent] = useState<string>(line ? `${line.id}:${line.sizes[0]?.id}` : "");
   const [busy, setBusy] = useState(false);
   const svgRef = useRef<SVGSVGElement>(null);
-  const sizeById = useMemo(() => new Map(sizes.map((s) => [s.id, s])), [sizes]);
 
   const upperPts = useMemo(() => archPoints(UPPER_TEETH, true), []);
   const lowerPts = useMemo(() => archPoints(LOWER_TEETH, false), []);
 
-  const rows = summarize(result, sizes);
+  const selectLine = (id: string) => {
+    setLineId(id);
+    const l = BRUSH_LINES.find((x) => x.id === id);
+    if (l && current !== "") setCurrent(`${l.id}:${l.sizes[0]?.id}`);
+  };
+
+  const rows = summarize(result);
   const total = rows.reduce((n, r) => n + r.gaps.length, 0);
 
   const toggleGap = (gap: string) =>
@@ -135,7 +142,7 @@ export function InterdentalChart({
         const off = 28;
         const gx = mx + (nx / len) * off;
         const gy = my + (ny / len) * off;
-        const s = result[gap] ? sizeById.get(result[gap]) : undefined;
+        const s = result[gap] ? resolveKey(result[gap])?.size : undefined;
         return (
           <g key={gap} onClick={() => toggleGap(gap)} style={{ cursor: "pointer" }}>
             <circle cx={gx} cy={gy} r={18} fill="transparent" />
@@ -194,7 +201,7 @@ export function InterdentalChart({
     setBusy(true);
     try {
       const file = await exportPng();
-      await onDone(file, interdentalText(result, sizes, todayLabel()));
+      await onDone(file, interdentalText(result, todayLabel()));
     } catch (e) {
       alert(e instanceof Error ? e.message : "기록에 담지 못했습니다.");
     } finally {
@@ -209,29 +216,20 @@ export function InterdentalChart({
     <div className="fixed inset-0 z-[70] flex flex-col bg-slate-50">
       <div className="flex flex-wrap items-center gap-2 border-b border-slate-200 bg-white px-4 py-3">
         <h2 className="mr-2 text-base font-bold text-slate-900">치간칫솔 사이즈 차트</h2>
-        <div className="flex flex-wrap gap-1.5">
-          {sizes.map((s) => (
+        {/* 제품군 선택 — 라이브러리(lib/care-templates.ts, 정본은 EO 상품 예정) */}
+        <div className="flex gap-1 rounded-xl border border-slate-200 bg-slate-50 p-1">
+          {BRUSH_LINES.map((l) => (
             <button
-              key={s.id}
+              key={l.id}
               type="button"
-              onClick={() => setCurrent(s.id)}
-              className={`flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-sm font-semibold transition ${
-                current === s.id ? "border-slate-900 bg-slate-900 text-white" : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
+              onClick={() => selectLine(l.id)}
+              className={`rounded-lg px-3 py-1 text-sm font-semibold transition ${
+                lineId === l.id ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-700"
               }`}
             >
-              <span className="inline-block size-3 rounded-full" style={{ backgroundColor: s.color }} />
-              {s.label}
+              {l.brand} {l.name}
             </button>
           ))}
-          <button
-            type="button"
-            onClick={() => setCurrent("")}
-            className={`rounded-full border px-3 py-1.5 text-sm font-semibold transition ${
-              current === "" ? "border-slate-900 bg-slate-900 text-white" : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
-            }`}
-          >
-            지우개
-          </button>
         </div>
         <div className="ml-auto flex gap-2">
           <button
@@ -256,8 +254,56 @@ export function InterdentalChart({
         </div>
       </div>
 
+      {/* 사이즈 팔레트 — 색·규격(·사진 예정) */}
+      {line && (
+        <div className="flex gap-2 overflow-x-auto border-b border-slate-200 bg-white px-4 py-2">
+          {line.sizes.map((s) => {
+            const key = `${line.id}:${s.id}`;
+            const active = current === key;
+            const spec = sizeSpec(s);
+            return (
+              <button
+                key={key}
+                type="button"
+                onClick={() => setCurrent(key)}
+                className={`flex shrink-0 items-center gap-2 rounded-xl border px-3 py-2 text-left transition ${
+                  active ? "border-slate-900 ring-2 ring-slate-900" : "border-slate-200 hover:bg-slate-50"
+                }`}
+              >
+                {s.imageUrl ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={s.imageUrl} alt="" className="size-9 rounded-md object-cover" />
+                ) : (
+                  <span className="inline-block size-6 rounded-full border border-black/10" style={{ backgroundColor: s.color }} />
+                )}
+                <span className="flex flex-col">
+                  <span className="text-sm font-bold text-slate-800">
+                    {s.label}
+                    {s.verified === false && (
+                      <span className="ml-1 text-[10px] font-medium text-amber-600" title="일부 규격(색 등)이 아직 제조사 자료로 확인되지 않았습니다">
+                        확인 필요
+                      </span>
+                    )}
+                  </span>
+                  {spec && <span className="text-[11px] text-slate-500">{spec}</span>}
+                </span>
+              </button>
+            );
+          })}
+          <button
+            type="button"
+            onClick={() => setCurrent("")}
+            className={`shrink-0 rounded-xl border px-4 py-2 text-sm font-semibold transition ${
+              current === "" ? "border-slate-900 ring-2 ring-slate-900" : "border-slate-200 text-slate-600 hover:bg-slate-50"
+            }`}
+          >
+            지우개
+          </button>
+        </div>
+      )}
+
       <p className="px-4 pt-2 text-center text-xs text-slate-500">
-        위에서 사이즈를 고른 뒤 치아 사이 점을 누르세요 · 같은 사이즈로 다시 누르면 지워집니다
+        사이즈를 고른 뒤 치아 사이 점을 누르세요 · 같은 사이즈로 다시 누르면 지워집니다 · 제품군을 바꿔 섞어 지정할 수 있습니다
       </p>
 
       <div className="flex min-h-0 flex-1 items-center justify-center p-3">
@@ -288,13 +334,13 @@ export function InterdentalChart({
           </text>
           {rows.length > 0 ? (
             rows.map((r, i) => (
-              <g key={r.size.id} transform={`translate(${i * legendW + legendW / 2}, ${LEGEND_Y})`}>
+              <g key={r.key} transform={`translate(${i * legendW + legendW / 2}, ${LEGEND_Y})`}>
                 <circle cx={-46} cy={22} r={9} fill={r.size.color} />
-                <text x={-32} y={28} fontSize={17} fontWeight={700} fill="#0f172a">
+                <text x={-32} y={28} fontSize={rows.length > 4 ? 13 : 17} fontWeight={700} fill="#0f172a">
                   {r.size.label}
                 </text>
-                <text x={-32} y={50} fontSize={14} fill="#64748b">
-                  {r.gaps.length}곳
+                <text x={-32} y={48} fontSize={12} fill="#64748b">
+                  {r.line.brand} · {r.gaps.length}곳
                 </text>
               </g>
             ))
@@ -310,7 +356,7 @@ export function InterdentalChart({
         {total > 0 ? (
           <>
             처방 요약 <b>{total}곳</b> ·{" "}
-            {rows.map((r) => `${r.size.label} ${r.gaps.length}곳`).join(" · ")}
+            {rows.map((r) => `${r.line.brand} ${r.size.label} ${r.gaps.length}곳`).join(" · ")}
           </>
         ) : (
           <span className="text-slate-400">치아 사이를 눌러 사이즈를 지정하세요</span>
