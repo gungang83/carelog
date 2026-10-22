@@ -113,14 +113,28 @@ function toothLocalPoints(fdi: Fdi, segs = 8) {
 
 export type ToothMesh3D = { fdi: Fdi; geometry: THREE.BufferGeometry };
 
-/** 32개(8-8) 또는 28개(7-7) 치아 지오메트리 — 월드 좌표(mm)로 굽는다. */
-export function buildProceduralTeeth(opts: { withThirdMolars?: boolean; occlusalGap?: number } = {}): ToothMesh3D[] {
+type ArchOpts3D = { withThirdMolars?: boolean; occlusalGap?: number };
+
+/** 2D 교합면 배치(mm) → 3D 월드 좌표 변환. 치아·치간 지점이 같은 변환을 쓴다. */
+function archFrame(opts: ArchOpts3D) {
   const layout = occlusalLayout({ withThirdMolars: opts.withThirdMolars, scale: 1, pad: 0 });
   const cx = layout.width / 2;
   const gap = opts.occlusalGap ?? 0.4;
   const upperFront = Math.min(...layout.teeth.filter((t) => isUpper(t.fdi)).map((t) => t.cy));
   const lowerFront = Math.max(...layout.teeth.filter((t) => !isUpper(t.fdi)).map((t) => t.cy));
+  /** (2D 배치 x, y) + 치경선 기준 높이 hy(치관 높이 h) → 월드 [X, Y, Z] */
+  const toWorld = (up: boolean, lx: number, ly: number, h: number, hy: number): [number, number, number] => [
+    lx - cx,
+    // 상악은 치관이 아래(교합평면)로, 하악은 위로
+    up ? gap + (h - hy) : -gap - (h - hy),
+    up ? upperFront - ly : ly - lowerFront,
+  ];
+  return { layout, toWorld };
+}
 
+/** 32개(8-8) 또는 28개(7-7) 치아 지오메트리 — 월드 좌표(mm)로 굽는다. */
+export function buildProceduralTeeth(opts: ArchOpts3D = {}): ToothMesh3D[] {
+  const { layout, toWorld } = archFrame(opts);
   return layout.teeth.map((t) => {
     const [a, b, c, d, e, f] = t.matrix;
     const up = isUpper(t.fdi);
@@ -129,13 +143,7 @@ export function buildProceduralTeeth(opts: { withThirdMolars?: boolean; occlusal
     const pos: number[] = [];
     for (const [x, hy, z] of verts) {
       // 교합면 로컬(x, z)는 2D 배치 행렬로 아치 위에 놓인다(z = 2D 로컬 y)
-      const lx = a * x + c * z + e;
-      const ly = b * x + d * z + f;
-      const X = lx - cx;
-      const Z = up ? upperFront - ly : ly - lowerFront;
-      // 상악은 치관이 아래(교합평면)로, 하악은 위로
-      const Y = up ? gap + (h - hy) : -gap - (h - hy);
-      pos.push(X, Y, Z);
+      pos.push(...toWorld(up, a * x + c * z + e, b * x + d * z + f, h, hy));
     }
     // 거울상 배치(좌우·상하 반전)로 면 방향이 뒤집힌 치아는 감기 순서를 바로잡는다(부피 부호로 판정)
     let vol = 0;
@@ -151,5 +159,19 @@ export function buildProceduralTeeth(opts: { withThirdMolars?: boolean; occlusal
     g.setIndex(idx);
     g.computeVertexNormals();
     return { fdi: t.fdi, geometry: g };
+  });
+}
+
+export type GapPoint3D = { id: string; upper: boolean; position: [number, number, number] };
+
+/** 치아 사이(치간) 지점 — 협·순측 바깥, 치경부 1/3 높이(치간칫솔이 들어가는 자리). id = "17-16". */
+export function buildGapPoints3D(opts: ArchOpts3D = {}): GapPoint3D[] {
+  const { layout, toWorld } = archFrame(opts);
+  return layout.gaps.map((g) => {
+    const [ta, tb] = g.id.split("-");
+    const up = isUpper(ta);
+    const h = (dims(ta).crown + dims(tb).crown) / 2;
+    const off = (Math.max(dims(ta).bl, dims(tb).bl) / 2) * 0.9 + 1.2;
+    return { id: g.id, upper: up, position: toWorld(up, g.x + g.nx * off, g.y + g.ny * off, h, h * 0.22) };
   });
 }

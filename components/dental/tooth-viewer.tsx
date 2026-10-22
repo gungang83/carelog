@@ -8,6 +8,7 @@ import { useCallback, useMemo, useRef, useState } from "react";
 import { facialLayout, occlusalLayout, toothLabel, type Fdi, type ToothView } from "@/lib/dental/teeth";
 import { DentalTeeth, type ToothPaint } from "@/components/dental/dental-teeth";
 import type { Capture3D } from "@/components/dental/dental-3d";
+import { readViewMode, writeViewMode, type ViewMode as Mode } from "@/lib/dental/view-mode";
 
 // three.js는 3D를 고를 때만 불러온다
 const Dental3D = dynamic(() => import("@/components/dental/dental-3d").then((m) => m.Dental3D), {
@@ -27,15 +28,6 @@ const COLORS = [
 ];
 
 const MODE_KEY = "carelog.toothViewer.mode";
-type Mode = "2d" | "3d";
-
-function readMode(): Mode {
-  try {
-    return localStorage.getItem(MODE_KEY) === "3d" ? "3d" : "2d";
-  } catch {
-    return "2d";
-  }
-}
 
 function todayLabel() {
   const d = new Date();
@@ -73,7 +65,7 @@ export function ToothViewer({
   onDone: (image: File, text: string) => Promise<void> | void;
   onClose: () => void;
 }) {
-  const [mode, setModeState] = useState<Mode>(readMode);
+  const [mode, setModeState] = useState<Mode>(() => readViewMode(MODE_KEY));
   const [view2d, setView2d] = useState<ToothView>("occlusal");
   const [third, setThird] = useState(false);
   const [dundee, setDundee] = useState(false);
@@ -85,11 +77,7 @@ export function ToothViewer({
 
   const setMode = (m: Mode) => {
     setModeState(m);
-    try {
-      localStorage.setItem(MODE_KEY, m);
-    } catch {
-      // 저장 못 해도 이번 사용에는 지장 없음
-    }
+    writeViewMode(MODE_KEY, m);
   };
 
   const layout = useMemo(

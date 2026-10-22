@@ -2,8 +2,10 @@
 
 // spec 036 A단계 — 치간칫솔 사이즈 차트(전체화면). 환자에게 화면을 보여주며 치아 사이를 눌러 사이즈 지정.
 // 치열 도식은 Carelog 치아 라이브러리(lib/dental/teeth.ts — 직접 그린 해부학적 SVG, 외부 저작물 미사용). 결과 = PNG 이미지 + 텍스트 블록.
+// 2D·3D는 쓸 때마다 선택(spec 037). 3D에선 치아 사이 점이 입체 위치(협측 치경부)에 뜨고, 담을 때 지금 3D 화면 + 범례를 한 장으로 합친다.
 
-import { useRef, useState } from "react";
+import dynamic from "next/dynamic";
+import { useMemo, useRef, useState } from "react";
 import {
   BRUSH_LINES,
   resolveKey,
@@ -14,6 +16,16 @@ import {
 } from "@/lib/care-templates";
 import { dims, occlusalLayout } from "@/lib/dental/teeth";
 import { DentalTeeth } from "@/components/dental/dental-teeth";
+import type { Capture3D } from "@/components/dental/dental-3d";
+import { BRUSH_W, BrushGlyph, BrushIllustration } from "@/components/care/brush-illustration";
+import { readViewMode, writeViewMode, type ViewMode } from "@/lib/dental/view-mode";
+
+// three.js는 3D를 고를 때만 불러온다
+const Dental3D = dynamic(() => import("@/components/dental/dental-3d").then((m) => m.Dental3D), {
+  ssr: false,
+  loading: () => <div className="flex h-full items-center justify-center text-sm text-slate-400">3D 불러오는 중…</div>,
+});
+const MODE_KEY = "carelog.interdental.mode";
 
 // 치열 도식 = Carelog 치아 라이브러리(lib/dental/teeth.ts) 교합면 7-7. 오른쪽에 범례 칸(PNG에도 함께 찍힘).
 const LAYOUT = occlusalLayout({ scale: 5, pad: 64 });
@@ -23,17 +35,50 @@ const H = Math.max(LAYOUT.height, 560);
 const CX = LAYOUT.width / 2;
 const MARKER_R = 10;
 
+// 서버·브라우저 삼각함수 끝자리 차이로 하이드레이션이 어긋나지 않게 반올림
+const r2 = (n: number) => Math.round(n * 100) / 100;
 const cyOf = (fdi: string) => LAYOUT.teeth.find((t) => t.fdi === fdi)?.cy ?? 0;
 // 상·하악 이름은 각 아치 안쪽(입천장·혀 자리)에
-const UPPER_LABEL_Y = cyOf("11") + (cyOf("17") - cyOf("11")) * 0.45;
-const LOWER_LABEL_Y = cyOf("41") + (cyOf("47") - cyOf("41")) * 0.45;
+const UPPER_LABEL_Y = r2(cyOf("11") + (cyOf("17") - cyOf("11")) * 0.45);
+const LOWER_LABEL_Y = r2(cyOf("41") + (cyOf("47") - cyOf("41")) * 0.45);
+const MID_Y = r2(LAYOUT.midY);
 
 /** 치아 사이 지점 → 아치 바깥(입술·볼 쪽)으로 이웃 치아 두께만큼 밀어낸 표시 위치. */
 const MARKERS = LAYOUT.gaps.map((g) => {
   const [a, b] = g.id.split("-");
   const off = (Math.max(dims(a).bl, dims(b).bl) / 2) * 5 + MARKER_R + 4;
-  return { id: g.id, x: g.x + g.nx * off, y: g.y + g.ny * off };
+  return { id: g.id, x: r2(g.x + g.nx * off), y: r2(g.y + g.ny * off) };
 });
+
+/** SVG 요소 → 이미지(크기 속성 명시 — 없으면 기본 300×150으로 잡혀 여백이 생긴다) */
+async function svgImage(svg: SVGSVGElement, w: number, h: number): Promise<HTMLImageElement> {
+  const clone = svg.cloneNode(true) as SVGSVGElement;
+  clone.setAttribute("width", String(w));
+  clone.setAttribute("height", String(h));
+  const xml = new XMLSerializer().serializeToString(clone);
+  const img = new Image();
+  await new Promise<void>((res, rej) => {
+    img.onload = () => res();
+    img.onerror = () => rej(new Error("이미지 변환 실패"));
+    img.src = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(xml)}`;
+  });
+  return img;
+}
+
+async function blobImage(blob: Blob): Promise<HTMLImageElement> {
+  const url = URL.createObjectURL(blob);
+  try {
+    const img = new Image();
+    await new Promise<void>((res, rej) => {
+      img.onload = () => res();
+      img.onerror = () => rej(new Error("이미지 변환 실패"));
+      img.src = url;
+    });
+    return img;
+  } finally {
+    URL.revokeObjectURL(url);
+  }
+}
 
 function todayLabel() {
   const d = new Date();
@@ -54,7 +99,15 @@ export function InterdentalChart({
   // 현재 칠할 값 = "제품군id:사이즈id" · 빈 문자열 = 지우개
   const [current, setCurrent] = useState<string>(line ? `${line.id}:${line.sizes[0]?.id}` : "");
   const [busy, setBusy] = useState(false);
+  const [mode, setModeState] = useState<ViewMode>(() => readViewMode(MODE_KEY));
   const svgRef = useRef<SVGSVGElement>(null);
+  const legendRef = useRef<SVGSVGElement>(null);
+  const captureRef = useRef<Capture3D | null>(null);
+
+  const setMode = (m: ViewMode) => {
+    setModeState(m);
+    writeViewMode(MODE_KEY, m);
+  };
 
   const selectLine = (id: string) => {
     setLineId(id);
@@ -64,6 +117,11 @@ export function InterdentalChart({
 
   const rows = summarize(result);
   const total = rows.reduce((n, r) => n + r.gaps.length, 0);
+
+  const gapColors = useMemo(
+    () => Object.fromEntries(Object.entries(result).map(([gap, key]) => [gap, resolveKey(key)?.size.color])),
+    [result],
+  );
 
   const toggleGap = (gap: string) =>
     setResult((prev) => {
@@ -103,29 +161,32 @@ export function InterdentalChart({
     });
 
   const exportPng = async (): Promise<File> => {
-    const svg = svgRef.current;
-    if (!svg) throw new Error("차트를 찾을 수 없습니다.");
-    // 크기 속성이 없으면 이미지가 기본 크기(300×150)로 잡혀 여백이 생기므로 명시한다
-    const clone = svg.cloneNode(true) as SVGSVGElement;
-    clone.setAttribute("width", String(W));
-    clone.setAttribute("height", String(H));
-    const xml = new XMLSerializer().serializeToString(clone);
-    const url = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(xml)}`;
-    const img = new Image();
-    await new Promise<void>((res, rej) => {
-      img.onload = () => res();
-      img.onerror = () => rej(new Error("이미지 변환 실패"));
-      img.src = url;
-    });
     const scale = 2;
     const canvas = document.createElement("canvas");
-    canvas.width = W * scale;
-    canvas.height = H * scale;
     const ctx = canvas.getContext("2d");
     if (!ctx) throw new Error("캔버스를 만들 수 없습니다.");
-    ctx.fillStyle = "#ffffff";
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+    if (mode === "3d") {
+      // 지금 3D 화면 + 오른쪽 범례를 한 장으로
+      const shot = await captureRef.current?.();
+      if (!shot || !legendRef.current) throw new Error("3D 화면을 이미지로 만들지 못했습니다.");
+      const view = await blobImage(shot);
+      const legend = await svgImage(legendRef.current, LEGEND_W, H);
+      const leftW = Math.round((H * scale * view.width) / view.height);
+      canvas.width = leftW + LEGEND_W * scale;
+      canvas.height = H * scale;
+      ctx.fillStyle = "#ffffff";
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.drawImage(view, 0, 0, leftW, canvas.height);
+      ctx.drawImage(legend, leftW, 0, LEGEND_W * scale, canvas.height);
+    } else {
+      if (!svgRef.current) throw new Error("차트를 찾을 수 없습니다.");
+      const img = await svgImage(svgRef.current, W, H);
+      canvas.width = W * scale;
+      canvas.height = H * scale;
+      ctx.fillStyle = "#ffffff";
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+    }
     const blob = await new Promise<Blob | null>((res) => canvas.toBlob(res, "image/png"));
     if (!blob) throw new Error("이미지 변환 실패");
     return new File([blob], `interdental_${Date.now()}.png`, { type: "image/png" });
@@ -144,14 +205,61 @@ export function InterdentalChart({
     }
   };
 
-  // 범례(이미지에도 함께 찍히도록 SVG 안에 그린다) — 줄 수가 많으면 촘촘하게
-  const LX = LAYOUT.width + 12;
-  const rowH = rows.length > 6 ? 46 : 62;
+  // 범례(이미지에도 함께 찍히도록 SVG 안에 그린다) — 사이즈별 그림 포함, 줄 수가 많으면 촘촘하게
+  const rowH = rows.length > 6 ? 50 : 66;
+  const renderLegend = (x0: number) => (
+    <g>
+      <text x={x0 + 8} y={44} fontSize={16} fontWeight={700} fill="#0f172a">
+        치간칫솔 처방
+      </text>
+      <text x={x0 + 8} y={64} fontSize={11} fill="#94a3b8">
+        {todayLabel()} · {total}곳
+      </text>
+      {rows.length > 0 ? (
+        rows.map((r, i) => (
+          <g key={r.key} transform={`translate(${x0 + 8}, ${88 + i * rowH})`}>
+            <g transform={`translate(0, 0) scale(${60 / BRUSH_W})`}>
+              <BrushGlyph size={r.size} />
+            </g>
+            <text x={68} y={13} fontSize={15} fontWeight={700} fill="#0f172a">
+              {r.size.label} <tspan fontSize={12} fontWeight={500} fill="#64748b">· {r.gaps.length}곳</tspan>
+            </text>
+            <text x={68} y={30} fontSize={11} fill="#64748b">
+              {r.line.brand} {r.line.name}
+            </text>
+            {rowH > 55 && (
+              <text x={0} y={50} fontSize={10} fill="#94a3b8">
+                {r.gaps.length > 7 ? `${r.gaps.slice(0, 7).join(", ")} 외 ${r.gaps.length - 7}` : r.gaps.join(", ")}
+              </text>
+            )}
+          </g>
+        ))
+      ) : (
+        <text x={x0 + 8} y={100} fontSize={13} fill="#cbd5e1">
+          아직 지정한 곳이 없습니다
+        </text>
+      )}
+    </g>
+  );
 
   return (
     <div className="fixed inset-0 z-[70] flex flex-col bg-slate-50">
       <div className="flex flex-wrap items-center gap-2 border-b border-slate-200 bg-white px-4 py-3">
         <h2 className="mr-2 text-base font-bold text-slate-900">치간칫솔 사이즈 차트</h2>
+        <div className="flex gap-1 rounded-xl border border-slate-200 bg-slate-100 p-1">
+          {(["2d", "3d"] as const).map((m) => (
+            <button
+              key={m}
+              type="button"
+              onClick={() => setMode(m)}
+              className={`rounded-lg px-3 py-1 text-sm font-semibold transition ${
+                mode === m ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-700"
+              }`}
+            >
+              {m.toUpperCase()}
+            </button>
+          ))}
+        </div>
         {/* 제품군 선택 — 라이브러리(lib/care-templates.ts, 정본은 EO 상품 예정) */}
         <div className="flex gap-1 rounded-xl border border-slate-200 bg-slate-50 p-1">
           {BRUSH_LINES.map((l) => (
@@ -190,7 +298,7 @@ export function InterdentalChart({
         </div>
       </div>
 
-      {/* 사이즈 팔레트 — 색·규격(·사진 예정) */}
+      {/* 사이즈 팔레트 — 그림(사진)·색·규격 */}
       {line && (
         <div className="flex gap-2 overflow-x-auto border-b border-slate-200 bg-white px-4 py-2">
           {line.sizes.map((s) => {
@@ -206,12 +314,8 @@ export function InterdentalChart({
                   active ? "border-slate-900 ring-2 ring-slate-900" : "border-slate-200 hover:bg-slate-50"
                 }`}
               >
-                {s.imageUrl ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img src={s.imageUrl} alt="" className="size-9 rounded-md object-cover" />
-                ) : (
-                  <span className="inline-block size-6 rounded-full border border-black/10" style={{ backgroundColor: s.color }} />
-                )}
+                {/* 사이즈별 그림(사진이 들어오면 사진) */}
+                <BrushIllustration size={s} className="h-9 w-[86px] shrink-0 rounded-md bg-slate-50" />
                 <span className="flex flex-col">
                   <span className="text-sm font-bold text-slate-800">
                     {s.label}
@@ -243,61 +347,50 @@ export function InterdentalChart({
       </p>
 
       <div className="flex min-h-0 flex-1 items-center justify-center p-3">
-        <svg
-          ref={svgRef}
-          xmlns="http://www.w3.org/2000/svg"
-          viewBox={`0 0 ${W} ${H}`}
-          className="h-full max-h-[78vh] w-full max-w-5xl select-none rounded-2xl border border-slate-200 bg-white"
-          fontFamily="system-ui, -apple-system, 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif"
-        >
-          <rect x={0} y={0} width={W} height={H} fill="#ffffff" />
-          <text x={CX} y={UPPER_LABEL_Y} textAnchor="middle" fontSize={14} fill="#94a3b8" fontWeight={600}>
-            상악 UPPER
-          </text>
-          <text x={CX - 78} y={LAYOUT.midY + 6} textAnchor="middle" fontSize={16} fontWeight={700} fill="#1e3a8a">
-            ← 우(R)
-          </text>
-          <text x={CX + 78} y={LAYOUT.midY + 6} textAnchor="middle" fontSize={16} fontWeight={700} fill="#1e3a8a">
-            좌(L) →
-          </text>
-          <text x={CX} y={LAYOUT.midY + 24} textAnchor="middle" fontSize={10} fill="#94a3b8">
-            환자 기준 · 마주 본 화면
-          </text>
-          <text x={CX} y={LOWER_LABEL_Y} textAnchor="middle" fontSize={14} fill="#94a3b8" fontWeight={600}>
-            하악 LOWER
-          </text>
-          <DentalTeeth layout={LAYOUT} labelSize={10} />
-          {renderMarkers()}
-          <line x1={LAYOUT.width} y1={24} x2={LAYOUT.width} y2={H - 24} stroke="#e2e8f0" />
-          <text x={LX + 8} y={44} fontSize={16} fontWeight={700} fill="#0f172a">
-            치간칫솔 처방
-          </text>
-          <text x={LX + 8} y={64} fontSize={11} fill="#94a3b8">
-            {todayLabel()} · {total}곳
-          </text>
-          {rows.length > 0 ? (
-            rows.map((r, i) => (
-              <g key={r.key} transform={`translate(${LX + 8}, ${92 + i * rowH})`}>
-                <circle cx={9} cy={8} r={9} fill={r.size.color} />
-                <text x={26} y={13} fontSize={15} fontWeight={700} fill="#0f172a">
-                  {r.size.label} <tspan fontSize={12} fontWeight={500} fill="#64748b">· {r.gaps.length}곳</tspan>
-                </text>
-                <text x={26} y={30} fontSize={11} fill="#64748b">
-                  {r.line.brand} {r.line.name}
-                </text>
-                {rowH > 50 && (
-                  <text x={26} y={46} fontSize={10} fill="#94a3b8">
-                    {r.gaps.length > 6 ? `${r.gaps.slice(0, 6).join(", ")} 외 ${r.gaps.length - 6}` : r.gaps.join(", ")}
-                  </text>
-                )}
-              </g>
-            ))
-          ) : (
-            <text x={LX + 8} y={100} fontSize={13} fill="#cbd5e1">
-              아직 지정한 곳이 없습니다
+        {mode === "3d" ? (
+          <div className="flex h-full w-full max-w-6xl gap-3">
+            <Dental3D showGaps gapColors={gapColors} onGapClick={toggleGap} captureRef={captureRef} className="min-h-0 flex-1" />
+            <svg
+              ref={legendRef}
+              xmlns="http://www.w3.org/2000/svg"
+              viewBox={`0 0 ${LEGEND_W} ${H}`}
+              className="hidden h-full w-[300px] shrink-0 rounded-2xl border border-slate-200 bg-white md:block"
+              fontFamily="system-ui, -apple-system, 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif"
+            >
+              <rect x={0} y={0} width={LEGEND_W} height={H} fill="#ffffff" />
+              {renderLegend(4)}
+            </svg>
+          </div>
+        ) : (
+          <svg
+            ref={svgRef}
+            xmlns="http://www.w3.org/2000/svg"
+            viewBox={`0 0 ${W} ${H}`}
+            className="h-full max-h-[78vh] w-full max-w-5xl select-none rounded-2xl border border-slate-200 bg-white"
+            fontFamily="system-ui, -apple-system, 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif"
+          >
+            <rect x={0} y={0} width={W} height={H} fill="#ffffff" />
+            <text x={CX} y={UPPER_LABEL_Y} textAnchor="middle" fontSize={14} fill="#94a3b8" fontWeight={600}>
+              상악 UPPER
             </text>
-          )}
-        </svg>
+            <text x={CX - 78} y={MID_Y + 6} textAnchor="middle" fontSize={16} fontWeight={700} fill="#1e3a8a">
+              ← 우(R)
+            </text>
+            <text x={CX + 78} y={MID_Y + 6} textAnchor="middle" fontSize={16} fontWeight={700} fill="#1e3a8a">
+              좌(L) →
+            </text>
+            <text x={CX} y={MID_Y + 24} textAnchor="middle" fontSize={10} fill="#94a3b8">
+              환자 기준 · 마주 본 화면
+            </text>
+            <text x={CX} y={LOWER_LABEL_Y} textAnchor="middle" fontSize={14} fill="#94a3b8" fontWeight={600}>
+              하악 LOWER
+            </text>
+            <DentalTeeth layout={LAYOUT} labelSize={10} />
+            {renderMarkers()}
+            <line x1={LAYOUT.width} y1={24} x2={LAYOUT.width} y2={H - 24} stroke="#e2e8f0" />
+            {renderLegend(LAYOUT.width + 12)}
+          </svg>
+        )}
       </div>
 
       <div className="border-t border-slate-200 bg-white px-4 py-2 text-center text-sm text-slate-700">

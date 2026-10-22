@@ -9,7 +9,7 @@ import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { isUpper, toothLabel, type Fdi } from "@/lib/dental/teeth";
-import { buildProceduralTeeth, fdiFromMeshName } from "@/lib/dental/teeth-3d";
+import { buildGapPoints3D, buildProceduralTeeth, fdiFromMeshName } from "@/lib/dental/teeth-3d";
 
 type View = "front" | "upper" | "lower" | "right" | "left";
 const VIEWS: { id: View; label: string }[] = [
@@ -24,6 +24,8 @@ const BASE = new THREE.Color("#f4ecdc");
 const HOVER = new THREE.Color("#e0f2fe");
 
 type ToothObj = { fdi: Fdi; mesh: THREE.Mesh; baseY: number };
+type MarkerObj = { id: string; upper: boolean; mesh: THREE.Mesh; baseY: number };
+
 
 /** 지금 보이는 화면을 PNG로(상담 기록에 담기) */
 export type Capture3D = () => Promise<Blob | null>;
@@ -33,6 +35,9 @@ export function Dental3D({
   withThirdMolars = false,
   paint,
   onToothClick,
+  showGaps = false,
+  gapColors,
+  onGapClick,
   captureRef,
   className,
 }: {
@@ -42,6 +47,11 @@ export function Dental3D({
   /** 치아별 색 — { "16": "#f87171" } (2D와 같은 선택 상태를 그대로 받는다) */
   paint?: Record<Fdi, string | undefined>;
   onToothClick?: (fdi: Fdi) => void;
+  /** 치아 사이(치간) 표시 점을 띄운다(치간칫솔 차트) */
+  showGaps?: boolean;
+  /** 치간 id("17-16") → 지정 색 */
+  gapColors?: Record<string, string | undefined>;
+  onGapClick?: (id: string) => void;
   captureRef?: { current: Capture3D | null };
   className?: string;
 }) {
@@ -52,12 +62,19 @@ export function Dental3D({
     teeth: ToothObj[];
     repaint: () => void;
   } | null>(null);
-  const [hovered, setHovered] = useState<Fdi | null>(null);
+  const [hovered, setHovered] = useState<string | null>(null);
   const [open, setOpen] = useState(0);
   const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
-  const hov = useRef<Fdi | null>(null);
-  const colors = useRef({ paint });
-  const click = useRef(onToothClick);
+  const hov = useRef<string | null>(null);
+  const colors = useRef({ paint, gapColors });
+  const click = useRef({ tooth: onToothClick, marker: onGapClick });
+
+  // 색·클릭 처리 바뀌면 반영 — ★아래 장면 effect보다 먼저 선언(사랑니 전환으로 장면을 다시 만들 때 최신 값을 쓰게)
+  useEffect(() => {
+    colors.current = { paint, gapColors };
+    click.current = { tooth: onToothClick, marker: onGapClick };
+    api.current?.repaint();
+  }, [paint, gapColors, onToothClick, onGapClick]);
 
   useEffect(() => {
     const host = hostRef.current;
@@ -87,17 +104,28 @@ export function Dental3D({
     const root = new THREE.Group();
     scene.add(root);
     const teeth: ToothObj[] = [];
+    const marks: MarkerObj[] = [];
+    const markGeo = new THREE.SphereGeometry(1, 20, 14);
     let center = new THREE.Vector3();
     let radius = 40;
 
     const repaint = () => {
-      const { paint: pt } = colors.current;
+      const { paint: pt, gapColors: gc } = colors.current;
       for (const t of teeth) {
         const m = t.mesh.material as THREE.MeshStandardMaterial;
         const c = pt?.[t.fdi] ? new THREE.Color(pt[t.fdi]) : BASE;
         m.color.copy(c);
         m.emissive.copy(hov.current === t.fdi ? HOVER : new THREE.Color("#000000"));
         m.emissiveIntensity = hov.current === t.fdi ? 0.35 : 0;
+      }
+      for (const o of marks) {
+        const color = gc?.[o.id];
+        const m = o.mesh.material as THREE.MeshStandardMaterial;
+        m.color.set(color ?? "#cbd5e1");
+        m.opacity = color ? 1 : 0.75;
+        m.emissive.set(hov.current === o.id ? "#38bdf8" : "#000000");
+        m.emissiveIntensity = hov.current === o.id ? 0.5 : 0;
+        o.mesh.scale.setScalar(color ? 1.25 : hov.current === o.id ? 1.15 : 0.9);
       }
     };
 
@@ -116,10 +144,12 @@ export function Dental3D({
       tween = { from: camera.position.clone(), to: center.clone().add(dir[v]), t0: performance.now() };
       // 교합면 시점에선 맞은편 아치가 가리므로 숨긴다
       for (const t of teeth) t.mesh.visible = v === "upper" ? isUpper(t.fdi) : v === "lower" ? !isUpper(t.fdi) : true;
+      for (const o of marks) o.mesh.visible = v === "upper" ? o.upper : v === "lower" ? !o.upper : true;
     };
 
     const setOpenMm = (mm: number) => {
       for (const t of teeth) t.mesh.position.y = t.baseY + (isUpper(t.fdi) ? mm / 2 : -mm / 2);
+      for (const o of marks) o.mesh.position.y = o.baseY + (o.upper ? mm / 2 : -mm / 2);
     };
 
     const fit = () => {
@@ -142,6 +172,14 @@ export function Dental3D({
     const onReady = () => {
       if (disposed) return;
       fit();
+      // 치간 표시 점은 화면 맞춤(fit) 계산에서 빼고 나중에 얹는다
+      for (const g of showGaps ? buildGapPoints3D({ withThirdMolars }) : []) {
+        const mesh = new THREE.Mesh(markGeo, new THREE.MeshStandardMaterial({ roughness: 0.35, transparent: true }));
+        mesh.position.set(...g.position);
+        mesh.userData.marker = g.id;
+        scene.add(mesh);
+        marks.push({ id: g.id, upper: g.upper, mesh, baseY: g.position[1] });
+      }
       repaint();
       api.current = { setView, setOpen: setOpenMm, teeth, repaint };
       if (captureRef) {
@@ -194,29 +232,35 @@ export function Dental3D({
 
     // 치아 고르기(끌기와 구분: 5px 이내 이동만 클릭)
     const ray = new THREE.Raycaster();
-    const pick = (ev: PointerEvent): Fdi | null => {
+    /** 누른 대상: 치간 점 { marker } 또는 치아 { fdi } */
+    const pick = (ev: PointerEvent): { marker?: string; fdi?: Fdi } | null => {
       const r = renderer.domElement.getBoundingClientRect();
       ray.setFromCamera(new THREE.Vector2(((ev.clientX - r.left) / r.width) * 2 - 1, -((ev.clientY - r.top) / r.height) * 2 + 1), camera);
-      const hit = ray.intersectObjects(teeth.filter((t) => t.mesh.visible).map((t) => t.mesh), false)[0];
-      return (hit?.object.userData.fdi as Fdi | undefined) ?? null;
+      const targets = [...marks.map((o) => o.mesh), ...teeth.map((t) => t.mesh)].filter((m) => m.visible);
+      const hit = ray.intersectObjects(targets, false)[0];
+      if (!hit) return null;
+      const d = hit.object.userData;
+      return d.marker ? { marker: d.marker as string } : d.fdi ? { fdi: d.fdi as Fdi } : null;
     };
     let down: [number, number] | null = null;
     const onDown = (ev: PointerEvent) => (down = [ev.clientX, ev.clientY]);
     const onUp = (ev: PointerEvent) => {
       if (!down || Math.hypot(ev.clientX - down[0], ev.clientY - down[1]) > 5) return;
       down = null;
-      const fdi = pick(ev);
-      if (!fdi) return;
-      click.current?.(fdi);
+      const p = pick(ev);
+      if (p?.marker) click.current.marker?.(p.marker);
+      else if (p?.fdi) click.current.tooth?.(p.fdi);
     };
     const onMove = (ev: PointerEvent) => {
       if (ev.buttons) return;
-      const fdi = pick(ev);
-      if (fdi !== hov.current) {
-        hov.current = fdi;
-        setHovered(fdi);
+      const p = pick(ev);
+      // 치아 클릭을 안 받는 화면(치간칫솔 차트)에선 치아에 손가락 커서를 띄우지 않는다
+      const key = p?.marker ?? (p?.fdi && click.current.tooth ? p.fdi : null);
+      if (key !== hov.current) {
+        hov.current = key;
+        setHovered(key);
         repaint();
-        renderer.domElement.style.cursor = fdi ? "pointer" : "grab";
+        renderer.domElement.style.cursor = key ? "pointer" : "grab";
       }
     };
     renderer.domElement.addEventListener("pointerdown", onDown);
@@ -245,6 +289,8 @@ export function Dental3D({
       renderer.domElement.removeEventListener("pointerdown", onDown);
       renderer.domElement.removeEventListener("pointerup", onUp);
       renderer.domElement.removeEventListener("pointermove", onMove);
+      markGeo.dispose();
+      marks.forEach((o) => (o.mesh.material as THREE.Material).dispose());
       root.traverse((o) => {
         const m = o as THREE.Mesh;
         if (m.isMesh) {
@@ -257,14 +303,7 @@ export function Dental3D({
       api.current = null;
       if (captureRef) captureRef.current = null;
     };
-  }, [modelUrl, withThirdMolars, captureRef]);
-
-  // 색·클릭 처리 바뀌면 반영
-  useEffect(() => {
-    colors.current = { paint };
-    click.current = onToothClick;
-    api.current?.repaint();
-  }, [paint, onToothClick]);
+  }, [modelUrl, withThirdMolars, showGaps, captureRef]);
 
   return (
     <div className={`relative overflow-hidden rounded-2xl border border-slate-200 bg-white ${className ?? ""}`}>
@@ -301,7 +340,13 @@ export function Dental3D({
             {modelUrl ? "이 3D 모델 파일이 아직 준비되지 않았습니다." : "3D 모델을 만들지 못했습니다."}
           </span>}
         {status === "ready" &&
-          (hovered ? toothLabel(hovered) : "끌어서 돌리기 · 휠/두 손가락으로 확대 · 치아를 누르면 표시")}
+          (hovered
+            ? hovered.includes("-")
+              ? `치아 사이 ${hovered}`
+              : toothLabel(hovered)
+            : showGaps
+              ? "끌어서 돌리기 · 휠/두 손가락으로 확대 · 치아 사이 점을 누르면 지정"
+              : "끌어서 돌리기 · 휠/두 손가락으로 확대 · 치아를 누르면 표시")}
       </div>
     </div>
   );
