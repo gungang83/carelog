@@ -261,6 +261,17 @@ export const UPDATE_FEED: UpdateFeedEntry[] = [
     ],
     internal: "spec 036 §2.6 · 세션 68d (실제 사진은 확보 후 교체)",
   },
+  {
+    id: "2026-10-22-3d-anatomy",
+    date: "2026-10-22",
+    emoji: "🦷",
+    title: "3D 치아 더 실제처럼",
+    items: [
+      "3D에서 '입 벌리기'를 하면 실제처럼 턱관절을 축으로 아래턱이 벌어집니다.",
+      "어금니·작은어금니 씹는 면의 교두와 홈이 치아마다 실제 모양에 가깝게 표현됩니다.",
+    ],
+    internal: "spec 037 · 세션 68d",
+  },
 ];
 
 // ── 결정 상태 (DB update_feed_decisions) ──────────────────────────────

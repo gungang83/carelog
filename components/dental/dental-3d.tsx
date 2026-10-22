@@ -23,8 +23,13 @@ const VIEWS: { id: View; label: string }[] = [
 const BASE = new THREE.Color("#f4ecdc");
 const HOVER = new THREE.Color("#e0f2fe");
 
-type ToothObj = { fdi: Fdi; mesh: THREE.Mesh; baseY: number };
-type MarkerObj = { id: string; upper: boolean; mesh: THREE.Mesh; baseY: number };
+type ToothObj = { fdi: Fdi; mesh: THREE.Mesh };
+type MarkerObj = { id: string; upper: boolean; mesh: THREE.Mesh };
+
+// 입 벌리기 = 하악이 턱관절(과두)을 축으로 회전. 평균 성인 기준 하악 전치 → 과두 약 92mm 뒤, 교합평면 위 약 20mm.
+const HINGE_BACK_MM = 92;
+const HINGE_UP_MM = 20;
+const MAX_OPEN_DEG = 22;
 
 
 /** 지금 보이는 화면을 PNG로(상담 기록에 담기) */
@@ -58,7 +63,7 @@ export function Dental3D({
   const hostRef = useRef<HTMLDivElement>(null);
   const api = useRef<{
     setView: (v: View) => void;
-    setOpen: (mm: number) => void;
+    setOpen: (deg: number) => void;
     teeth: ToothObj[];
     repaint: () => void;
   } | null>(null);
@@ -147,9 +152,13 @@ export function Dental3D({
       for (const o of marks) o.mesh.visible = v === "upper" ? o.upper : v === "lower" ? !o.upper : true;
     };
 
-    const setOpenMm = (mm: number) => {
-      for (const t of teeth) t.mesh.position.y = t.baseY + (isUpper(t.fdi) ? mm / 2 : -mm / 2);
-      for (const o of marks) o.mesh.position.y = o.baseY + (o.upper ? mm / 2 : -mm / 2);
+    // 하악(치아·치간 점)은 경첩 그룹에 담아 과두 축으로 돌린다 — jaw(축 위치) ⊃ jawInner(축 위치만큼 되돌림)
+    const jaw = new THREE.Group();
+    const jawInner = new THREE.Group();
+    jaw.add(jawInner);
+    scene.add(jaw);
+    const setOpenDeg = (deg: number) => {
+      jaw.rotation.x = (deg * Math.PI) / 180;
     };
 
     const fit = () => {
@@ -164,24 +173,34 @@ export function Dental3D({
     };
 
     const addTooth = (fdi: Fdi, mesh: THREE.Mesh) => {
-      mesh.material = new THREE.MeshStandardMaterial({ color: BASE, roughness: 0.42, metalness: 0 });
+      // 자체 모델은 정점 음영(구·와)을 갖고 있다 — 있으면 재질 색과 곱해 쓴다
+      const vertexColors = !!mesh.geometry.getAttribute("color");
+      mesh.material = new THREE.MeshStandardMaterial({ color: BASE, roughness: 0.42, metalness: 0, vertexColors });
       mesh.userData.fdi = fdi;
-      teeth.push({ fdi, mesh, baseY: mesh.position.y });
+      teeth.push({ fdi, mesh });
     };
 
     const onReady = () => {
       if (disposed) return;
       fit();
-      // 치간 표시 점은 화면 맞춤(fit) 계산에서 빼고 나중에 얹는다
+      // 경첩 축: 하악 전치에서 뒤로·위로
+      const front = new THREE.Box3().setFromObject(root).max.z;
+      const hinge = new THREE.Vector3(0, HINGE_UP_MM, front - HINGE_BACK_MM);
+      jaw.position.copy(hinge);
+      jawInner.position.copy(hinge).negate();
+      root.updateMatrixWorld(true);
+      jaw.updateMatrixWorld(true);
+      for (const t of teeth) if (!isUpper(t.fdi)) jawInner.attach(t.mesh);
+      // 치간 표시 점은 화면 맞춤(fit) 계산에서 빼고 나중에 얹는다(하악 점은 경첩 그룹에)
       for (const g of showGaps ? buildGapPoints3D({ withThirdMolars }) : []) {
         const mesh = new THREE.Mesh(markGeo, new THREE.MeshStandardMaterial({ roughness: 0.35, transparent: true }));
         mesh.position.set(...g.position);
         mesh.userData.marker = g.id;
-        scene.add(mesh);
-        marks.push({ id: g.id, upper: g.upper, mesh, baseY: g.position[1] });
+        (g.upper ? scene : jawInner).add(mesh);
+        marks.push({ id: g.id, upper: g.upper, mesh });
       }
       repaint();
-      api.current = { setView, setOpen: setOpenMm, teeth, repaint };
+      api.current = { setView, setOpen: setOpenDeg, teeth, repaint };
       if (captureRef) {
         captureRef.current = () =>
           new Promise((res) => {
@@ -290,8 +309,7 @@ export function Dental3D({
       renderer.domElement.removeEventListener("pointerup", onUp);
       renderer.domElement.removeEventListener("pointermove", onMove);
       markGeo.dispose();
-      marks.forEach((o) => (o.mesh.material as THREE.Material).dispose());
-      root.traverse((o) => {
+      scene.traverse((o) => {
         const m = o as THREE.Mesh;
         if (m.isMesh) {
           m.geometry.dispose();
@@ -324,7 +342,7 @@ export function Dental3D({
           <input
             type="range"
             min={0}
-            max={30}
+            max={MAX_OPEN_DEG}
             value={open}
             onChange={(e) => {
               const v = Number(e.target.value);
