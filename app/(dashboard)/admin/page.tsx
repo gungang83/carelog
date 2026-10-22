@@ -59,6 +59,12 @@ export default async function AdminPage() {
           >
             상담 평가(테스트중) →
           </Link>
+          <Link
+            href="/admin/dental"
+            className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm font-medium text-amber-700 transition hover:bg-amber-100"
+          >
+            치아 도식 라이브러리 →
+          </Link>
         </div>
       </div>
 

@@ -227,6 +227,17 @@ export const UPDATE_FEED: UpdateFeedEntry[] = [
     ],
     internal: "spec 036 A단계 · 세션 68c",
   },
+  {
+    id: "2026-10-22-dental-library",
+    date: "2026-10-22",
+    emoji: "🦷",
+    title: "치간칫솔 차트 치아 그림 개선",
+    items: [
+      "치간칫솔 사이즈 차트의 치아가 동그라미 대신 실제 치아 모양(씹는 면에서 본 모습)으로 바뀌었습니다.",
+      "사이즈별 범례가 차트 오른쪽에 정리되어, 상담 기록에 담기는 그림에서도 한눈에 보입니다.",
+    ],
+    internal: "spec 037 · 세션 68d (보관함 /admin/dental은 관리자용이라 공지 제외)",
+  },
 ];
 
 // ── 결정 상태 (DB update_feed_decisions) ──────────────────────────────
