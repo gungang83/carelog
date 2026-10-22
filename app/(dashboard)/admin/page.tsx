@@ -21,14 +21,15 @@ export default async function AdminPage() {
 
   return (
     <div className="mx-auto max-w-4xl space-y-8 px-4 py-10 sm:px-6">
-      <div className="flex items-start justify-between gap-4">
+      {/* 바로가기가 늘어도 제목이 눌리지 않게 — 제목 아래 줄바꿈 배치 */}
+      <div className="space-y-4">
         <div>
           <h1 className="text-2xl font-bold text-slate-900">슈퍼어드민</h1>
           <p className="mt-1 text-sm text-slate-500">
             모든 기관·직원·실험실을 통합 관리합니다. (최고 관리자 전용)
           </p>
         </div>
-        <div className="flex shrink-0 gap-2">
+        <div className="flex flex-wrap gap-2">
           <Link
             href="/admin/updates"
             className="rounded-xl border border-violet-200 bg-violet-50 px-3 py-2 text-sm font-medium text-violet-700 transition hover:bg-violet-100"

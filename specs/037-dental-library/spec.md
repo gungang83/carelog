@@ -47,7 +47,11 @@
 
 ## 2.5 3D 시제품 (2026-10-22 — 대표 지시 "던디대 무료 모델로 3D 시제품 만들어봐")
 
-- **보기**: `/admin/dental` → [2D | 3D 🧪] 전환(사용 시 2D·3D 선택 원칙). `components/dental/dental-3d.tsx`(three.js, next/dynamic으로 3D를 켤 때만 로드).
+- **보기**: ★대표 정정(2026-10-22) — 2D/3D 전환은 슈퍼어드민이 아니라 **상담 화면에서 쓸 때마다** 고른다.
+  상담보드 본문 아래 **[🦷 치아 그림 (2D·3D)]** → 전체화면(`components/dental/tooth-viewer.tsx`): [2D | 3D] 전환(마지막 선택 기억),
+  2D는 교합면/정면, 표시 색 5가지로 치아를 눌러 표시(2D·3D가 같은 표시 공유), [기록에 담기] → 지금 화면 PNG + 텍스트
+  (`[치아 표시 — 날짜 · N개]` / `빨강: #16(상악 우측 제1대구치)`). `/admin/dental`은 2D 라이브러리(색 바꾸기·SVG 내려받기) 전용으로 되돌림.
+  3D 뷰어 `components/dental/dental-3d.tsx`(three.js, next/dynamic으로 3D를 켤 때만 로드). `components/dental/dental-3d.tsx`(three.js, next/dynamic으로 3D를 켤 때만 로드).
   끌어서 돌리기·확대 · 시점 버튼(정면·우측·좌측·상악 교합면·하악 교합면 — 교합면 시점은 맞은편 아치를 숨김) · 입 벌리기 슬라이더 ·
   치아를 누르면 선택(강조색)·치식 표시.
 - **모델 ① Carelog 자체 모델**(`lib/dental/teeth-3d.ts`): 2D 원본의 치수·교합면 윤곽·아치 배치를 그대로 써서 단면을 높이별로 쌓아 만든다
@@ -55,7 +59,8 @@
   한계: 치근 한 갈래로 단순화, 교합면 세부(구·융선) 없음.
 - **모델 ② 던디대 "Permanent Dentition"**(CC BY 4.0): ⏳ **파일 확보 대기** — Sketchfab이 다운로드에 로그인을 요구(API 401)해
   에이전트가 직접 받을 수 없다. 대표가 받아 전달하면 → 치아별 분리(연결 덩어리 단위) → 위치로 FDI 판정 → 메시 이름 `T11~T48` →
-  `public/dental-3d/dundee-permanent-dentition.glb`로 넣는다. 화면에 출처 표기(CC BY 의무) 이미 들어가 있음.
+  `public/dental-3d/dundee-permanent-dentition.glb`로 넣고 `tooth-viewer.tsx`의 `DUNDEE.ready`를 켠다 → 3D에 [기본 모델 | 정밀 모델] 선택이 나타남.
+  출처 표기(CC BY 의무)는 정밀 모델 선택 시 화면 아래에 표시. 대표 회원가입 진행 중(2026-10-22).
 - **외부 모델 규칙**: 어떤 GLB든 메시 이름이 `T11`~`T48`이면 같은 뷰어에서 그대로 동작(선택·색·입 벌리기). 제작 의뢰 시 이 규칙을 요구사항으로.
 
 ## 3. 하지 않는 것

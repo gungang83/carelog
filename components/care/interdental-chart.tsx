@@ -105,7 +105,11 @@ export function InterdentalChart({
   const exportPng = async (): Promise<File> => {
     const svg = svgRef.current;
     if (!svg) throw new Error("차트를 찾을 수 없습니다.");
-    const xml = new XMLSerializer().serializeToString(svg);
+    // 크기 속성이 없으면 이미지가 기본 크기(300×150)로 잡혀 여백이 생기므로 명시한다
+    const clone = svg.cloneNode(true) as SVGSVGElement;
+    clone.setAttribute("width", String(W));
+    clone.setAttribute("height", String(H));
+    const xml = new XMLSerializer().serializeToString(clone);
     const url = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(xml)}`;
     const img = new Image();
     await new Promise<void>((res, rej) => {

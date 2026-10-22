@@ -25,20 +25,24 @@ const HOVER = new THREE.Color("#e0f2fe");
 
 type ToothObj = { fdi: Fdi; mesh: THREE.Mesh; baseY: number };
 
+/** 지금 보이는 화면을 PNG로(상담 기록에 담기) */
+export type Capture3D = () => Promise<Blob | null>;
+
 export function Dental3D({
   modelUrl,
   withThirdMolars = false,
-  accent = "#f87171",
   paint,
+  onToothClick,
+  captureRef,
   className,
 }: {
   /** 외부 GLB. 없으면 자체 생성 모델 */
   modelUrl?: string;
   withThirdMolars?: boolean;
-  /** 선택한 치아 색 */
-  accent?: string;
-  /** 치아별 고정 색 — { "16": "#fecaca" } */
+  /** 치아별 색 — { "16": "#f87171" } (2D와 같은 선택 상태를 그대로 받는다) */
   paint?: Record<Fdi, string | undefined>;
+  onToothClick?: (fdi: Fdi) => void;
+  captureRef?: { current: Capture3D | null };
   className?: string;
 }) {
   const hostRef = useRef<HTMLDivElement>(null);
@@ -48,13 +52,12 @@ export function Dental3D({
     teeth: ToothObj[];
     repaint: () => void;
   } | null>(null);
-  const [selected, setSelected] = useState<Fdi[]>([]);
   const [hovered, setHovered] = useState<Fdi | null>(null);
   const [open, setOpen] = useState(0);
   const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
-  const sel = useRef<Fdi[]>([]);
   const hov = useRef<Fdi | null>(null);
-  const colors = useRef({ accent, paint });
+  const colors = useRef({ paint });
+  const click = useRef(onToothClick);
 
   useEffect(() => {
     const host = hostRef.current;
@@ -88,10 +91,10 @@ export function Dental3D({
     let radius = 40;
 
     const repaint = () => {
-      const { accent: ac, paint: pt } = colors.current;
+      const { paint: pt } = colors.current;
       for (const t of teeth) {
         const m = t.mesh.material as THREE.MeshStandardMaterial;
-        const c = sel.current.includes(t.fdi) ? new THREE.Color(ac) : pt?.[t.fdi] ? new THREE.Color(pt[t.fdi]) : BASE;
+        const c = pt?.[t.fdi] ? new THREE.Color(pt[t.fdi]) : BASE;
         m.color.copy(c);
         m.emissive.copy(hov.current === t.fdi ? HOVER : new THREE.Color("#000000"));
         m.emissiveIntensity = hov.current === t.fdi ? 0.35 : 0;
@@ -141,6 +144,13 @@ export function Dental3D({
       fit();
       repaint();
       api.current = { setView, setOpen: setOpenMm, teeth, repaint };
+      if (captureRef) {
+        captureRef.current = () =>
+          new Promise((res) => {
+            renderer.render(scene, camera);
+            renderer.domElement.toBlob(res, "image/png");
+          });
+      }
       setStatus("ready");
     };
 
@@ -197,9 +207,7 @@ export function Dental3D({
       down = null;
       const fdi = pick(ev);
       if (!fdi) return;
-      sel.current = sel.current.includes(fdi) ? sel.current.filter((x) => x !== fdi) : [...sel.current, fdi];
-      setSelected(sel.current);
-      repaint();
+      click.current?.(fdi);
     };
     const onMove = (ev: PointerEvent) => {
       if (ev.buttons) return;
@@ -247,14 +255,16 @@ export function Dental3D({
       renderer.dispose();
       renderer.domElement.remove();
       api.current = null;
+      if (captureRef) captureRef.current = null;
     };
-  }, [modelUrl, withThirdMolars]);
+  }, [modelUrl, withThirdMolars, captureRef]);
 
-  // 색 바뀌면 다시 칠하기
+  // 색·클릭 처리 바뀌면 반영
   useEffect(() => {
-    colors.current = { accent, paint };
+    colors.current = { paint };
+    click.current = onToothClick;
     api.current?.repaint();
-  }, [accent, paint]);
+  }, [paint, onToothClick]);
 
   return (
     <div className={`relative overflow-hidden rounded-2xl border border-slate-200 bg-white ${className ?? ""}`}>
@@ -291,11 +301,7 @@ export function Dental3D({
             {modelUrl ? "이 3D 모델 파일이 아직 준비되지 않았습니다." : "3D 모델을 만들지 못했습니다."}
           </span>}
         {status === "ready" &&
-          (hovered
-            ? toothLabel(hovered)
-            : selected.length > 0
-              ? `선택: ${selected.join(", ")}`
-              : "끌어서 돌리기 · 휠/두 손가락으로 확대 · 치아를 누르면 선택")}
+          (hovered ? toothLabel(hovered) : "끌어서 돌리기 · 휠/두 손가락으로 확대 · 치아를 누르면 표시")}
       </div>
     </div>
   );

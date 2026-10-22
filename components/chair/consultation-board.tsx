@@ -34,6 +34,7 @@ import { InterpreterStage } from "@/components/chair/interpreter-stage";
 import { RichTextEditor, type RichTextEditorHandle } from "@/components/rich-text-editor";
 import { PrescriptionPicker } from "@/components/chair/prescription-picker";
 import { InterdentalChart } from "@/components/care/interdental-chart";
+import { ToothViewer } from "@/components/dental/tooth-viewer";
 import { ParticipantPicker } from "@/components/chair/participant-picker";
 import { getLastChairId, setLastChairId } from "@/lib/chair/last-chair";
 import {
@@ -120,6 +121,7 @@ function BoardContent({
   // spec 030 — 실시간 통역 스테이지(실험실 PoC). ⚠️ 훅은 조기 return 위(66f).
   const [showInterpreter, setShowInterpreter] = useState(false);
   const [showInterdental, setShowInterdental] = useState(false); // spec 036 치간칫솔 사이즈 차트
+  const [showTeeth, setShowTeeth] = useState(false); // spec 037 치아 그림(2D·3D)
   const [recoverable, setRecoverable] = useState<BoardDraft | null>(null);
   // 청크(긴 상담) 전사 진행률 — "n/m 구간 전사 중" 표시(spec 010 US4).
   const [chunkProgress, setChunkProgress] = useState<{ done: number; total: number } | null>(null);
@@ -1199,6 +1201,14 @@ function BoardContent({
               onChange={setEditText}
               placeholder="상담 내용을 입력하거나 녹음을 정리하세요…"
             />
+            {/* spec 037 — 치아 그림: 쓸 때마다 2D·3D 선택, 치아 표시 → 기록에 담기 */}
+            <button
+              type="button"
+              onClick={() => setShowTeeth(true)}
+              className="inline-flex min-h-9 w-full items-center justify-center gap-1.5 rounded-xl border border-amber-200 bg-amber-50 px-4 text-sm font-semibold text-amber-800 transition hover:bg-amber-100"
+            >
+              🦷 치아 그림 (2D·3D)
+            </button>
             {editText.trim() && (
               <CopyAllButton
                 html={editText}
@@ -1320,6 +1330,18 @@ function BoardContent({
             editorRef.current?.insertText(text);
             setPrescriptions((prev) => (prev.includes("치간 칫솔") ? prev : [...prev, "치간 칫솔"]));
             setShowInterdental(false);
+          }}
+        />
+      )}
+
+      {/* spec 037 — 치아 그림: 지금 화면 이미지 + 표시한 치아 텍스트를 상담 기록에 */}
+      {showTeeth && (
+        <ToothViewer
+          onClose={() => setShowTeeth(false)}
+          onDone={async (image, text) => {
+            await editorRef.current?.insertImageFile(image);
+            if (text) editorRef.current?.insertText(text);
+            setShowTeeth(false);
           }}
         />
       )}
