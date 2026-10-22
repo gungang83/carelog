@@ -33,6 +33,7 @@ import { EngineSelector } from "@/components/chair/engine-selector";
 import { InterpreterStage } from "@/components/chair/interpreter-stage";
 import { RichTextEditor, type RichTextEditorHandle } from "@/components/rich-text-editor";
 import { PrescriptionPicker } from "@/components/chair/prescription-picker";
+import { InterdentalChart } from "@/components/care/interdental-chart";
 import { ParticipantPicker } from "@/components/chair/participant-picker";
 import { getLastChairId, setLastChairId } from "@/lib/chair/last-chair";
 import {
@@ -118,6 +119,7 @@ function BoardContent({
   const [usedEngine, setUsedEngine] = useState<string | null>(null);
   // spec 030 — 실시간 통역 스테이지(실험실 PoC). ⚠️ 훅은 조기 return 위(66f).
   const [showInterpreter, setShowInterpreter] = useState(false);
+  const [showInterdental, setShowInterdental] = useState(false); // spec 036 치간칫솔 사이즈 차트
   const [recoverable, setRecoverable] = useState<BoardDraft | null>(null);
   // 청크(긴 상담) 전사 진행률 — "n/m 구간 전사 중" 표시(spec 010 US4).
   const [chunkProgress, setChunkProgress] = useState<{ done: number; total: number } | null>(null);
@@ -1265,7 +1267,11 @@ function BoardContent({
             </div>
 
             {/* 처방 */}
-            <PrescriptionPicker value={prescriptions} onChange={setPrescriptions} />
+            <PrescriptionPicker
+              value={prescriptions}
+              onChange={setPrescriptions}
+              onOpenInterdentalChart={() => setShowInterdental(true)}
+            />
           </div>
 
           {/* 저장 */}
@@ -1304,6 +1310,19 @@ function BoardContent({
           </div>
         </div>
       </div>
+
+      {/* spec 036 — 치간칫솔 사이즈 차트: 결과 이미지+텍스트 블록을 상담 기록에 담고 처방 칩도 켠다 */}
+      {showInterdental && (
+        <InterdentalChart
+          onClose={() => setShowInterdental(false)}
+          onDone={async (image, text) => {
+            await editorRef.current?.insertImageFile(image);
+            editorRef.current?.insertText(text);
+            setPrescriptions((prev) => (prev.includes("치간 칫솔") ? prev : [...prev, "치간 칫솔"]));
+            setShowInterdental(false);
+          }}
+        />
+      )}
 
       {/* spec 030 — 실시간 통역 스테이지(마운트 시에만 연결·해제) */}
       {showInterpreter && (

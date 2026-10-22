@@ -10,9 +10,12 @@ const PRODUCTS = [
 export function PrescriptionPicker({
   value,
   onChange,
+  onOpenInterdentalChart,
 }: {
   value: string[];
   onChange: (v: string[]) => void;
+  /** spec 036 — 치간칫솔 사이즈 차트 열기(없으면 버튼 숨김) */
+  onOpenInterdentalChart?: () => void;
 }) {
   const toggle = (name: string) =>
     onChange(
@@ -49,6 +52,16 @@ export function PrescriptionPicker({
             </button>
           );
         })}
+        {onOpenInterdentalChart && (
+          <button
+            type="button"
+            onClick={onOpenInterdentalChart}
+            className="inline-flex items-center gap-1.5 rounded-full border border-pink-300 bg-pink-50 px-3 py-1.5 text-xs font-semibold text-pink-700 transition hover:bg-pink-100"
+            title="치아 사이마다 치간칫솔 사이즈를 지정해 상담 기록에 담습니다"
+          >
+            🦷 치간칫솔 사이즈 차트
+          </button>
+        )}
       </div>
     </div>
   );

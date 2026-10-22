@@ -292,6 +292,8 @@ const BTN_ACTIVE =
 // ── Component ─────────────────────────────────────────────────
 export type RichTextEditorHandle = {
   insertText: (text: string) => void;
+  /** 이미지 파일을 업로드해 본문에 삽입(spec 036 치간칫솔 차트 등 외부 도구의 결과물). */
+  insertImageFile: (file: File) => Promise<void>;
   clear: () => void;
   setHTML: (html: string) => void;
   /** 현재 에디터 내용을 HTML로 즉시 읽는다(자동저장 — React 상태 갱신 대기 없이 동기 캡처). */
@@ -326,6 +328,15 @@ function RichTextEditor({ value, onChange, placeholder }, ref) {
         .map((line) => `<p>${line}</p>`)
         .join("");
       editorRef.current.chain().focus().insertContent(html).run();
+    },
+    async insertImageFile(file: File) {
+      if (!editorRef.current) return;
+      const url = await uploadImage(file);
+      editorRef.current
+        .chain()
+        .focus()
+        .insertContent([{ type: "image", attrs: { src: url } }, { type: "paragraph" }])
+        .run();
     },
     clear() {
       editorRef.current?.commands.clearContent();
