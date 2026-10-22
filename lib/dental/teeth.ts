@@ -85,7 +85,7 @@ export function archTeeth(upper: boolean, withThirdMolars = false): Fdi[] {
 
 // ── 경로 유틸 ─────────────────────────────────────────────────────────
 
-type P = [number, number];
+export type P = [number, number];
 const f = (n: number) => Math.round(n * 100) / 100;
 
 /** Catmull-Rom → 3차 베지어 매끈한 경로. closed면 닫힌 윤곽. */
@@ -128,51 +128,79 @@ export type ToothShape = {
   box: { x: number; y: number; w: number; h: number };
 };
 
+/** 교합면 윤곽 제어점(정규화 −0.5~0.5, 매끈하게 하기 전). 3D 단면 등 다른 표현도 이 윤곽을 공유한다. */
+function occlusalOutlineNorm(fdi: Fdi): P[] {
+  const pos = toothPos(fdi);
+  const up = isUpper(fdi);
+  if (pos <= 2) {
+    // 절치 — 순측은 넓은 호, 설측은 기저결절(cingulum) 쪽으로 좁아짐
+    return [
+      [-0.5, -0.12], [-0.38, -0.4], [0, -0.5], [0.38, -0.4], [0.5, -0.12],
+      [0.36, 0.14], [0.14, 0.4], [0, 0.48], [-0.14, 0.4], [-0.36, 0.14],
+    ];
+  }
+  if (pos === 3) {
+    // 견치
+    return [
+      [-0.5, -0.04], [-0.32, -0.4], [0, -0.5], [0.32, -0.4], [0.5, -0.04],
+      [0.34, 0.3], [0, 0.5], [-0.34, 0.3],
+    ];
+  }
+  if (pos <= 5) {
+    // 소구치 — 타원형(하악은 설측이 좁다)
+    const lingualNarrow = up ? 1 : 0.8;
+    return [
+      [-0.5, 0], [-0.42, -0.36], [0, -0.5], [0.42, -0.36], [0.5, 0],
+      [0.42 * lingualNarrow, 0.36], [0, 0.5], [-0.42 * lingualNarrow, 0.36],
+    ];
+  }
+  if (up) {
+    // 상악 대구치 — 마름모꼴
+    return [
+      [-0.48, -0.42], [0, -0.5], [0.45, -0.44], [0.5, 0], [0.38, 0.42],
+      [0, 0.5], [-0.44, 0.45], [-0.5, 0],
+    ];
+  }
+  // 하악 대구치 — 사각형(5교두)
+  return [
+    [-0.5, -0.38], [-0.1, -0.5], [0.3, -0.48], [0.5, -0.3], [0.5, 0.1],
+    [0.42, 0.44], [0, 0.5], [-0.46, 0.44], [-0.5, 0],
+  ];
+}
+
+/** 교합면 윤곽 제어점(mm, 중심 0,0, -y = 협·순측, +x = 원심). */
+export function occlusalOutline(fdi: Fdi): P[] {
+  const { md, bl } = dims(fdi);
+  return scalePts(occlusalOutlineNorm(fdi), md, bl);
+}
+
 /** 교합면 모양. 단위 mm, 중심 (0,0), -y = 협·순측, +x = 원심. */
 function occlusalShape(fdi: Fdi): ToothShape {
   const { md: w, bl: d } = dims(fdi);
   const pos = toothPos(fdi);
   const up = isUpper(fdi);
-  let outline: [number, number][];
   let details: string[] = [];
 
   if (pos <= 2) {
     // 절치 — 순측은 넓은 호, 설측은 기저결절(cingulum) 쪽으로 좁아짐
-    outline = [
-      [-0.5, -0.12], [-0.38, -0.4], [0, -0.5], [0.38, -0.4], [0.5, -0.12],
-      [0.36, 0.14], [0.14, 0.4], [0, 0.48], [-0.14, 0.4], [-0.36, 0.14],
-    ];
     details = [
       smoothPath(scalePts([[-0.42, -0.22], [0, -0.3], [0.42, -0.22]], w, d), false), // 절단연
       smoothPath(scalePts([[-0.16, 0.22], [0, 0.3], [0.16, 0.22]], w, d), false), // 기저결절
     ];
   } else if (pos === 3) {
     // 견치 — 교두정에서 근·원심 융선, 설측 융선
-    outline = [
-      [-0.5, -0.04], [-0.32, -0.4], [0, -0.5], [0.32, -0.4], [0.5, -0.04],
-      [0.34, 0.3], [0, 0.5], [-0.34, 0.3],
-    ];
     details = [
       smoothPath(scalePts([[-0.44, -0.08], [0, -0.2], [0.44, -0.08]], w, d), false),
       smoothPath(scalePts([[0, -0.2], [0, 0.32]], w, d), false),
     ];
   } else if (pos <= 5) {
     // 소구치 — 타원형, 근원심 중심구 + 양끝 소와
-    const lingualNarrow = up ? 1 : 0.8;
-    outline = [
-      [-0.5, 0], [-0.42, -0.36], [0, -0.5], [0.42, -0.36], [0.5, 0],
-      [0.42 * lingualNarrow, 0.36], [0, 0.5], [-0.42 * lingualNarrow, 0.36],
-    ];
     details = [
       smoothPath(scalePts([[-0.32, 0.02], [0, up ? 0.06 : 0.1], [0.32, 0.02]], w, d), false),
       smoothPath(scalePts([[0, -0.38], [0, -0.12]], w, d), false),
     ];
   } else if (up) {
     // 상악 대구치 — 마름모꼴, 협측구·중심구·사선융선/원심설측구
-    outline = [
-      [-0.48, -0.42], [0, -0.5], [0.45, -0.44], [0.5, 0], [0.38, 0.42],
-      [0, 0.5], [-0.44, 0.45], [-0.5, 0],
-    ];
     details = [
       smoothPath(scalePts([[0.02, -0.46], [0, -0.04]], w, d), false), // 협측구
       smoothPath(scalePts([[-0.36, -0.08], [-0.04, 0.02], [0.3, 0.12]], w, d), false), // 중심구
@@ -180,10 +208,6 @@ function occlusalShape(fdi: Fdi): ToothShape {
     ];
   } else {
     // 하악 대구치 — 사각형, 5교두(협측 3·설측 2), 중심구 + 협측구 2 + 설측구 1
-    outline = [
-      [-0.5, -0.38], [-0.1, -0.5], [0.3, -0.48], [0.5, -0.3], [0.5, 0.1],
-      [0.42, 0.44], [0, 0.5], [-0.46, 0.44], [-0.5, 0],
-    ];
     details = [
       smoothPath(scalePts([[-0.4, 0.0], [0, 0.04], [0.4, 0.02]], w, d), false),
       smoothPath(scalePts([[-0.1, -0.48], [-0.08, 0.02]], w, d), false),
@@ -192,7 +216,7 @@ function occlusalShape(fdi: Fdi): ToothShape {
     ];
   }
   return {
-    crown: smoothPath(scalePts(outline, w, d)),
+    crown: smoothPath(occlusalOutline(fdi)),
     details,
     box: { x: -w / 2, y: -d / 2, w, h: d },
   };

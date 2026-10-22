@@ -102,7 +102,7 @@ components/
 ├── consultation-form.tsx          # 상담 기록 작성 폼 (처방 메모 포함)
 ├── consultation-history.tsx       # 상담 이력 목록 (HTML 렌더링)
 ├── rich-text-editor.tsx           # Tiptap 리치 텍스트 에디터 (인라인 이미지·주석 포함)
-├── dental/                        # spec 037 치아 도식 — dental-teeth(DentalTeeth·DentalArchSvg) · dental-library(/admin/dental 보관함)
+├── dental/                        # spec 037 치아 도식 — dental-teeth(DentalTeeth·DentalArchSvg) · dental-library(/admin/dental 보관함) · dental-3d(three.js 뷰어, dynamic 로드)
 ├── care/interdental-chart.tsx     # spec 036 치간칫솔 사이즈 차트(교합면 도식 위 치간 26곳)
 ├── image-annotator.tsx            # 이미지 주석 캔버스 모달 (펜·직선·화살표·사각형·텍스트·지우개)
 ├── station-manager.tsx            # 체어 번호 설정
@@ -132,7 +132,8 @@ lib/
 ├── station-storage.ts             # 로컬스토리지 체어 번호 관리
 ├── care-templates.ts              # spec 036 기록 템플릿 — 치간칫솔 라이브러리(BRUSH_LINES)·처방 텍스트
 ├── dental/
-│   └── teeth.ts                   # spec 037 치아 도식 원본(2D SVG) — 모양·배치·FDI·SVG 내보내기
+│   ├── teeth.ts                   # spec 037 치아 도식 원본(2D SVG) — 모양·배치·FDI·SVG 내보내기
+│   └── teeth-3d.ts                # spec 037 3D 자체 모델(2D 원본 치수로 로프트 생성, 메시 이름 T11~T48)
 └── utils.ts                       # 공통 유틸
 
 proxy.ts                           # Next.js 16 미들웨어 진입점 (middleware.ts 대체)

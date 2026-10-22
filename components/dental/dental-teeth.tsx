@@ -15,6 +15,9 @@ import {
 
 export type ToothPaint = Partial<ToothStyle> & { opacity?: number };
 
+// 서버·브라우저 삼각함수 끝자리 차이로 하이드레이션이 어긋나지 않게 좌표를 반올림
+const r2 = (n: number) => Math.round(n * 100) / 100;
+
 function Tooth({
   tooth,
   style,
@@ -36,7 +39,7 @@ function Tooth({
       onClick={onClick ? () => onClick(tooth.fdi) : undefined}
       style={onClick ? { cursor: "pointer" } : undefined}
     >
-      <g transform={`matrix(${tooth.matrix.join(" ")})`}>
+      <g transform={`matrix(${tooth.matrix.map(r2).join(" ")})`}>
         {shape.root && (
           <path d={shape.root} fill={style.rootFill} stroke={style.stroke} strokeWidth={style.strokeWidth} vectorEffect="non-scaling-stroke" />
         )}
@@ -55,8 +58,8 @@ function Tooth({
       </g>
       {label && (
         <text
-          x={tooth.cx}
-          y={tooth.cy + labelSize * 0.36}
+          x={r2(tooth.cx)}
+          y={r2(tooth.cy + labelSize * 0.36)}
           textAnchor="middle"
           fontSize={labelSize}
           fontWeight={600}
