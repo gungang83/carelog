@@ -23,6 +23,7 @@ import {
 import { PatientPicker, type PickedPatient } from "@/components/patients/patient-picker";
 import { ToothChart } from "@/components/lab/tooth-chart";
 import { SketchPad } from "@/components/lab/sketch-pad";
+import { ToothViewer } from "@/components/dental/tooth-viewer";
 
 const labBucket = "lab-orders";
 
@@ -124,6 +125,7 @@ export function LabOrderComposer({
   const [attachments, setAttachments] = useState<LabAttachmentMeta[]>(initial?.attachments ?? []);
   const [uploading, setUploading] = useState(false);
   const [sketchOpen, setSketchOpen] = useState(false);
+  const [teethOpen, setTeethOpen] = useState(false); // spec 037 — 치아 모형(2D·3D) 스냅샷에 그려 첨부
 
   const handleLabChange = (name: string) => {
     setLabName(name);
@@ -661,6 +663,9 @@ export function LabOrderComposer({
           <button type="button" onClick={() => setSketchOpen(true)} className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs text-slate-600 hover:bg-slate-50">
             ✏️ 그림 지시
           </button>
+          <button type="button" onClick={() => setTeethOpen(true)} className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs text-slate-600 hover:bg-slate-50">
+            🦷 치아 모형에 그리기
+          </button>
           {uploading && <span className="text-xs text-slate-400">업로드 중…</span>}
         </div>
         {attachments.length > 0 && (
@@ -700,6 +705,17 @@ export function LabOrderComposer({
       </div>
 
       {sketchOpen && <SketchPad onDone={(b) => void handleSketchDone(b)} onCancel={() => setSketchOpen(false)} />}
+      {/* 치아 모형(2D·3D)을 원하는 각도로 돌려 찍고 그 위에 그려 손그림 첨부로(전송 시 drawing) */}
+      {teethOpen && (
+        <ToothViewer
+          doneLabel="첨부하기"
+          onClose={() => setTeethOpen(false)}
+          onDone={async (image) => {
+            setTeethOpen(false);
+            await uploadBlob(image, `teeth_${Date.now()}.png`, "sketch");
+          }}
+        />
+      )}
     </section>
   );
 }

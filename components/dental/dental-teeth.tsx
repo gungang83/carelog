@@ -4,6 +4,7 @@
 
 import {
   DEFAULT_STYLE,
+  TABLE_SHADE,
   facialLayout,
   occlusalLayout,
   type Fdi,
@@ -44,6 +45,20 @@ function Tooth({
           <path d={shape.root} fill={style.rootFill} stroke={style.stroke} strokeWidth={style.strokeWidth} vectorEffect="non-scaling-stroke" />
         )}
         <path d={shape.crown} fill={style.crownFill} stroke={style.stroke} strokeWidth={style.strokeWidth} vectorEffect="non-scaling-stroke" />
+        {shape.table && (
+          <path d={shape.table} fill={TABLE_SHADE} stroke={style.detailStroke} strokeWidth={style.strokeWidth * 0.6} vectorEffect="non-scaling-stroke" />
+        )}
+        {shape.ridges?.map((d, i) => (
+          <path
+            key={`r${i}`}
+            d={d}
+            fill="none"
+            stroke={style.detailStroke}
+            strokeWidth={style.strokeWidth * 0.7}
+            strokeLinecap="round"
+            vectorEffect="non-scaling-stroke"
+          />
+        ))}
         {shape.details.map((d, i) => (
           <path
             key={i}
@@ -55,6 +70,18 @@ function Tooth({
             vectorEffect="non-scaling-stroke"
           />
         ))}
+        {shape.grooves?.map((d, i) => (
+          <path
+            key={`g${i}`}
+            d={d}
+            fill="none"
+            stroke={style.grooveStroke}
+            strokeWidth={style.strokeWidth * 0.9}
+            strokeLinecap="round"
+            vectorEffect="non-scaling-stroke"
+          />
+        ))}
+        {shape.pits?.map(([x, y], i) => <circle key={`p${i}`} cx={x} cy={y} r={0.2} fill={style.grooveStroke} />)}
       </g>
       {label && (
         <text

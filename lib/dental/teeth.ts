@@ -124,6 +124,14 @@ export type ToothShape = {
   root?: string;
   /** 교두·구(groove)·융선 등 세부 선 */
   details: string[];
+  /** 교합면 테이블(변연융선 안쪽) 윤곽 — 살짝 음영 */
+  table?: string;
+  /** 구(groove) — 진한 선 */
+  grooves?: string[];
+  /** 융선(삼각융선·사선융선·횡주융선) — 옅은 선 */
+  ridges?: string[];
+  /** 소와(pit) 중심 [x, y] (mm) */
+  pits?: [number, number][];
   /** 로컬 좌표 경계 상자 */
   box: { x: number; y: number; w: number; h: number };
 };
@@ -174,52 +182,223 @@ export function occlusalOutline(fdi: Fdi): P[] {
   return scalePts(occlusalOutlineNorm(fdi), md, bl);
 }
 
+// ── 교합면 해부(2D 도식·3D 모델 공용 원본) ─────────────────────────────
+// 좌표: u = 근원심(+ 원심), v = 협설(− 협·순측, + 설측), 둘 다 치아 폭으로 나눈 값(−0.5 ~ 0.5).
+// 교두 = [u, v, 높이(0~1), 반경] · 구(groove) = [시작, 끝, 깊이] — 깊이가 음수면 융선(ridge, 솟음).
+// 평균 영구치 형태학 기준: 상악 대구치 4교두(근심설측 최대 · 사선융선 · 협측구 · 원심설측구),
+// 하악 제1대구치 5교두(설측 교두가 높음 · 근심/원심협측구 · 설측구), 하악 제2대구치 4교두(+자 구),
+// 상악 소구치 2교두(협측 > 설측) · 하악 제1소구치(협측 우세 · 작은 설측) · 하악 제2소구치 3교두(Y자 구),
+// 견치 1교두(교두정 약간 근심 · 설측 융선), 절치 절단연(발육엽 흔적).
+export type Cusp = [number, number, number, number];
+export type Groove = [[number, number], [number, number], number];
+export type Occlusal = { cusps: Cusp[]; grooves: Groove[]; depth: number; floor: number };
+
+export function occlusalAnatomy(fdi: Fdi): Occlusal {
+  const pos = toothPos(fdi);
+  const up = isUpper(fdi);
+  if (pos <= 2) {
+    // 절치: 절단연(융선) + 발육엽 3개의 얕은 굴곡
+    return {
+      cusps: [[-0.26, -0.2, 0.96, 0.26], [0, -0.2, 1, 0.26], [0.26, -0.2, 0.95, 0.26]],
+      grooves: [[[-0.42, -0.2], [0.42, -0.2], -0.5]],
+      depth: 0.12,
+      floor: 0.55,
+    };
+  }
+  if (pos === 3) {
+    // 견치: 교두정(약간 근심) + 설측 융선, 양옆 얕은 설측와
+    return {
+      cusps: [[-0.06, -0.12, 1, 0.55]],
+      grooves: [
+        [[-0.06, -0.12], [0, 0.36], -0.35],
+        [[-0.2, 0.02], [-0.14, 0.3], 0.35],
+        [[0.16, 0.02], [0.12, 0.3], 0.35],
+      ],
+      depth: 0.32,
+      floor: 0.2,
+    };
+  }
+  if (pos <= 5 && up) {
+    // 상악 소구치: 협측·설측 2교두, 근원심 중심구 + 양끝 삼각구
+    return {
+      cusps: [[0, -0.2, 1, 0.36], [pos === 4 ? 0.04 : 0, 0.22, pos === 4 ? 0.82 : 0.95, 0.32]],
+      grooves: [
+        [[-0.3, 0.02], [0.3, 0.02], 1],
+        [[-0.3, 0.02], [-0.38, -0.14], 0.55],
+        [[0.3, 0.02], [0.38, -0.14], 0.55],
+        [[-0.3, 0.02], [-0.36, 0.18], 0.4],
+        [[0.3, 0.02], [0.36, 0.18], 0.4],
+      ],
+      depth: 0.32,
+      floor: 0.18,
+    };
+  }
+  if (pos === 4) {
+    // 하악 제1소구치: 큰 협측 교두 + 작은 설측 교두, 횡주융선, 근·원심 소와
+    return {
+      cusps: [[0, -0.12, 1, 0.42], [0, 0.3, 0.45, 0.2]],
+      grooves: [
+        [[0, -0.12], [0, 0.3], -0.3],
+        [[-0.2, 0.1], [-0.3, 0.32], 0.7],
+        [[0.2, 0.1], [0.3, 0.3], 0.7],
+      ],
+      depth: 0.3,
+      floor: 0.2,
+    };
+  }
+  if (pos === 5) {
+    // 하악 제2소구치(3교두형): 협측 + 근심설측·원심설측, Y자 구
+    return {
+      cusps: [[0, -0.2, 1, 0.36], [-0.17, 0.24, 0.8, 0.24], [0.2, 0.25, 0.7, 0.22]],
+      grooves: [
+        [[-0.32, 0.02], [0.02, 0.06], 1],
+        [[0.02, 0.06], [0.32, 0.02], 1],
+        [[0.02, 0.06], [0.03, 0.48], 0.8],
+      ],
+      depth: 0.3,
+      floor: 0.16,
+    };
+  }
+  if (up) {
+    // 상악 대구치: 근심협측·원심협측·근심설측(최대)·원심설측(제2·3대구치는 작다) + 사선융선
+    const dl = pos === 6 ? 0.68 : 0.5;
+    return {
+      cusps: [[-0.24, -0.26, 0.95, 0.3], [0.24, -0.26, 0.85, 0.27], [-0.2, 0.22, 1, 0.36], [0.28, 0.28, dl, 0.22]],
+      grooves: [
+        [[-0.36, 0.0], [0.04, -0.02], 1], // 중심구(근심 → 중심와)
+        [[0.02, -0.04], [0.02, -0.48], 0.9], // 협측구
+        [[0.12, 0.04], [0.34, 0.06], 0.6], // 원심 소와로
+        [[0.1, 0.06], [0.32, 0.46], 0.9], // 원심설측구
+        [[-0.2, 0.22], [0.24, -0.26], -0.38], // 사선융선
+      ],
+      depth: 0.36,
+      floor: 0.12,
+    };
+  }
+  if (pos === 6) {
+    // 하악 제1대구치: 5교두(협측 3 · 설측 2, 설측이 높다)
+    return {
+      cusps: [
+        [-0.3, -0.25, 0.85, 0.26],
+        [0.02, -0.28, 0.8, 0.24],
+        [0.33, -0.16, 0.65, 0.18],
+        [-0.26, 0.25, 1, 0.28],
+        [0.16, 0.26, 0.95, 0.26],
+      ],
+      grooves: [
+        [[-0.42, 0.0], [0.4, 0.03], 1], // 중심구
+        [[-0.13, 0.0], [-0.15, -0.48], 0.85], // 근심협측구
+        [[0.2, 0.02], [0.28, -0.44], 0.7], // 원심협측구
+        [[-0.05, 0.01], [-0.04, 0.48], 0.85], // 설측구
+      ],
+      depth: 0.36,
+      floor: 0.12,
+    };
+  }
+  // 하악 제2·3대구치: 4교두, +자 구
+  return {
+    cusps: [[-0.25, -0.25, 0.85, 0.28], [0.25, -0.25, 0.8, 0.27], [-0.25, 0.25, 1, 0.28], [0.25, 0.25, 0.95, 0.27]],
+    grooves: [
+      [[-0.42, 0.0], [0.42, 0.0], 1],
+      [[0.0, 0.0], [0.0, -0.48], 0.85],
+      [[0.0, 0.0], [0.0, 0.48], 0.85],
+    ],
+    depth: 0.36,
+    floor: 0.12,
+  };
+}
+
 /** 교합면 모양. 단위 mm, 중심 (0,0), -y = 협·순측, +x = 원심. */
 function occlusalShape(fdi: Fdi): ToothShape {
   const { md: w, bl: d } = dims(fdi);
   const pos = toothPos(fdi);
-  const up = isUpper(fdi);
-  let details: string[] = [];
+  const outline = occlusalOutline(fdi);
+  const anat = occlusalAnatomy(fdi);
+  const mm = ([u, v]: [number, number]): P => [u * w, v * d];
+  const shrink = (sx: number, sy: number, oy = 0) => smoothPath(outline.map(([x, y]) => [x * sx, y * sy + oy * d] as P));
+  const details: string[] = [];
+  const grooves: string[] = [];
+  const ridges: string[] = [];
+  const pits: [number, number][] = [];
+  let table: string;
+
+  // 2D에선 구를 교합면 테이블 안(+약간)에서 끝낸다 — 협·설면으로 넘어가는 부분은 교합면 그림에서 생략
+  const clip = (p: [number, number], q: [number, number]): [number, number] => {
+    const inside = (r: [number, number]) => (r[0] / 0.4) ** 2 + (r[1] / 0.39) ** 2 <= 1;
+    if (inside(p)) return p;
+    let lo = 0;
+    let hi = 1; // q(안쪽) → p(바깥) 사이 이분 탐색
+    for (let k = 0; k < 16; k++) {
+      const m = (lo + hi) / 2;
+      if (inside([q[0] + (p[0] - q[0]) * m, q[1] + (p[1] - q[1]) * m])) lo = m;
+      else hi = m;
+    }
+    return [q[0] + (p[0] - q[0]) * lo, q[1] + (p[1] - q[1]) * lo];
+  };
+  // 구: 직선이 아니라 살짝 굽이치게(교대로 반대쪽으로 휨)
+  const groovePath = ([ga0, gb0]: [[number, number], [number, number]], i: number) => {
+    const ga = clip(ga0, gb0);
+    const gb = clip(gb0, ga);
+    const [ax, ay] = mm(ga);
+    const [bx, by] = mm(gb);
+    const len = Math.hypot(bx - ax, by - ay) || 1;
+    const bend = 0.06 * len * (i % 2 ? 1 : -1);
+    const mid: P = [(ax + bx) / 2 + (-(by - ay) / len) * bend, (ay + by) / 2 + ((bx - ax) / len) * bend];
+    return smoothPath([[ax, ay], mid, [bx, by]], false);
+  };
+  const split = () =>
+    anat.grooves.forEach(([ga, gb, depth], i) => (depth < 0 ? ridges : grooves).push(groovePath([ga, gb], i)));
 
   if (pos <= 2) {
-    // 절치 — 순측은 넓은 호, 설측은 기저결절(cingulum) 쪽으로 좁아짐
-    details = [
-      smoothPath(scalePts([[-0.42, -0.22], [0, -0.3], [0.42, -0.22]], w, d), false), // 절단연
-      smoothPath(scalePts([[-0.16, 0.22], [0, 0.3], [0.16, 0.22]], w, d), false), // 기저결절
-    ];
+    // 절치: 절단연 · 설면와(변연융선 안쪽) · 기저결절
+    table = shrink(0.66, 0.5, 0.1);
+    details.push(smoothPath(scalePts([[-0.42, -0.22], [0, -0.3], [0.42, -0.22]], w, d), false));
+    ridges.push(smoothPath(scalePts([[-0.16, 0.26], [0, 0.34], [0.16, 0.26]], w, d), false));
   } else if (pos === 3) {
-    // 견치 — 교두정에서 근·원심 융선, 설측 융선
-    details = [
-      smoothPath(scalePts([[-0.44, -0.08], [0, -0.2], [0.44, -0.08]], w, d), false),
-      smoothPath(scalePts([[0, -0.2], [0, 0.32]], w, d), false),
-    ];
-  } else if (pos <= 5) {
-    // 소구치 — 타원형, 근원심 중심구 + 양끝 소와
-    details = [
-      smoothPath(scalePts([[-0.32, 0.02], [0, up ? 0.06 : 0.1], [0.32, 0.02]], w, d), false),
-      smoothPath(scalePts([[0, -0.38], [0, -0.12]], w, d), false),
-    ];
-  } else if (up) {
-    // 상악 대구치 — 마름모꼴, 협측구·중심구·사선융선/원심설측구
-    details = [
-      smoothPath(scalePts([[0.02, -0.46], [0, -0.04]], w, d), false), // 협측구
-      smoothPath(scalePts([[-0.36, -0.08], [-0.04, 0.02], [0.3, 0.12]], w, d), false), // 중심구
-      smoothPath(scalePts([[0.12, 0.08], [0.24, 0.26], [0.3, 0.42]], w, d), false), // 원심설측구
-    ];
+    // 견치: 근·원심 교두융선 · 설측융선 · 양옆 설측와
+    table = shrink(0.7, 0.58, 0.06);
+    details.push(smoothPath(scalePts([[-0.46, -0.06], [-0.06, -0.24], [0.46, -0.06]], w, d), false));
+    split();
   } else {
-    // 하악 대구치 — 사각형, 5교두(협측 3·설측 2), 중심구 + 협측구 2 + 설측구 1
-    details = [
-      smoothPath(scalePts([[-0.4, 0.0], [0, 0.04], [0.4, 0.02]], w, d), false),
-      smoothPath(scalePts([[-0.1, -0.48], [-0.08, 0.02]], w, d), false),
-      smoothPath(scalePts([[0.26, -0.46], [0.2, 0.03]], w, d), false),
-      smoothPath(scalePts([[0.04, 0.48], [0.02, 0.04]], w, d), false),
-    ];
+    // 소구치·대구치: 교합면 테이블 · 구 · 소와 · 삼각융선(교두정 → 중심구) · 사선/횡주융선
+    table = shrink(0.76, 0.72);
+    split();
+    const main = anat.grooves.filter(([, , depth]) => depth > 0);
+    const deep = main.filter(([, , depth]) => depth >= 0.8);
+    // 삼각융선: 교두정에서 가장 가까운 주구(깊이 0.8 이상) 쪽으로, 교두정 조금 아래에서 시작해 살짝 휘며 내려간다
+    for (const [cu, cv] of anat.cusps) {
+      let best: [number, number] = [0, 0];
+      let bestD = Infinity;
+      for (const [ga, gb] of deep.length ? deep : main) {
+        for (let t = 0; t <= 1; t += 0.05) {
+          const q: [number, number] = [ga[0] + (gb[0] - ga[0]) * t, ga[1] + (gb[1] - ga[1]) * t];
+          const dd = Math.hypot(q[0] - cu, q[1] - cv);
+          if (dd < bestD) {
+            bestD = dd;
+            best = q;
+          }
+        }
+      }
+      const at = (t: number, bend: number): P =>
+        mm([cu + (best[0] - cu) * t - (best[1] - cv) * bend, cv + (best[1] - cv) * t + (best[0] - cu) * bend]);
+      ridges.push(smoothPath([at(0.12, 0), at(0.36, 0.04), at(0.62, 0)], false));
+    }
+    // 소와: 깊은 구(0.8 이상)끼리 만나는 점(중심와) + 가장 긴 주구의 근·원심 끝(근심·원심 소와)
+    const deepEnds = deep.flatMap(([ga, gb]) => [ga, gb]);
+    const seen: [number, number][] = [];
+    const addPit = (e: [number, number]) => {
+      if (seen.some((q) => Math.hypot(q[0] - e[0], q[1] - e[1]) < 0.08)) return;
+      seen.push(e);
+      pits.push(mm(clip(e, [0, 0])));
+    };
+    for (const e of deepEnds) if (deepEnds.filter((o) => Math.hypot(o[0] - e[0], o[1] - e[1]) < 0.08).length >= 2) addPit(e);
+    const longest = [...main].sort((x, y) => Math.hypot(y[1][0] - y[0][0], y[1][1] - y[0][1]) - Math.hypot(x[1][0] - x[0][0], x[1][1] - x[0][1]))[0];
+    if (longest && Math.abs(longest[0][1]) < 0.15 && Math.abs(longest[1][1]) < 0.15) {
+      addPit(longest[0]);
+      addPit(longest[1]);
+    }
   }
-  return {
-    crown: smoothPath(occlusalOutline(fdi)),
-    details,
-    box: { x: -w / 2, y: -d / 2, w, h: d },
-  };
+  return { crown: smoothPath(outline), details, table, grooves, ridges, pits, box: { x: -w / 2, y: -d / 2, w, h: d } };
 }
 
 /** 정면(순·협측에서 본) 모양. y=0 치경선, +y 치관, -y 치근. -x = 근심. */
@@ -500,7 +679,10 @@ export type ToothStyle = {
   crownFill: string;
   rootFill: string;
   stroke: string;
+  /** 융선·절단연 등 옅은 선 */
   detailStroke: string;
+  /** 구(groove)·소와 */
+  grooveStroke: string;
   strokeWidth: number;
 };
 
@@ -509,8 +691,12 @@ export const DEFAULT_STYLE: ToothStyle = {
   rootFill: "#f1e3c8",
   stroke: "#94a3b8",
   detailStroke: "#cbd5e1",
+  grooveStroke: "#9aa8ba",
   strokeWidth: 1.2,
 };
+
+/** 교합면 테이블 음영(치관 색 위에 겹쳐 칠해 어떤 색에서도 보이게) */
+export const TABLE_SHADE = "rgba(120, 96, 60, 0.07)";
 
 function toothGroupSvg(t: PlacedTooth, style: ToothStyle, label: boolean, fill?: string): string {
   const m = t.matrix.map((n) => f(n)).join(" ");
@@ -521,9 +707,19 @@ function toothGroupSvg(t: PlacedTooth, style: ToothStyle, label: boolean, fill?:
       ? `<path d="${t.shape.root}" fill="${style.rootFill}" stroke="${style.stroke}" stroke-width="${style.strokeWidth}" ${ve}/>`
       : "",
     `<path d="${t.shape.crown}" fill="${fill ?? style.crownFill}" stroke="${style.stroke}" stroke-width="${style.strokeWidth}" ${ve}/>`,
+    t.shape.table
+      ? `<path d="${t.shape.table}" fill="${TABLE_SHADE}" stroke="${style.detailStroke}" stroke-width="${style.strokeWidth * 0.6}" ${ve}/>`
+      : "",
+    ...(t.shape.ridges ?? []).map(
+      (d) => `<path d="${d}" fill="none" stroke="${style.detailStroke}" stroke-width="${style.strokeWidth * 0.7}" stroke-linecap="round" ${ve}/>`,
+    ),
     ...t.shape.details.map(
       (d) => `<path d="${d}" fill="none" stroke="${style.detailStroke}" stroke-width="${style.strokeWidth * 0.8}" stroke-linecap="round" ${ve}/>`,
     ),
+    ...(t.shape.grooves ?? []).map(
+      (d) => `<path d="${d}" fill="none" stroke="${style.grooveStroke}" stroke-width="${style.strokeWidth * 0.9}" stroke-linecap="round" ${ve}/>`,
+    ),
+    ...(t.shape.pits ?? []).map(([x, y]) => `<circle cx="${f(x)}" cy="${f(y)}" r="0.2" fill="${style.grooveStroke}"/>`),
   ];
   const lbl = label
     ? `<text x="${f(t.cx)}" y="${f(t.cy + 4)}" text-anchor="middle" font-size="11" font-weight="600" fill="#475569" font-family="system-ui, sans-serif">${t.fdi}</text>`

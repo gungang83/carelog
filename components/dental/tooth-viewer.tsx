@@ -2,6 +2,7 @@
 
 // spec 037 — 상담 중 치아 그림(전체화면). 쓸 때마다 2D·3D를 골라 환자에게 보여주고, 치아를 눌러 색으로 표시한 뒤
 // [기록에 담기] → 지금 화면 PNG + 표시한 치아 텍스트를 상담 기록에 넣는다. 2D·3D가 같은 표시 상태를 공유한다.
+// [✏️ 그려서 담기] → 지금 화면을 스냅샷으로 찍어 그림 도구(펜·화살표·텍스트)로 그린 뒤 담는다. 기공지 첨부에도 같은 화면을 쓴다.
 
 import dynamic from "next/dynamic";
 import { useCallback, useMemo, useRef, useState } from "react";
@@ -9,6 +10,7 @@ import { facialLayout, occlusalLayout, toothLabel, type Fdi, type ToothView } fr
 import { DentalTeeth, type ToothPaint } from "@/components/dental/dental-teeth";
 import type { Capture3D } from "@/components/dental/dental-3d";
 import { readViewMode, writeViewMode, type ViewMode as Mode } from "@/lib/dental/view-mode";
+import { ImageAnnotator } from "@/components/image-annotator";
 
 // three.js는 3D를 고를 때만 불러온다
 const Dental3D = dynamic(() => import("@/components/dental/dental-3d").then((m) => m.Dental3D), {
@@ -60,10 +62,13 @@ async function svgToPng(svg: SVGSVGElement, w: number, h: number): Promise<Blob 
 export function ToothViewer({
   onDone,
   onClose,
+  doneLabel = "기록에 담기",
 }: {
-  /** 기록에 담기 — 지금 화면 PNG + 표시한 치아 텍스트 */
+  /** 기록에 담기 — 지금 화면 PNG(그렸으면 그린 그림) + 표시한 치아 텍스트 */
   onDone: (image: File, text: string) => Promise<void> | void;
   onClose: () => void;
+  /** 완료 버튼 문구 — 기공지에선 "첨부하기" */
+  doneLabel?: string;
 }) {
   const [mode, setModeState] = useState<Mode>(() => readViewMode(MODE_KEY));
   const [view2d, setView2d] = useState<ToothView>("occlusal");
@@ -72,6 +77,8 @@ export function ToothViewer({
   const [current, setCurrent] = useState(COLORS[0].color);
   const [marks, setMarks] = useState<Record<Fdi, string>>({});
   const [busy, setBusy] = useState(false);
+  /** 그려서 담기 — 찍은 스냅샷(그림 도구로 연다) */
+  const [snapshot, setSnapshot] = useState<File | null>(null);
   const svgRef = useRef<SVGSVGElement>(null);
   const captureRef = useRef<Capture3D | null>(null);
 
@@ -112,20 +119,28 @@ export function ToothViewer({
     return [`[치아 표시 — ${todayLabel()} · ${marked.length}개]`, ...lines].join("\n");
   };
 
-  const handleDone = async () => {
+  /** 지금 보이는 화면(2D·3D)을 PNG로 */
+  const capture = async (): Promise<File> => {
+    const blob =
+      mode === "3d"
+        ? await captureRef.current?.()
+        : svgRef.current
+          ? await svgToPng(svgRef.current, layout.width, layout.height)
+          : null;
+    if (!blob) throw new Error("화면을 이미지로 만들지 못했습니다.");
+    return new File([blob], `teeth_${Date.now()}.png`, { type: "image/png" });
+  };
+
+  const finish = async (file: File) => {
+    await onDone(file, marked.length > 0 ? text() : "");
+  };
+
+  const run = async (fn: () => Promise<void>) => {
     setBusy(true);
     try {
-      const blob =
-        mode === "3d"
-          ? await captureRef.current?.()
-          : svgRef.current
-            ? await svgToPng(svgRef.current, layout.width, layout.height)
-            : null;
-      if (!blob) throw new Error("화면을 이미지로 만들지 못했습니다.");
-      const file = new File([blob], `teeth_${Date.now()}.png`, { type: "image/png" });
-      await onDone(file, marked.length > 0 ? text() : "");
+      await fn();
     } catch (e) {
-      alert(e instanceof Error ? e.message : "기록에 담지 못했습니다.");
+      alert(e instanceof Error ? e.message : "담지 못했습니다.");
     } finally {
       setBusy(false);
     }
@@ -185,11 +200,20 @@ export function ToothViewer({
           </button>
           <button
             type="button"
-            onClick={() => void handleDone()}
+            onClick={() => void run(async () => setSnapshot(await capture()))}
+            disabled={busy}
+            className="rounded-lg border border-sky-200 bg-sky-50 px-3 py-1.5 text-sm font-semibold text-sky-700 hover:bg-sky-100 disabled:opacity-40"
+            title="지금 보이는 화면을 찍어 그 위에 그립니다"
+          >
+            ✏️ 그려서 {doneLabel.replace(/^기록에 /, "")}
+          </button>
+          <button
+            type="button"
+            onClick={() => void run(async () => finish(await capture()))}
             disabled={busy}
             className="rounded-lg bg-sky-600 px-4 py-1.5 text-sm font-semibold text-white hover:bg-sky-700 disabled:opacity-40"
           >
-            {busy ? "담는 중…" : "기록에 담기"}
+            {busy ? "처리 중…" : doneLabel}
           </button>
         </div>
       </div>
@@ -244,6 +268,20 @@ export function ToothViewer({
           </svg>
         )}
       </div>
+      {/* 스냅샷 위에 그리기 — 저장하면 그린 그림이 담긴다 */}
+      {snapshot && (
+        <ImageAnnotator
+          file={snapshot}
+          saveLabel={doneLabel}
+          onClose={() => setSnapshot(null)}
+          onSave={(f) =>
+            void run(async () => {
+              await finish(f);
+              setSnapshot(null);
+            })
+          }
+        />
+      )}
     </div>
   );
 }

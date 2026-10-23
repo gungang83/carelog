@@ -11,7 +11,8 @@ const COLOR_FIELDS: { key: keyof Omit<ToothStyle, "strokeWidth">; label: string 
   { key: "crownFill", label: "치관" },
   { key: "rootFill", label: "치근" },
   { key: "stroke", label: "윤곽선" },
-  { key: "detailStroke", label: "구·융선" },
+  { key: "detailStroke", label: "융선" },
+  { key: "grooveStroke", label: "구(홈)" },
 ];
 
 export function DentalLibrary() {
