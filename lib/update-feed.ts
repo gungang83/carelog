@@ -285,6 +285,17 @@ export const UPDATE_FEED: UpdateFeedEntry[] = [
     ],
     internal: "spec 037 · 세션 68d",
   },
+  {
+    id: "2026-10-23-lab-attach-preview",
+    date: "2026-10-23",
+    emoji: "🖼",
+    title: "기공지 첨부 미리보기·수정",
+    items: [
+      "기공지에 첨부한 사진·그림·동영상이 작은 미리보기로 보입니다.",
+      "누르면 크게 보고 확대할 수 있고, 사진·그림은 [수정]으로 그 위에 다시 그려 바꿀 수 있습니다. [빼기]로 첨부에서 뺄 수 있습니다.",
+    ],
+    internal: "spec 035 §3.10 · 세션 68d",
+  },
 ];
 
 // ── 결정 상태 (DB update_feed_decisions) ──────────────────────────────

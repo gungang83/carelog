@@ -131,6 +131,23 @@ export async function createLabAttachmentUpload(
   return { ok: true, path, token: data.token };
 }
 
+/** 작성 화면 첨부 미리보기용 단기 서명 URL(10분). 화면 표시에만 쓰고 저장하지 않는다(만료 링크를 남기지 않는 원칙). */
+export async function getLabAttachmentPreviewUrls(
+  paths: string[],
+): Promise<{ ok: true; urls: Record<string, string> } | Fail> {
+  const auth = await requireMember();
+  if (!auth.ok) return auth;
+  // 우리 기관 경로만
+  const mine = paths.filter((p) => p.startsWith(`${auth.institutionId}/`)).slice(0, 50);
+  if (mine.length === 0) return { ok: true, urls: {} };
+  const admin = createAdminSupabaseClient();
+  const { data, error } = await admin.storage.from(labBucket).createSignedUrls(mine, 600);
+  if (error) return { ok: false, message: `미리보기를 불러오지 못했습니다: ${error.message}` };
+  const urls: Record<string, string> = {};
+  for (const d of data ?? []) if (d.path && d.signedUrl) urls[d.path] = d.signedUrl;
+  return { ok: true, urls };
+}
+
 // ── 의뢰 제출 (세트 — 기공물 여러 개를 한 번에, 장마다 1행) ──
 
 export type LabOrderItemInput = {

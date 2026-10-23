@@ -4,11 +4,12 @@
 // 기공물 여러 개 = 한 세트([+ 기공물 추가]) · 의뢰일(기본 오늘)·완료 희망(납기)일 ·
 // 거래했던 기공소 자동 제안 · 보낸 뒤 수정/첨부 추가(수정 이력 기록 — 전송 후 수정 명확 표시).
 
-import { useMemo, useRef, useState, useTransition } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { createBrowserSupabaseClient } from "@/lib/supabase/client";
 import { compressImageFile } from "@/lib/image/optimize";
 import {
   createLabAttachmentUpload,
+  getLabAttachmentPreviewUrls,
   submitLabOrderSet,
   type LabOrderContext,
   type LabOrderItemInput,
@@ -24,6 +25,8 @@ import { PatientPicker, type PickedPatient } from "@/components/patients/patient
 import { ToothChart } from "@/components/lab/tooth-chart";
 import { SketchPad } from "@/components/lab/sketch-pad";
 import { ToothViewer } from "@/components/dental/tooth-viewer";
+import { AttachmentGallery } from "@/components/lab/attachment-gallery";
+import { ImageAnnotator } from "@/components/image-annotator";
 
 const labBucket = "lab-orders";
 
@@ -126,6 +129,23 @@ export function LabOrderComposer({
   const [uploading, setUploading] = useState(false);
   const [sketchOpen, setSketchOpen] = useState(false);
   const [teethOpen, setTeethOpen] = useState(false); // spec 037 — 치아 모형(2D·3D) 스냅샷에 그려 첨부
+  // 첨부 미리보기: path → 주소(이번에 올린 건 로컬 주소, 기존 첨부는 10분 서명 URL — 화면 표시용, 저장 안 함)
+  const [previews, setPreviews] = useState<Record<string, string>>({});
+  // 첨부 수정(그림 도구) — 대상 위치와 원본 파일
+  const [editTarget, setEditTarget] = useState<{ index: number; file: File } | null>(null);
+
+  // 수정 화면으로 연 기존 첨부의 미리보기 주소 받기
+  useEffect(() => {
+    const paths = (initial?.attachments ?? []).map((a) => a.path);
+    if (paths.length === 0) return;
+    let alive = true;
+    void getLabAttachmentPreviewUrls(paths).then((r) => {
+      if (alive && r.ok) setPreviews((prev) => ({ ...r.urls, ...prev }));
+    });
+    return () => {
+      alive = false;
+    };
+  }, [initial?.attachments]);
 
   const handleLabChange = (name: string) => {
     setLabName(name);
@@ -134,8 +154,10 @@ export function LabOrderComposer({
   };
 
   // ── 첨부 업로드(서명 업로드 URL — 액션 바디 한도 우회) ──
-  const uploadBlob = async (blob: Blob, name: string, kind: LabAttachmentKind) => {
-    const total = attachments.reduce((s, a) => s + a.bytes, 0) + blob.size;
+  /** replaceAt를 주면 그 자리의 첨부를 새 파일로 바꾼다(수정) */
+  const uploadBlob = async (blob: Blob, name: string, kind: LabAttachmentKind, replaceAt?: number) => {
+    const replaced = replaceAt !== undefined ? (attachments[replaceAt]?.bytes ?? 0) : 0;
+    const total = attachments.reduce((s, a) => s + a.bytes, 0) - replaced + blob.size;
     if (total > LAB_ATTACH_LIMITS.total) {
       setMsg("첨부 합계가 100MB를 초과합니다 — 일부를 빼 주세요.");
       return;
@@ -158,7 +180,11 @@ export function LabOrderComposer({
         setMsg(`업로드 실패: ${error.message}`);
         return;
       }
-      setAttachments((prev) => [...prev, { kind, name, bytes: blob.size, path: prep.path }]);
+      const meta: LabAttachmentMeta = { kind, name, bytes: blob.size, path: prep.path };
+      setPreviews((prev) => ({ ...prev, [prep.path]: URL.createObjectURL(blob) }));
+      setAttachments((prev) =>
+        replaceAt !== undefined && replaceAt < prev.length ? prev.map((a, i) => (i === replaceAt ? meta : a)) : [...prev, meta],
+      );
     } finally {
       setUploading(false);
     }
@@ -199,6 +225,33 @@ export function LabOrderComposer({
       return;
     }
     await uploadBlob(file, file.name, "video");
+  };
+
+  /** 첨부(사진·그림)를 그림 도구로 열기 */
+  const openEdit = async (index: number) => {
+    const a = attachments[index];
+    const url = a && previews[a.path];
+    if (!a || !url) return;
+    try {
+      const blob = await (await fetch(url)).blob();
+      setEditTarget({ index, file: new File([blob], a.name, { type: blob.type || "image/png" }) });
+    } catch {
+      setMsg("첨부를 열지 못했습니다 — 잠시 뒤 다시 시도해 주세요.");
+    }
+  };
+
+  const saveEdit = async (file: File) => {
+    if (!editTarget) return;
+    const { index } = editTarget;
+    const a = attachments[index];
+    setEditTarget(null);
+    if (!a) return;
+    if (a.kind === "photo") {
+      const compressed = await compressImageFile(file); // 사진은 다시 webp로(5MB 제한)
+      await uploadBlob(compressed, compressed.name, "photo", index);
+    } else {
+      await uploadBlob(file, `sketch_${Date.now()}.png`, "sketch", index);
+    }
   };
 
   const handleSketchDone = async (blob: Blob) => {
@@ -669,18 +722,12 @@ export function LabOrderComposer({
           {uploading && <span className="text-xs text-slate-400">업로드 중…</span>}
         </div>
         {attachments.length > 0 && (
-          <ul className="space-y-1">
-            {attachments.map((a, i) => (
-              <li key={a.path} className="flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-1.5 text-xs text-slate-600">
-                <span>{a.kind === "photo" ? "📷" : a.kind === "video" ? "🎬" : "✏️"}</span>
-                <span className="min-w-0 flex-1 truncate">{a.name}</span>
-                <span className="text-slate-400">{(a.bytes / 1024 / 1024).toFixed(1)}MB</span>
-                <button onClick={() => setAttachments((prev) => prev.filter((_, j) => j !== i))} className="text-rose-500 hover:underline">
-                  빼기
-                </button>
-              </li>
-            ))}
-          </ul>
+          <AttachmentGallery
+            attachments={attachments}
+            previews={previews}
+            onRemove={(i) => setAttachments((prev) => prev.filter((_, j) => j !== i))}
+            onEdit={(i) => void openEdit(i)}
+          />
         )}
       </div>
 
@@ -705,6 +752,10 @@ export function LabOrderComposer({
       </div>
 
       {sketchOpen && <SketchPad onDone={(b) => void handleSketchDone(b)} onCancel={() => setSketchOpen(false)} />}
+      {/* 첨부 수정 — 그림 도구로 열어 저장하면 그 자리의 첨부가 바뀐다 */}
+      {editTarget && (
+        <ImageAnnotator file={editTarget.file} saveLabel="수정 저장" onClose={() => setEditTarget(null)} onSave={(f) => void saveEdit(f)} />
+      )}
       {/* 치아 모형(2D·3D)을 원하는 각도로 돌려 찍고 그 위에 그려 손그림 첨부로(전송 시 drawing) */}
       {teethOpen && (
         <ToothViewer
