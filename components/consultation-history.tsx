@@ -179,11 +179,12 @@ function DraftActions({
 }
 
 // ─── 체어 기록 재연결 / 연결 해제 ────────────────────────────────────────────
-function RelinkControls({
+/** 환자 연결 변경(다른 환자로 옮기기·연결 해제) — 환자 페이지 공용 카드의 추가 액션으로도 쓴다 */
+export function RelinkControls({
   item,
   patientId,
 }: {
-  item: ConsultationHistoryItem;
+  item: Pick<ConsultationHistoryItem, "id">;
   patientId: string;
 }) {
   const [open, setOpen] = useState(false);
@@ -376,11 +377,12 @@ function ConfirmedEditControls({
 }
 
 // ─── 확정된 상담 SMS 전송 버튼 ────────────────────────────────────────────────
-function SmsControls({
+/** 환자에게 상담 기록 링크 SMS 전송 — 환자 페이지 공용 카드의 추가 액션으로도 쓴다 */
+export function SmsControls({
   item,
   patientId,
 }: {
-  item: ConsultationHistoryItem;
+  item: Pick<ConsultationHistoryItem, "id" | "sms_sent_at">;
   patientId: string;
 }) {
   const [message, setMessage] = useState<string | null>(null);

@@ -1,9 +1,8 @@
 import Link from "next/link";
 import { getPatientById } from "@/app/actions/patients";
-import { getConsultationsByPatientId } from "@/app/actions/consultations";
+import { getConsultationsByPatientId, searchConsultations } from "@/app/actions/consultations";
 import { getPatientPortalStatus } from "@/app/actions/patient-status";
-import { ConsultationForm } from "@/components/consultation-form";
-import { ConsultationHistory } from "@/components/consultation-history";
+import { PatientConsultations } from "@/components/patients/patient-consultations";
 import { PatientEditForm } from "@/components/patient-edit-form";
 import { PatientPortalStatus } from "@/components/patient/patient-portal-status";
 import { formatPhoneForList } from "@/lib/patient-search";
@@ -64,12 +63,15 @@ export default async function PatientConsultationPage({
   }
 
   const { patient } = res;
-  const [consultRes, portalStatusRes] = await Promise.all([
+  // 상담 기록 = 홈과 같은 카드 데이터(searchConsultations) + 이전 방식 데이터(이미지 첨부·임시저장)
+  const [cardRes, consultRes, portalStatusRes] = await Promise.all([
+    searchConsultations({ patientId: String(patient.id), status: "all", limit: 100 }),
     getConsultationsByPatientId(patient.id),
     getPatientPortalStatus(patient.id),
   ]);
 
   const consultations = consultRes.ok ? consultRes.consultations : [];
+  const cardRows = cardRes.ok ? cardRes.rows : [];
   const portalStatus = portalStatusRes.ok
     ? portalStatusRes.status
     : { isActive: false, linkedAt: null, consentAt: null, smsHistory: [] };
@@ -103,29 +105,15 @@ export default async function PatientConsultationPage({
 
       <PatientEditForm patient={patient} initialOpen={edit === "1"} />
 
+      {/* 상담 기록 — 홈과 같은 카드·같은 상담보드(저장하면 이 환자에게 바로 연결) */}
       <section className="rounded-2xl border border-sky-100 bg-white p-6 shadow-sm shadow-sky-100/60">
-        <ConsultationForm
-          patientId={patient.id}
+        <PatientConsultations
+          patientId={String(patient.id)}
           patientName={patient.name}
+          rows={cardRows}
+          legacy={consultations}
+          hasMore={cardRes.ok ? cardRes.hasMore : false}
         />
-      </section>
-
-      <section className="rounded-2xl border border-sky-100 bg-white p-6 shadow-sm shadow-sky-100/60">
-        <div className="flex items-end justify-between gap-4">
-          <div>
-            <p className="text-xs font-medium uppercase tracking-wide text-sky-600">
-              과거 상담 내역
-            </p>
-            <h2 className="mt-1 text-lg font-semibold text-slate-900">
-              타임라인
-            </h2>
-          </div>
-          <div className="text-xs font-semibold text-slate-500">
-            {consultations.length ? `${consultations.length}건` : "없음"}
-          </div>
-        </div>
-
-        <ConsultationHistory consultations={consultations} patientId={patientId} />
       </section>
 
       <section className="rounded-2xl border border-sky-100 bg-white p-6 shadow-sm shadow-sky-100/60">

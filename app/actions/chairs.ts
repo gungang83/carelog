@@ -212,6 +212,8 @@ export async function updateChairRecordContent(params: {
   participants?: { id: string; name: string; role: string | null }[];
   /** 새 녹음의 전사 원문(spec 034) — 이어서 상담 시 기존 원문 뒤에 append. */
   transcript?: string | null;
+  /** 환자 연결된 기록도 수정 허용(연결 완료 카드의 편집·이어서 상담). 기본은 미연결 기록만. */
+  allowLinked?: boolean;
 }): Promise<UpdateChairRecordContentResult> {
   const supabase = await createServerSupabaseClient();
   const institutionId = await getMyInstitutionId();
@@ -222,14 +224,14 @@ export async function updateChairRecordContent(params: {
   } = await supabase.auth.getUser();
   if (!user) return { ok: false, message: "로그인이 필요합니다." };
 
-  // 미연결 기록인지 + 소속 기관인지 확인
-  const { data: existing } = await supabase
+  // 소속 기관 기록인지(+ 기본은 미연결 기록만) 확인
+  let existingQuery = supabase
     .from("consultation")
     .select("id, chair_id")
     .eq("id", params.consultationId)
-    .eq("institution_id", institutionId)
-    .is("patient_id", null)
-    .maybeSingle();
+    .eq("institution_id", institutionId);
+  if (!params.allowLinked) existingQuery = existingQuery.is("patient_id", null);
+  const { data: existing } = await existingQuery.maybeSingle();
 
   if (!existing) return { ok: false, message: "수정 권한이 없거나 이미 연결된 기록입니다." };
 

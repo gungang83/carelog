@@ -15,6 +15,7 @@ import {
   transcribeChairAudio,
   saveChairRecord,
   updateChairRecordContent,
+  linkChairRecordToPatient,
   getOrCreateChairByName,
   getRecentParticipants,
   reportAutoSaveFailure,
@@ -162,20 +163,36 @@ function BoardContent({
   // spec 027 ④ — 이어서 상담: 카드가 실어 보낸 기존 기록을 소비해 보드에 깐다.
   //   구분 블록([이어서 상담 — 일시 · 상담: 이름])을 붙이고, 저장은 기존 기록 업데이트로.
   const [continuationId, setContinuationId] = useState<string | null>(null);
+  // 환자 페이지에서 연 새 상담 — 저장 직후 이 환자에게 연결(홈에서 만든 기록과 같은 기록·같은 카드)
+  const [targetPatient, setTargetPatient] = useState<{ id: string; name: string } | null>(null);
+  /** 새 기록 저장 직후: 대상 환자가 있으면 연결. 실패하면 미연결 기록으로 남는다(홈에서 연결 가능). */
+  const linkToTarget = async (consultationId: string): Promise<string | null> => {
+    const t = targetPatient;
+    if (!t) return null;
+    setTargetPatient(null);
+    const r = await linkChairRecordToPatient({ consultationId, patientId: Number(t.id) });
+    return r.ok ? null : `${t.name} 환자 연결 실패(미연결 기록으로 저장됨): ${r.message}`;
+  };
   useEffect(() => {
     if (!isOpen) return;
     const p = consumeBoardPrefill();
     if (!p) return;
+    // 환자 페이지에서 연 새 상담 — 내용은 그대로 두고 저장 대상 환자만 정한다
+    if (!p.consultationId) {
+      if (p.patient) setTargetPatient(p.patient);
+      return;
+    }
     const d = new Date();
     const stamp = `${d.getMonth() + 1}/${d.getDate()} ${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
     const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
     const divider = `<p>[이어서 상담 — ${stamp} · 상담: ${esc(authorName)}]</p><p></p>`;
-    const html = `${p.content}${divider}`;
+    const html = `${p.content ?? ""}${divider}`;
+    setTargetPatient(null);
     setContinuationId(p.consultationId);
     setEditText(html);
     editorRef.current?.setHTML(html);
-    setPrescriptions(p.prescriptions);
-    setParticipants(p.participants.length ? p.participants : me ? [me] : []);
+    setPrescriptions(p.prescriptions ?? []);
+    setParticipants(p.participants?.length ? p.participants : me ? [me] : []);
     const chair = p.chairId ? chairs.find((c) => c.id === p.chairId) : undefined;
     setSelectedChair(chair ? { id: chair.id, name: chair.name } : null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -532,6 +549,7 @@ function BoardContent({
       ? await (async () => {
           const r = await updateChairRecordContent({
             consultationId: continuationId,
+            allowLinked: true,
             content: html,
             prescriptions,
             participants,
@@ -551,6 +569,11 @@ function BoardContent({
     autoSaveRef.current = false;
     if (result.ok) {
       markLocalSave(result.consultationId);
+      // 환자 페이지에서 연 새 상담이면 바로 연결(이어서 상담은 이미 연결·미연결 그대로)
+      if (!continuationId) {
+        const linkErr = await linkToTarget(result.consultationId);
+        if (linkErr) window.alert(linkErr);
+      }
       const audio = audioBlobRef.current;
       if (audio) {
         const fd = new FormData();
@@ -771,6 +794,7 @@ function BoardContent({
       return;
     }
     setContinuationId(null); // spec 027 ④ — 이어서 모드 해제
+    setTargetPatient(null);
     audioBlobRef.current = null;
     audioSegmentsRef.current = [];
     transcriptRef.current = "";
@@ -839,6 +863,7 @@ function BoardContent({
       startTransition(async () => {
         const result = await updateChairRecordContent({
           consultationId: contId,
+          allowLinked: true,
           content: editText,
           prescriptions,
           participants,
@@ -881,6 +906,9 @@ function BoardContent({
       if (result.ok) {
         // 이 탭이 저장한 기록 → 내 토스트만 숨김(같은 계정 다른 기기는 알림 받음)
         markLocalSave(result.consultationId);
+        // 환자 페이지에서 연 새 상담이면 바로 그 환자에게 연결
+        const linkErr = await linkToTarget(result.consultationId);
+        if (linkErr) window.alert(linkErr);
         // 음성 원본 보관(spec 009) — 비차단(저장은 이미 완료, 음성은 보조)
         const audio = audioBlobRef.current;
         if (audio) {
@@ -1195,6 +1223,22 @@ function BoardContent({
                 "이 내용은 체어를 선택하면 해당 체어의 상담 기록으로 저장됩니다"
               )}
             </p>
+            {/* 환자 페이지에서 연 새 상담 — 저장 즉시 이 환자에게 연결 */}
+            {targetPatient && !continuationId && (
+              <p className="flex items-center gap-2 rounded-lg bg-emerald-50 px-2.5 py-1.5 text-[11px] text-emerald-700">
+                <span>
+                  👤 저장하면 <span className="font-semibold">{targetPatient.name}</span> 환자 상담 기록으로 바로 연결됩니다
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setTargetPatient(null)}
+                  className="ml-auto rounded px-1.5 text-emerald-600 hover:bg-emerald-100"
+                  title="환자 연결 없이 미연결 기록으로 저장"
+                >
+                  연결 안 함
+                </button>
+              </p>
+            )}
             <RichTextEditor
               ref={editorRef}
               value={editText}

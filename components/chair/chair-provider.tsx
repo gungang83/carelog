@@ -205,13 +205,15 @@ type ChairContextValue = {
   consumeBoardPrefill: () => BoardPrefill | null;
 };
 
-/** spec 027 ④ — 이어서 상담 프리필(카드 → 보드) */
+/** spec 027 ④ — 이어서 상담 프리필(카드 → 보드). consultationId 없이 patient만 주면 "이 환자 새 상담"(저장 즉시 연결). */
 export type BoardPrefill = {
-  consultationId: string;
-  content: string;
-  prescriptions: string[];
-  participants: Participant[];
-  chairId: string | null;
+  consultationId?: string;
+  content?: string;
+  prescriptions?: string[];
+  participants?: Participant[];
+  chairId?: string | null;
+  /** 환자 페이지에서 연 새 상담 — 저장하면 이 환자에게 바로 연결 */
+  patient?: { id: string; name: string };
 };
 
 const ChairContext = createContext<ChairContextValue | null>(null);

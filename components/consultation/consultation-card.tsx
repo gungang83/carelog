@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState, useTransition } from "react";
+import { useRef, useState, useTransition, type ReactNode } from "react";
 import Link from "next/link";
 import { useChairContext } from "@/components/chair/chair-provider";
 import { CopyAllButton } from "@/components/copy-all-button";
@@ -47,12 +47,18 @@ export function ConsultationCard({
   recent,
   onMutated,
   onFlagsChanged,
+  extra,
+  inPatientPage = false,
 }: {
   record: CardRecord;
   flags: ReviewFlag[];
   recent: Participant[];
   onMutated: () => void | Promise<void>;
   onFlagsChanged?: () => void;
+  /** 화면별 추가 액션(환자 페이지: 환자에게 전송·연결 변경 등) — 액션 줄 아래 */
+  extra?: ReactNode;
+  /** 환자 페이지 안에서 그릴 때 — 환자 이름을 링크로 만들지 않는다 */
+  inPatientPage?: boolean;
 }) {
   const { chairs, members, me, openOverlay, refreshUnlinkedCount, openBoardWithPrefill } =
     useChairContext();
@@ -105,6 +111,7 @@ export function ConsultationCard({
         prescriptions: editPrescriptions,
         chairId: editChairId || undefined,
         participants: editParticipants,
+        allowLinked: linked,
       });
       if (result.ok) {
         await onMutated();
@@ -148,7 +155,18 @@ export function ConsultationCard({
           </span>
         )}
         {linked ? (
-          <span className="inline-flex items-center gap-1 font-medium text-slate-700">👤 {record.patient_name ?? "환자"}</span>
+          record.patient_id && !inPatientPage ? (
+            // 환자 이름 → 그 환자 페이지(상담 기록 전체·새 상담)
+            <Link
+              href={`/patients/${record.patient_id}`}
+              title="이 환자의 상담 기록 모두 보기"
+              className="inline-flex items-center gap-1 rounded-md font-semibold text-slate-700 underline decoration-slate-300 underline-offset-2 hover:bg-emerald-50 hover:text-emerald-700 hover:decoration-emerald-400"
+            >
+              👤 {record.patient_name ?? "환자"} <span className="text-[10px] text-slate-400">›</span>
+            </Link>
+          ) : (
+            <span className="inline-flex items-center gap-1 font-medium text-slate-700">👤 {record.patient_name ?? "환자"}</span>
+          )
         ) : (
           record.participants.length > 0 && (
             <span className="inline-flex items-center gap-1 text-slate-400">🩺 {record.participants.map((p) => p.name).join(", ")}</span>
@@ -268,14 +286,9 @@ export function ConsultationCard({
                 <button type="button" onClick={() => setLinking(true)}
                   className="inline-flex min-h-8 items-center rounded-xl border border-sky-200 bg-sky-50 px-3 text-xs font-semibold text-sky-700 hover:bg-sky-100">환자 연결</button>
               )}
-              {linked ? (
-                record.patient_id && (
-                  <Link href={`/patients/${record.patient_id}`} className="inline-flex min-h-8 items-center rounded-xl border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-600 hover:bg-slate-50">편집</Link>
-                )
-              ) : (
-                <button type="button" onClick={startEdit}
-                  className="inline-flex min-h-8 items-center rounded-xl border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-600 hover:bg-slate-50">편집</button>
-              )}
+              {/* 편집 = 연결 여부와 관계없이 이 자리에서(홈·환자 페이지 동일) */}
+              <button type="button" onClick={startEdit}
+                className="inline-flex min-h-8 items-center rounded-xl border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-600 hover:bg-slate-50">편집</button>
               {!linked && record.chair_id && (
                 <button type="button" onClick={() => openOverlay(record.chair_id!)}
                   className="inline-flex min-h-8 items-center rounded-xl border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-600 hover:bg-slate-50">새 녹음</button>
@@ -290,6 +303,8 @@ export function ConsultationCard({
               {resummaryMsg}
             </p>
           )}
+
+          {extra}
 
           {/* 확인 꼬리표 */}
           <ReviewFlags consultationId={record.id} flags={flags} onChanged={onFlagsChanged} />

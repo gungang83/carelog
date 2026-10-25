@@ -102,6 +102,7 @@ components/
 ├── consultation-form.tsx          # 상담 기록 작성 폼 (처방 메모 포함)
 ├── consultation-history.tsx       # 상담 이력 목록 (HTML 렌더링)
 ├── rich-text-editor.tsx           # Tiptap 리치 텍스트 에디터 (인라인 이미지·주석 포함)
+├── patients/patient-consultations.tsx  # 환자 페이지 상담 기록 — 공용 ConsultationCard + [이 환자 상담 시작](상담보드, 저장 즉시 연결)
 ├── dental/                        # spec 037 치아 도식 — dental-teeth(DentalTeeth·DentalArchSvg) · dental-library(/admin/dental 2D 보관함) · dental-3d(three.js 뷰어, dynamic 로드) · tooth-viewer(상담보드 치아 그림 2D·3D)
 ├── care/interdental-chart.tsx     # spec 036 치간칫솔 사이즈 차트(교합면 도식 위 치간 26곳)
 ├── image-annotator.tsx            # 이미지 주석 캔버스 모달 (펜·직선·화살표·사각형·텍스트·지우개)
