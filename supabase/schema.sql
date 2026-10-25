@@ -398,6 +398,8 @@ create index if not exists idx_patient_shares_consultation on public.patient_sha
 alter table public.patient_shares enable row level security;
 alter table public.patient_invitations add column if not exists share_id uuid
   references public.patient_shares(id) on delete set null;
+-- migration: 20261025000002_institution_sms_sender.sql — 병원별 문자 발신번호(솔라피 등록 번호)
+alter table public.institutions add column if not exists sms_sender_phone text;
 
 -- Push Subscriptions (Web Push / VAPID)
 create table if not exists public.push_subscriptions (

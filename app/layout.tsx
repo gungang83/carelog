@@ -13,7 +13,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Carelog — 진료 상담 기록",
+  title: "Carelog — 치과 상담 기록", // 용어 규칙: 케어로그 산출물은 '상담 기록'(진료 기록으로 칭하지 않음)
   description: "치과 환자 검색 및 상담·이미지 기록",
   appleWebApp: {
     capable: true,

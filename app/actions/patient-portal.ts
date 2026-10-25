@@ -9,6 +9,7 @@ import { normalizeFullResidentNo } from "@/lib/rrn-core";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import type { PatientInvitationRow } from "@/lib/types/database";
+import { insertInvitation, institutionSmsSender, patientLinkUrl } from "@/lib/patient-invite";
 
 function normalizePhone(raw: string): string | null {
   const digits = raw.replace(/\D/g, "");
@@ -62,26 +63,21 @@ export async function sendPatientInvitation(
   if (!supabaseUser) return { ok: false, message: "로그인이 필요합니다." };
 
   // 새 초대 생성(spec 038 — 이전 링크도 30일 안에는 계속 열림)
-  const { data: invitation, error: insertError } = await admin
-    .from("patient_invitations")
-    .insert({
-      institution_id: institution.id,
-      patient_id: patientId,
-      phone,
-      consent_given: true,
-      invited_by: supabaseUser.id,
-    })
-    .select()
-    .single();
-
-  if (insertError || !invitation) {
+  const created = await insertInvitation(admin, {
+    institution_id: institution.id,
+    patient_id: patientId,
+    phone,
+    consent_given: true,
+    invited_by: supabaseUser.id,
+  });
+  if (!created.ok) {
     return { ok: false, message: "초대 생성에 실패했습니다." };
   }
+  const { data: invitation } = await admin.from("patient_invitations").select().eq("id", created.id).single();
+  if (!invitation) return { ok: false, message: "초대 생성에 실패했습니다." };
 
-  const siteUrl =
-    process.env.NEXT_PUBLIC_SITE_URL ?? "https://carelog-tau.vercel.app";
-  const smsText = `[${institution.name}] 상담 내역 확인하기: ${siteUrl}/p/${invitation.token}`;
-  const smsResult = await sendSms(phone, smsText);
+  const smsText = `[${institution.name}] ${institution.name}에서 받으신 상담 내용을 확인해 주세요.\n${patientLinkUrl(created.token)}`;
+  const smsResult = await sendSms(phone, smsText, { from: await institutionSmsSender(admin, institution.id) });
 
   if (!smsResult.ok) {
     await admin
@@ -135,6 +131,7 @@ async function issueOtp(
   admin: Admin,
   phone: string,
   sender: string,
+  fromPhone?: string | null,
 ): Promise<{ ok: true } | { ok: false; message: string; retryAfterSeconds?: number }> {
   const tenMinutesAgo = new Date(Date.now() - 10 * 60 * 1000).toISOString();
   const { data: lockedOtp } = await admin
@@ -164,7 +161,7 @@ async function issueOtp(
   const { error } = await admin.from("patient_otps").insert({ phone, code });
   if (error) return { ok: false, message: "인증번호 생성에 실패했습니다." };
 
-  const sms = await sendSms(phone, `[${sender}] 인증번호: ${code} (5분 이내 입력)`);
+  const sms = await sendSms(phone, `[${sender}] 인증번호: ${code} (5분 이내 입력)`, { from: fromPhone });
   if (!sms.ok) return { ok: false, message: `인증번호 발송 실패: ${sms.message}` };
   return { ok: true };
 }
@@ -294,7 +291,8 @@ export async function requestInviteOtp(
   const r = await getInvitation(token);
   if (!r.ok) return { ok: false, message: r.reason === "expired" ? "링크 유효기간이 지났습니다. 병원에 다시 요청해 주세요." : "유효하지 않은 링크입니다." };
   if (!r.invite.phone) return { ok: false, message: "병원에 등록된 휴대폰 번호가 없습니다. 병원에 문의해 주세요." };
-  return issueOtp(createAdminSupabaseClient(), r.invite.phone, r.invite.institutionName);
+  const admin = createAdminSupabaseClient();
+  return issueOtp(admin, r.invite.phone, r.invite.institutionName, await institutionSmsSender(admin, r.invite.institutionId));
 }
 
 /** 링크 화면 인증번호 확인 → 계정(휴대폰) 연결 → 로그인 → 갈 곳 */

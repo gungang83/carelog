@@ -14,6 +14,7 @@ import { sanitizeRichHtml } from "@/lib/sanitize-html";
 import { deductCredit } from "@/lib/credits";
 import { sendSms } from "@/lib/sms/solapi";
 import { sendPushToPatient } from "@/app/actions/patient-portal";
+import { insertInvitation, institutionSmsSender, koreanMonthDay, patientLinkUrl } from "@/lib/patient-invite";
 
 type Fail = { ok: false; message: string };
 
@@ -39,6 +40,8 @@ async function requireStaff(): Promise<{ ok: true; institutionId: string; userId
 
 export type ShareContext = {
   consultationId: string;
+  /** 상담 일시(문자 "10월 25일 ○○치과에서 받으신 상담") */
+  consultedAt: string;
   content: string;
   prescriptions: string[];
   patient: { id: string; name: string; maskedPhone: string | null };
@@ -52,7 +55,7 @@ export async function getShareContext(consultationId: string): Promise<{ ok: tru
   const supabase = await createServerSupabaseClient();
   const { data: c } = await supabase
     .from("consultation")
-    .select("id, content, prescriptions, patient_id")
+    .select("id, content, prescriptions, patient_id, created_at")
     .eq("id", consultationId)
     .eq("institution_id", auth.institutionId)
     .maybeSingle();
@@ -79,6 +82,7 @@ export async function getShareContext(consultationId: string): Promise<{ ok: tru
     ok: true,
     ctx: {
       consultationId: String(c.id),
+      consultedAt: (c.created_at as string) ?? new Date().toISOString(),
       content: (c.content as string) ?? "",
       prescriptions: ((c.prescriptions as string[] | null) ?? []).filter(Boolean),
       patient: {
@@ -193,31 +197,30 @@ export async function sendPatientShare(params: {
     .single();
   if (error || !share) return { ok: false, message: `저장 실패: ${error?.message ?? "원인 미상"}` };
 
-  const { data: inv, error: invErr } = await admin
-    .from("patient_invitations")
-    .insert({
-      institution_id: auth.institutionId,
-      patient_id: ctx.patient.id,
-      phone,
-      consent_given: ctx.consentDone || params.consent,
-      invited_by: auth.userId,
-      share_id: share.id,
-    })
-    .select("token")
-    .single();
-  if (invErr || !inv) {
+  const inv = await insertInvitation(admin, {
+    institution_id: auth.institutionId,
+    patient_id: ctx.patient.id,
+    phone,
+    consent_given: ctx.consentDone || params.consent,
+    invited_by: auth.userId,
+    share_id: share.id,
+  });
+  if (!inv.ok) {
     await admin.from("patient_shares").delete().eq("id", share.id);
-    return { ok: false, message: `링크 생성 실패: ${invErr?.message ?? "원인 미상"}` };
+    return { ok: false, message: `링크 생성 실패: ${inv.message}` };
   }
 
+  // 문자: 언제·어디서 받은 상담인지 + 짧은 링크(병원별 발신번호가 있으면 그 번호로)
   const inst = await getMyInstitution();
-  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "https://carelog-tau.vercel.app";
+  const instName = inst?.institution.name ?? "케어로그";
+  const when = koreanMonthDay(ctx.consultedAt);
   const sms = await sendSms(
     phone,
-    `[${inst?.institution.name ?? "케어로그"}] ${ctx.patient.name}님, 오늘 상담 안내가 도착했어요. ${siteUrl}/p/${inv.token}`,
+    `[${instName}] ${ctx.patient.name}님, ${when ? `${when} ` : ""}${instName}에서 받으신 상담 내용을 정리해 보내 드려요. 아래 링크에서 확인해 주세요.\n${patientLinkUrl(inv.token)}`,
+    { from: await institutionSmsSender(admin, auth.institutionId) },
   );
   if (!sms.ok) {
-    await admin.from("patient_invitations").delete().eq("token", inv.token);
+    await admin.from("patient_invitations").delete().eq("id", inv.id);
     await admin.from("patient_shares").delete().eq("id", share.id);
     return { ok: false, message: sms.message ?? "문자 발송에 실패했습니다." };
   }

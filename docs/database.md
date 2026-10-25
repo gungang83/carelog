@@ -44,6 +44,7 @@ Supabase(PostgreSQL) 기반. 전체 스키마는 `supabase/schema.sql` 참고.
 | `type` | text NOT NULL DEFAULT 'dental' | 기관 유형 |
 | `plan` | text DEFAULT 'free' | 요금/기능 게이트 단일 출처 |
 | `lab_enabled` | boolean NOT NULL DEFAULT false | 녹음 엔진 실험실 게이트 — true면 상담별 엔진 picker 노출(예미안 한정). 비-lab은 'basic' 강제 |
+| `sms_sender_phone` | text NULL | 환자 문자 발신번호(솔라피에 등록된 번호, 숫자만 · spec 038). NULL이면 기본 발신번호(env `SOLAPI_SENDER_PHONE`) |
 | `created_at` | timestamptz | 생성 시각 |
 
 ---

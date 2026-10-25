@@ -40,30 +40,25 @@ async function _sendConsultationSms(
 
   // spec 038 — 링크는 30일 안에 반복해 열 수 있으므로 이전 링크를 끊지 않는다.
   //   동의는 여기서 자동으로 기록하지 않는다(환자에게 보내기 화면에서 직원이 확인).
-  const { data: invitation, error: invErr } = await admin
-    .from("patient_invitations")
-    .insert({
-      institution_id: institutionId,
-      patient_id: patientId,
-      phone: patientRow.phone,
-      consent_given: false,
-      invited_by: user?.id ?? null,
-    })
-    .select("token")
-    .single();
-
-  if (invErr || !invitation) {
-    return { ok: false, message: `초대 생성 실패: ${invErr?.message ?? "알 수 없는 오류"}` };
+  const { insertInvitation, institutionSmsSender, patientLinkUrl } = await import("@/lib/patient-invite");
+  const invitation = await insertInvitation(admin, {
+    institution_id: institutionId,
+    patient_id: patientId,
+    phone: patientRow.phone,
+    consent_given: false,
+    invited_by: user?.id ?? null,
+  });
+  if (!invitation.ok) {
+    return { ok: false, message: `초대 생성 실패: ${invitation.message}` };
   }
 
-  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "https://carelog-tau.vercel.app";
   const institutionData = await (await import("@/lib/auth/institution")).getMyInstitution();
   const institutionName = institutionData?.institution.name ?? "케어로그";
-  const smsText = `[${institutionName}] ${patientRow.name}님의 상담 내역 확인하기: ${siteUrl}/p/${invitation.token}`;
+  const smsText = `[${institutionName}] ${patientRow.name}님, ${institutionName}에서 받으신 상담 내용을 확인해 주세요.\n${patientLinkUrl(invitation.token)}`;
 
-  const smsResult = await sendSms(patientRow.phone, smsText);
+  const smsResult = await sendSms(patientRow.phone, smsText, { from: await institutionSmsSender(admin, institutionId) });
   if (!smsResult.ok) {
-    await admin.from("patient_invitations").delete().eq("token", invitation.token);
+    await admin.from("patient_invitations").delete().eq("id", invitation.id);
     return { ok: false, message: smsResult.message ?? "SMS 발송 실패" };
   }
 

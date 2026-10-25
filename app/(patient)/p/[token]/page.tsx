@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getInvitation, inviteRedirectIfSignedIn } from "@/app/actions/patient-portal";
@@ -6,6 +7,19 @@ import { InviteAuth } from "@/components/patient/invite-auth";
 type PageProps = {
   params: Promise<{ token: string }>;
 };
+
+// 문자 앱 링크 미리보기 — 병원 이름만(환자 이름 등 개인정보는 미리보기 서버로 보내지 않는다) · 검색 노출 금지
+export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
+  const { token } = await params;
+  const r = await getInvitation(token);
+  const inst = r.ok ? r.invite.institutionName : "케어로그";
+  return {
+    title: `${inst} 상담 안내`,
+    description: "받으신 상담 내용을 확인해 보세요 — 케어로그",
+    robots: { index: false, follow: false },
+    openGraph: { title: `${inst} 상담 안내`, description: "받으신 상담 내용을 확인해 보세요", siteName: "케어로그" },
+  };
+}
 
 // spec 038 — 문자 링크: 이미 로그인돼 있으면 바로 안내(또는 기록)로, 아니면 등록된 번호로 인증번호 한 번.
 //   주민번호·전화번호를 입력받지 않는다(ⓐ). 링크는 유효기간(30일) 안에 몇 번이든 열 수 있다(ⓓ).

@@ -320,6 +320,17 @@ export const UPDATE_FEED: UpdateFeedEntry[] = [
     ],
     internal: "spec 038 1·2단계 · 세션 68f",
   },
+  {
+    id: "2026-10-25-patient-sms-text",
+    date: "2026-10-25",
+    emoji: "✉️",
+    title: "환자 문자 안내 문구·링크 개선",
+    items: [
+      "환자분께 가는 문자에 언제·어느 병원에서 받은 상담인지 함께 적힙니다.",
+      "문자 속 링크가 짧아졌습니다.",
+    ],
+    internal: "spec 038 §5.7 · 병원별 발신번호는 솔라피 등록 후 설정",
+  },
 ];
 
 // ── 결정 상태 (DB update_feed_decisions) ──────────────────────────────
