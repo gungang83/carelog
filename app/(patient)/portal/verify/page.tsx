@@ -4,15 +4,13 @@ import Link from "next/link";
 type PageProps = {
   searchParams: Promise<{
     phone?: string;
-    rrn_hash?: string;
-    token?: string;
   }>;
 };
 
 export default async function PatientVerifyPage({ searchParams }: PageProps) {
-  const { phone, rrn_hash, token } = await searchParams;
+  const { phone } = await searchParams;
 
-  if (!phone || !rrn_hash) {
+  if (!phone) {
     return (
       <div className="flex flex-1 items-center justify-center px-4 py-12">
         <div className="w-full max-w-sm rounded-2xl border border-slate-100 bg-white p-8 shadow-sm text-center">
@@ -32,11 +30,7 @@ export default async function PatientVerifyPage({ searchParams }: PageProps) {
           케어로그
         </p>
         <h1 className="mb-6 text-xl font-semibold text-slate-900">인증번호 입력</h1>
-        <PatientOtpForm
-          phone={phone}
-          rrnHash={rrn_hash}
-          invitationToken={token}
-        />
+        <PatientOtpForm phone={phone} />
       </div>
     </div>
   );

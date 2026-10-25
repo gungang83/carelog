@@ -25,7 +25,7 @@ async function _sendConsultationSms(
 
   const { data: patientRow } = await supabase
     .from("patient")
-    .select("name, phone, resident_no")
+    .select("name, phone")
     .eq("id", patientId)
     .eq("institution_id", institutionId)
     .maybeSingle();
@@ -33,27 +33,20 @@ async function _sendConsultationSms(
   if (!patientRow?.phone) {
     return { ok: false, message: "환자 전화번호가 등록되어 있지 않습니다." };
   }
-  if (!patientRow?.resident_no) {
-    return { ok: false, message: "환자 주민번호가 등록되어 있지 않습니다." };
-  }
+  // spec 038 — 환자 인증은 등록된 번호의 인증번호로(주민번호 불필요)
 
   const admin = createAdminSupabaseClient();
   const { data: { user } } = await supabase.auth.getUser();
 
-  // 기존 미수락 초대 무효화
-  await admin
-    .from("patient_invitations")
-    .update({ expires_at: new Date().toISOString() })
-    .eq("patient_id", patientId)
-    .is("accepted_at", null);
-
+  // spec 038 — 링크는 30일 안에 반복해 열 수 있으므로 이전 링크를 끊지 않는다.
+  //   동의는 여기서 자동으로 기록하지 않는다(환자에게 보내기 화면에서 직원이 확인).
   const { data: invitation, error: invErr } = await admin
     .from("patient_invitations")
     .insert({
       institution_id: institutionId,
       patient_id: patientId,
       phone: patientRow.phone,
-      consent_given: true,
+      consent_given: false,
       invited_by: user?.id ?? null,
     })
     .select("token")

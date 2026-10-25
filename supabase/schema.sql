@@ -370,6 +370,35 @@ alter table public.patient_otps           enable row level security;
 alter table public.patient_sessions       enable row level security;
 alter table public.patient_account_links  enable row level security;
 
+-- spec 038 (migration: 20261025000001_patient_share.sql) — 휴대폰 계정 · 30일 반복 링크 · 환자용 상담 안내
+alter table public.patient_accounts alter column rrn_hash drop not null;
+alter table public.patient_accounts add column if not exists phone text;
+create unique index if not exists patient_accounts_phone_uidx
+  on public.patient_accounts (phone) where phone is not null;
+alter table public.patient_invitations alter column expires_at set default (now() + interval '30 days');
+
+create table if not exists public.patient_shares (
+  id               uuid primary key default gen_random_uuid(),
+  institution_id   uuid not null references public.institutions(id) on delete cascade,
+  patient_id       bigint not null references public.patient(id) on delete cascade,
+  consultation_id  bigint references public.consultation(id) on delete set null,
+  title            text not null default '',
+  content          text not null default '',
+  prescriptions    jsonb not null default '[]'::jsonb,
+  created_by       uuid references auth.users(id),
+  author_name      text,
+  sent_at          timestamptz,
+  first_viewed_at  timestamptz,
+  last_viewed_at   timestamptz,
+  view_count       integer not null default 0,
+  created_at       timestamptz not null default now()
+);
+create index if not exists idx_patient_shares_patient on public.patient_shares (patient_id, created_at desc);
+create index if not exists idx_patient_shares_consultation on public.patient_shares (consultation_id);
+alter table public.patient_shares enable row level security;
+alter table public.patient_invitations add column if not exists share_id uuid
+  references public.patient_shares(id) on delete set null;
+
 -- Push Subscriptions (Web Push / VAPID)
 create table if not exists public.push_subscriptions (
   id             uuid primary key default gen_random_uuid(),

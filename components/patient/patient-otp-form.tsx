@@ -6,11 +6,10 @@ import { verifyPatientOtp } from "@/app/actions/patient-portal";
 
 type Props = {
   phone: string;
-  rrnHash: string;
-  invitationToken?: string;
 };
 
-export function PatientOtpForm({ phone, rrnHash, invitationToken }: Props) {
+// 포털 로그인(링크 없이) 인증번호 입력 — spec 038(주민번호 없음)
+export function PatientOtpForm({ phone }: Props) {
   const router = useRouter();
   const [status, setStatus] = useState<
     "idle" | "verifying" | "success" | "error"
@@ -25,8 +24,6 @@ export function PatientOtpForm({ phone, rrnHash, invitationToken }: Props) {
 
     const formData = new FormData(e.currentTarget);
     formData.set("phone", phone);
-    formData.set("rrn_hash", rrnHash);
-    if (invitationToken) formData.set("invitation_token", invitationToken);
 
     const result = await verifyPatientOtp(formData);
 
@@ -40,11 +37,7 @@ export function PatientOtpForm({ phone, rrnHash, invitationToken }: Props) {
   }
 
   function handleContinue() {
-    if (isNewAccount && invitationToken) {
-      router.push(`/portal/signup-cta?invitation=${invitationToken}`);
-    } else {
-      router.push("/portal/records");
-    }
+    router.push("/portal/records");
   }
 
   if (status === "success") {

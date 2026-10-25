@@ -5,11 +5,8 @@ import { useRouter } from "next/navigation";
 import { requestPatientOtp } from "@/app/actions/patient-portal";
 import { createBrowserSupabaseClient } from "@/lib/supabase/client";
 
-type Props = {
-  invitationToken?: string;
-};
-
-export function PatientLoginForm({ invitationToken }: Props) {
+// spec 038 — 주민번호 없이 휴대폰 번호 + 인증번호(병원에서 받은 문자 링크로 한 번 들어온 번호)
+export function PatientLoginForm() {
   const router = useRouter();
   const [status, setStatus] = useState<"idle" | "sending" | "error">("idle");
   const [errorMsg, setErrorMsg] = useState("");
@@ -28,22 +25,9 @@ export function PatientLoginForm({ invitationToken }: Props) {
     e.preventDefault();
     setStatus("sending");
     setErrorMsg("");
-
-    const formData = new FormData(e.currentTarget);
-    if (invitationToken) {
-      formData.set("invitation_token", invitationToken);
-    }
-
-    const result = await requestPatientOtp(formData);
-
+    const result = await requestPatientOtp(new FormData(e.currentTarget));
     if (result.ok) {
-      const phone = String(formData.get("phone") ?? "").replace(/\D/g, "");
-      const params = new URLSearchParams({
-        phone,
-        rrn_hash: result.rrnHash,
-      });
-      if (invitationToken) params.set("token", invitationToken);
-      router.push(`/portal/verify?${params.toString()}`);
+      router.push(`/portal/verify?${new URLSearchParams({ phone: result.phone }).toString()}`);
     } else {
       setStatus("error");
       setErrorMsg(result.message);
@@ -54,36 +38,7 @@ export function PatientLoginForm({ invitationToken }: Props) {
     <form onSubmit={handleSubmit} className="flex flex-col gap-4">
       <div>
         <label className="mb-1 block text-sm font-medium text-slate-700">
-          주민등록번호
-        </label>
-        <div className="flex items-center gap-2">
-          <input
-            type="text"
-            name="rrn_front"
-            placeholder="앞 6자리"
-            maxLength={6}
-            inputMode="numeric"
-            pattern="\d{6}"
-            required
-            className="w-32 rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-sky-400 focus:ring-1 focus:ring-sky-400"
-          />
-          <span className="text-slate-400">—</span>
-          <input
-            type="password"
-            name="rrn_back"
-            placeholder="뒤 7자리"
-            maxLength={7}
-            inputMode="numeric"
-            pattern="\d{7}"
-            required
-            className="w-32 rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-sky-400 focus:ring-1 focus:ring-sky-400"
-          />
-        </div>
-      </div>
-
-      <div>
-        <label className="mb-1 block text-sm font-medium text-slate-700">
-          전화번호
+          휴대폰 번호
         </label>
         <input
           type="tel"
@@ -106,8 +61,7 @@ export function PatientLoginForm({ invitationToken }: Props) {
         {status === "sending" ? "확인 중..." : "인증번호 받기"}
       </button>
 
-      {!invitationToken && (
-        <>
+      <>
           <div className="relative flex items-center">
             <div className="flex-1 border-t border-slate-200" />
             <span className="mx-3 text-xs text-slate-400">또는</span>
@@ -128,8 +82,7 @@ export function PatientLoginForm({ invitationToken }: Props) {
             </svg>
             {googleLoading ? "연결 중..." : "Google 계정으로 로그인"}
           </button>
-        </>
-      )}
+      </>
     </form>
   );
 }

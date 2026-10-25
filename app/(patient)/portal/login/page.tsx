@@ -9,7 +9,7 @@ export default function PatientLoginPage() {
         </p>
         <h1 className="mb-2 text-xl font-semibold text-slate-900">환자 로그인</h1>
         <p className="mb-6 text-sm text-slate-500">
-          주민등록번호와 전화번호를 입력하면 인증번호를 발송해 드립니다.
+          휴대폰 번호를 입력하면 인증번호를 보내 드립니다. 처음이시면 병원에서 받은 문자 링크로 들어와 주세요.
         </p>
         <PatientLoginForm />
       </div>

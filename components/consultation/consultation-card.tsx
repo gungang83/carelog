@@ -9,6 +9,7 @@ import { ConsultationEditor } from "@/components/chair/consultation-editor";
 import { type RichTextEditorHandle } from "@/components/rich-text-editor";
 import { ChairPatientSearch } from "@/components/chair/chair-patient-search";
 import { ReviewFlags } from "@/components/consultation/review-flags";
+import { ShareComposer } from "@/components/patients/share-composer";
 import { renderContentHtml } from "@/lib/content-html";
 import { stripMarkdownMarkers } from "@/lib/summary-format";
 import { updateChairRecordContent, deleteChairRecord } from "@/app/actions/chairs";
@@ -66,6 +67,7 @@ export function ConsultationCard({
   const [isLinking, setLinking] = useState(false);
   const [isDeleteConfirm, setDeleteConfirm] = useState(false);
   const [isViewing, setViewing] = useState(false);
+  const [isSharing, setSharing] = useState(false); // spec 038 환자에게 보내기
   const [editContent, setEditContent] = useState("");
   const [editPrescriptions, setEditPrescriptions] = useState<string[]>([]);
   const [editChairId, setEditChairId] = useState<string>("");
@@ -286,6 +288,14 @@ export function ConsultationCard({
                 <button type="button" onClick={() => setLinking(true)}
                   className="inline-flex min-h-8 items-center rounded-xl border border-sky-200 bg-sky-50 px-3 text-xs font-semibold text-sky-700 hover:bg-sky-100">환자 연결</button>
               )}
+              {/* spec 038 — 환자용 상담 안내 만들어 보내기(연결된 기록만) */}
+              {linked && (
+                <button type="button" onClick={() => setSharing(true)}
+                  title="이 상담에서 보낼 내용을 골라 환자용 안내로 만들어 문자로 보냅니다"
+                  className="inline-flex min-h-8 items-center gap-1 rounded-xl border border-sky-200 bg-sky-50 px-3 text-xs font-semibold text-sky-700 hover:bg-sky-100">
+                  📩 환자에게 보내기
+                </button>
+              )}
               {/* 편집 = 연결 여부와 관계없이 이 자리에서(홈·환자 페이지 동일) */}
               <button type="button" onClick={startEdit}
                 className="inline-flex min-h-8 items-center rounded-xl border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-600 hover:bg-slate-50">편집</button>
@@ -305,6 +315,7 @@ export function ConsultationCard({
           )}
 
           {extra}
+          {isSharing && <ShareComposer consultationId={record.id} onClose={() => setSharing(false)} onSent={() => void onMutated()} />}
 
           {/* 확인 꼬리표 */}
           <ReviewFlags consultationId={record.id} flags={flags} onChanged={onFlagsChanged} />

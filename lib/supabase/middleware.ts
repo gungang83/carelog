@@ -37,6 +37,7 @@ export async function updateSession(request: NextRequest) {
     pathname.startsWith("/about") ||
     pathname.startsWith("/invite") ||
     pathname.startsWith("/auth/callback") ||
+    pathname.startsWith("/auth/patient-callback") || // 환자 구글 로그인 복귀(spec 038 점검 중 발견 — 비로그인 환자가 직원 로그인으로 튕기던 문제)
     pathname.startsWith("/api/auth/sso") || // EO SSO 브릿지 — 자체 토큰 검증
     pathname.startsWith("/api/cron/") || // Vercel Cron(예: sync-master) — 라우트에서 CRON_SECRET 자체 검증
     pathname.startsWith("/present/") || // 체어 모니터 환자 안내 화면 — 로그인 불요(표시 전용)

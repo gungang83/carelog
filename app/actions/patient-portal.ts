@@ -61,14 +61,7 @@ export async function sendPatientInvitation(
   })();
   if (!supabaseUser) return { ok: false, message: "로그인이 필요합니다." };
 
-  // 기존 미수락 초대 무효화
-  await admin
-    .from("patient_invitations")
-    .update({ expires_at: new Date().toISOString() })
-    .eq("patient_id", patientId)
-    .is("accepted_at", null);
-
-  // 새 초대 생성
+  // 새 초대 생성(spec 038 — 이전 링크도 30일 안에는 계속 열림)
   const { data: invitation, error: insertError } = await admin
     .from("patient_invitations")
     .insert({
@@ -101,114 +94,48 @@ export async function sendPatientInvitation(
   return { ok: true, invitation: invitation as PatientInvitationRow };
 }
 
-// ─── US2: 환자 OTP 요청 ──────────────────────────────────────────────────────
+// ─── US2: 환자 인증 — 주민번호 없이 휴대폰 인증번호만 (spec 038 ⓐ) ─────────────
+//   초대 링크(문자로 받은 토큰) + 병원에 등록된 번호로 받은 인증번호 = 소지 2단계.
+//   환자 계정 키 = 인증된 휴대폰 번호. 기존 주민번호 계정은 같은 번호로 인증하면 그 계정을 이어 쓴다(ⓔ).
 
-export async function requestPatientOtp(
-  formData: FormData,
-): Promise<
-  | { ok: true; rrnHash: string }
-  | { ok: false; message: string; retryAfterSeconds?: number }
-> {
-  const rawPhone = String(formData.get("phone") ?? "");
-  const phone = normalizePhone(rawPhone);
-  if (!phone) {
-    return {
-      ok: false,
-      message: "올바른 전화번호를 입력해 주세요. (010으로 시작하는 11자리)",
-    };
-  }
+type Admin = ReturnType<typeof createAdminSupabaseClient>;
 
-  const rrnFront = String(formData.get("rrn_front") ?? "").trim();
-  const rrnBack = String(formData.get("rrn_back") ?? "").trim();
-  if (!/^\d{6}$/.test(rrnFront) || !/^\d{7}$/.test(rrnBack)) {
-    return { ok: false, message: "주민등록번호를 올바르게 입력해 주세요." };
-  }
-  const normalized13 = rrnFront + rrnBack;
-  const rrnHash = hashResidentNoForMatching(normalized13);
+/** 화면 표시용 가림 번호 010-****-1234 */
+function maskPhone(phone: string): string {
+  return `${phone.slice(0, 3)}-****-${phone.slice(-4)}`;
+}
 
-  const invitationToken = formData.get("invitation_token")
-    ? String(formData.get("invitation_token"))
-    : null;
+/** 저장 형식이 섞여 있을 수 있어(하이픈 유무) 두 형식으로 찾는다 */
+function phoneVariants(phone: string): string[] {
+  return [phone, `${phone.slice(0, 3)}-${phone.slice(3, 7)}-${phone.slice(7)}`];
+}
 
-  const admin = createAdminSupabaseClient();
+/** 이 번호의 환자 계정 — 휴대폰 계정 → (없으면) 이 번호 환자와 이미 연결된 기존 계정(주민번호 계정 전환) */
+async function findAccountByPhone(admin: Admin, phone: string, patientIds: string[] = []): Promise<string | null> {
+  const { data: byPhone } = await admin.from("patient_accounts").select("id").eq("phone", phone).maybeSingle();
+  if (byPhone) return byPhone.id as string;
 
-  if (invitationToken) {
-    const { data: invitation, error } = await admin
-      .from("patient_invitations")
-      .select("patient_id, expires_at, accepted_at")
-      .eq("token", invitationToken)
-      .single();
+  const { data: patients } = await admin.from("patient").select("id").in("phone", phoneVariants(phone));
+  const ids = [...new Set([...patientIds, ...(patients ?? []).map((p) => String(p.id))])];
+  if (ids.length === 0) return null;
+  const { data: links } = await admin
+    .from("patient_account_links")
+    .select("patient_account_id")
+    .in("patient_id", ids)
+    .limit(1);
+  const accountId = links?.[0]?.patient_account_id as string | undefined;
+  if (!accountId) return null;
+  // ⓔ 기존 계정을 휴대폰 계정으로 전환
+  await admin.from("patient_accounts").update({ phone }).eq("id", accountId).is("phone", null);
+  return accountId;
+}
 
-    if (error || !invitation) {
-      return { ok: false, message: "초대 링크가 유효하지 않습니다." };
-    }
-    if (new Date(invitation.expires_at) < new Date()) {
-      return {
-        ok: false,
-        message: "초대 링크가 만료되었습니다. 치과에 재전송을 요청하세요.",
-      };
-    }
-    if (invitation.accepted_at) {
-      return { ok: false, message: "이미 사용된 초대 링크입니다." };
-    }
-
-    const { data: patient } = await admin
-      .from("patient")
-      .select("resident_no, phone")
-      .eq("id", invitation.patient_id)
-      .single();
-
-    if (!patient?.resident_no) {
-      return { ok: false, message: "입력 정보가 일치하지 않습니다." };
-    }
-    const storedNorm = normalizeFullResidentNo(patient.resident_no);
-    if (!storedNorm || hashResidentNoForMatching(storedNorm) !== rrnHash) {
-      return { ok: false, message: "입력 정보가 일치하지 않습니다." };
-    }
-    const storedPhone = normalizePhone(patient.phone ?? "");
-    if (!storedPhone || storedPhone !== phone) {
-      return { ok: false, message: "입력 정보가 일치하지 않습니다." };
-    }
-  } else {
-    const { data: account } = await admin
-      .from("patient_accounts")
-      .select("id")
-      .eq("rrn_hash", rrnHash)
-      .maybeSingle();
-
-    if (!account) {
-      return {
-        ok: false,
-        message:
-          "가입된 계정이 없습니다. 치과에서 받은 초대 링크로 가입해 주세요.",
-      };
-    }
-
-    // 연결된 환자 기록의 전화번호와 대조
-    const { data: links } = await admin
-      .from("patient_account_links")
-      .select("patient_id")
-      .eq("patient_account_id", account.id);
-
-    if (!links?.length) {
-      return { ok: false, message: "입력 정보가 일치하지 않습니다." };
-    }
-
-    const { data: patients } = await admin
-      .from("patient")
-      .select("phone")
-      .in("id", links.map((l) => l.patient_id));
-
-    const storedPhones = (patients ?? [])
-      .map((p) => normalizePhone(p.phone ?? ""))
-      .filter(Boolean);
-
-    if (!storedPhones.includes(phone)) {
-      return { ok: false, message: "입력 정보가 일치하지 않습니다." };
-    }
-  }
-
-  // OTP 잠금 확인 (최근 10분 내 attempt_count >= 3)
+/** 인증번호 발급(잠금 확인 · 이전 번호 무효화 · 문자 발송) */
+async function issueOtp(
+  admin: Admin,
+  phone: string,
+  sender: string,
+): Promise<{ ok: true } | { ok: false; message: string; retryAfterSeconds?: number }> {
   const tenMinutesAgo = new Date(Date.now() - 10 * 60 * 1000).toISOString();
   const { data: lockedOtp } = await admin
     .from("patient_otps")
@@ -216,162 +143,64 @@ export async function requestPatientOtp(
     .eq("phone", phone)
     .gte("attempt_count", 3)
     .gte("created_at", tenMinutesAgo)
+    .limit(1)
     .maybeSingle();
-
   if (lockedOtp) {
-    const lockExpiry = new Date(
-      new Date(lockedOtp.created_at).getTime() + 10 * 60 * 1000,
-    );
-    const retryAfterSeconds = Math.ceil(
-      (lockExpiry.getTime() - Date.now()) / 1000,
-    );
+    const lockExpiry = new Date(lockedOtp.created_at).getTime() + 10 * 60 * 1000;
     return {
       ok: false,
-      message: "OTP 입력 오류 횟수 초과. 잠시 후 다시 시도해 주세요.",
-      retryAfterSeconds: Math.max(retryAfterSeconds, 0),
+      message: "인증번호 입력 오류 횟수를 넘었습니다. 잠시 후 다시 시도해 주세요.",
+      retryAfterSeconds: Math.max(Math.ceil((lockExpiry - Date.now()) / 1000), 0),
     };
   }
 
-  // 기존 미사용 OTP 무효화
   await admin
     .from("patient_otps")
     .update({ expires_at: new Date().toISOString() })
     .eq("phone", phone)
     .is("verified_at", null);
 
-  // 6자리 OTP 생성
   const code = String(Math.floor(100000 + Math.random() * 900000));
+  const { error } = await admin.from("patient_otps").insert({ phone, code });
+  if (error) return { ok: false, message: "인증번호 생성에 실패했습니다." };
 
-  const { error: otpError } = await admin.from("patient_otps").insert({
-    phone,
-    code,
-  });
-
-  if (otpError) {
-    return { ok: false, message: "OTP 생성에 실패했습니다." };
-  }
-
-  const smsResult = await sendSms(
-    phone,
-    `[케어로그] 인증번호: ${code} (5분 이내 입력)`,
-  );
-
-  if (!smsResult.ok) {
-    return { ok: false, message: `OTP 발송 실패: ${smsResult.message}` };
-  }
-
-  return { ok: true, rrnHash };
+  const sms = await sendSms(phone, `[${sender}] 인증번호: ${code} (5분 이내 입력)`);
+  if (!sms.ok) return { ok: false, message: `인증번호 발송 실패: ${sms.message}` };
+  return { ok: true };
 }
 
-// ─── US2: 환자 OTP 검증 + 세션 생성 ─────────────────────────────────────────
-
-export async function verifyPatientOtp(
-  formData: FormData,
-): Promise<
-  | { ok: true; isNewAccount: boolean }
-  | { ok: false; message: string }
-> {
-  const rawPhone = String(formData.get("phone") ?? "");
-  const phone = normalizePhone(rawPhone);
-  if (!phone) {
-    return { ok: false, message: "올바른 전화번호입니다." };
-  }
-
-  const code = String(formData.get("code") ?? "").trim();
-  const rrnHash = String(formData.get("rrn_hash") ?? "").trim();
-  const invitationToken = formData.get("invitation_token")
-    ? String(formData.get("invitation_token"))
-    : null;
-
-  const admin = createAdminSupabaseClient();
-
-  // 유효한 OTP 조회
-  const { data: otp, error: otpError } = await admin
+/** 인증번호 확인(3회 제한) */
+async function checkOtp(admin: Admin, phone: string, code: string): Promise<{ ok: true } | { ok: false; message: string }> {
+  const { data: otp } = await admin
     .from("patient_otps")
-    .select("id, code, attempt_count, expires_at")
+    .select("id, code, attempt_count")
     .eq("phone", phone)
     .is("verified_at", null)
     .gt("expires_at", new Date().toISOString())
     .order("created_at", { ascending: false })
     .limit(1)
     .maybeSingle();
+  if (!otp) return { ok: false, message: "인증 시간이 지났습니다. 인증번호를 다시 받아 주세요." };
 
-  if (otpError || !otp) {
-    return {
-      ok: false,
-      message:
-        "인증 시간이 초과되었습니다. OTP를 다시 요청해 주세요.",
-    };
+  const attempts = otp.attempt_count + 1;
+  await admin.from("patient_otps").update({ attempt_count: attempts }).eq("id", otp.id);
+  if (otp.code !== code.trim()) {
+    return attempts >= 3
+      ? { ok: false, message: "인증번호를 3번 틀렸습니다. 10분 후 다시 시도해 주세요." }
+      : { ok: false, message: `인증번호가 일치하지 않습니다. (${attempts}/3회)` };
   }
+  await admin.from("patient_otps").update({ verified_at: new Date().toISOString() }).eq("id", otp.id);
+  return { ok: true };
+}
 
-  // attempt_count 증가
-  const newAttemptCount = otp.attempt_count + 1;
-  await admin
-    .from("patient_otps")
-    .update({ attempt_count: newAttemptCount })
-    .eq("id", otp.id);
-
-  if (newAttemptCount >= 3 && otp.code !== code) {
-    return {
-      ok: false,
-      message: "OTP 입력 오류 횟수(3회)를 초과했습니다. 10분 후 다시 시도해 주세요.",
-    };
-  }
-
-  if (otp.code !== code) {
-    return {
-      ok: false,
-      message: `인증번호가 일치하지 않습니다. (${newAttemptCount}/3회)`,
-    };
-  }
-
-  // OTP 사용 처리
-  await admin
-    .from("patient_otps")
-    .update({ verified_at: new Date().toISOString() })
-    .eq("id", otp.id);
-
-  // patient_accounts 조회 또는 생성
-  let isNewAccount = false;
-  let patientAccountId: string;
-
-  const { data: existing } = await admin
-    .from("patient_accounts")
-    .select("id")
-    .eq("rrn_hash", rrnHash)
-    .maybeSingle();
-
-  if (existing) {
-    patientAccountId = existing.id;
-    await admin
-      .from("patient_accounts")
-      .update({ last_login_at: new Date().toISOString() })
-      .eq("id", patientAccountId);
-  } else {
-    const { data: newAccount, error: accountError } = await admin
-      .from("patient_accounts")
-      .insert({ rrn_hash: rrnHash })
-      .select("id")
-      .single();
-
-    if (accountError || !newAccount) {
-      return { ok: false, message: "계정 생성에 실패했습니다." };
-    }
-    patientAccountId = newAccount.id;
-    isNewAccount = true;
-  }
-
-  // 세션 생성
-  const { data: session, error: sessionError } = await admin
+async function startPatientSession(admin: Admin, patientAccountId: string): Promise<boolean> {
+  await admin.from("patient_accounts").update({ last_login_at: new Date().toISOString() }).eq("id", patientAccountId);
+  const { data: session } = await admin
     .from("patient_sessions")
     .insert({ patient_account_id: patientAccountId })
     .select("token")
     .single();
-
-  if (sessionError || !session) {
-    return { ok: false, message: "세션 생성에 실패했습니다." };
-  }
-
+  if (!session) return false;
   const cookieStore = await cookies();
   cookieStore.set("patient_session_token", session.token, {
     httpOnly: true,
@@ -380,43 +209,13 @@ export async function verifyPatientOtp(
     maxAge: 60 * 60 * 24 * 30, // 30 days
     path: "/",
   });
-
-  // 초대 토큰 처리
-  if (invitationToken) {
-    const { data: invitation } = await admin
-      .from("patient_invitations")
-      .select("id, patient_id, institution_id, expires_at, accepted_at")
-      .eq("token", invitationToken)
-      .maybeSingle();
-
-    if (
-      invitation &&
-      !invitation.accepted_at &&
-      new Date(invitation.expires_at) > new Date()
-    ) {
-      try {
-        await admin.from("patient_account_links").insert({
-          patient_account_id: patientAccountId,
-          patient_id: invitation.patient_id,
-          institution_id: invitation.institution_id,
-        });
-      } catch {
-        // ON CONFLICT DO NOTHING — duplicate link is fine
-      }
-
-      await admin
-        .from("patient_invitations")
-        .update({ accepted_at: new Date().toISOString() })
-        .eq("id", invitation.id);
-    }
-  }
-
-  // Supabase 로그인 상태라면 patient_auth_links도 자동 연결
-  // (직원 겸 환자인 경우, 이후 Supabase 세션만으로 /portal/records 접근 가능)
+  // 직원 겸 환자: Supabase 로그인 상태면 Google 연결도(이후 Supabase 세션만으로 포털 접근)
   try {
     const { createServerSupabaseClient } = await import("@/lib/supabase/server");
     const supabase = await createServerSupabaseClient();
-    const { data: { user: authUser } } = await supabase.auth.getUser();
+    const {
+      data: { user: authUser },
+    } = await supabase.auth.getUser();
     if (authUser) {
       await admin
         .from("patient_auth_links")
@@ -426,10 +225,142 @@ export async function verifyPatientOtp(
         );
     }
   } catch {
-    // 인증 컨텍스트 없을 때 무시 (순수 환자 OTP 흐름)
+    // 순수 환자 흐름 — 무시
+  }
+  return true;
+}
+
+type InviteInfo = {
+  id: string;
+  patientId: string;
+  institutionId: string;
+  institutionName: string;
+  patientName: string;
+  phone: string | null;
+  shareId: string | null;
+};
+
+/** 초대 링크 확인 — 유효기간 안이면 몇 번이든 열 수 있다(ⓓ 30일). 번호는 지금 병원에 등록된 번호. */
+export async function getInvitation(
+  token: string,
+): Promise<{ ok: true; invite: InviteInfo; maskedPhone: string | null } | { ok: false; reason: "invalid" | "expired" }> {
+  const admin = createAdminSupabaseClient();
+  const { data } = await admin
+    .from("patient_invitations")
+    .select("id, expires_at, institution_id, patient_id, share_id, institutions(name), patient(name, phone)")
+    .eq("token", token)
+    .maybeSingle();
+  if (!data) return { ok: false, reason: "invalid" };
+  if (new Date(data.expires_at) < new Date()) return { ok: false, reason: "expired" };
+  const inst = data.institutions as unknown as { name: string } | null;
+  const pat = data.patient as unknown as { name: string; phone: string | null } | null;
+  const phone = normalizePhone(pat?.phone ?? "");
+  return {
+    ok: true,
+    invite: {
+      id: data.id as string,
+      patientId: String(data.patient_id),
+      institutionId: data.institution_id as string,
+      institutionName: inst?.name ?? "케어로그",
+      patientName: pat?.name ?? "",
+      phone,
+      shareId: (data.share_id as string | null) ?? null,
+    },
+    maskedPhone: phone ? maskPhone(phone) : null,
+  };
+}
+
+/** 링크로 들어온 환자가 이미 로그인돼 있고 그 환자와 연결돼 있으면 바로 갈 곳 */
+export async function inviteRedirectIfSignedIn(token: string): Promise<string | null> {
+  const session = await getPatientSession();
+  if (!session) return null;
+  const r = await getInvitation(token);
+  if (!r.ok) return null;
+  const admin = createAdminSupabaseClient();
+  const { data: link } = await admin
+    .from("patient_account_links")
+    .select("id")
+    .eq("patient_account_id", session.patientAccountId)
+    .eq("patient_id", r.invite.patientId)
+    .maybeSingle();
+  if (!link) return null;
+  return r.invite.shareId ? `/portal/s/${r.invite.shareId}` : "/portal/records";
+}
+
+/** 링크 화면 [인증번호 받기] — 번호 입력 없이 등록된 번호로 */
+export async function requestInviteOtp(
+  token: string,
+): Promise<{ ok: true } | { ok: false; message: string; retryAfterSeconds?: number }> {
+  const r = await getInvitation(token);
+  if (!r.ok) return { ok: false, message: r.reason === "expired" ? "링크 유효기간이 지났습니다. 병원에 다시 요청해 주세요." : "유효하지 않은 링크입니다." };
+  if (!r.invite.phone) return { ok: false, message: "병원에 등록된 휴대폰 번호가 없습니다. 병원에 문의해 주세요." };
+  return issueOtp(createAdminSupabaseClient(), r.invite.phone, r.invite.institutionName);
+}
+
+/** 링크 화면 인증번호 확인 → 계정(휴대폰) 연결 → 로그인 → 갈 곳 */
+export async function verifyInviteOtp(
+  token: string,
+  code: string,
+): Promise<{ ok: true; next: string; isNewAccount: boolean } | { ok: false; message: string }> {
+  const r = await getInvitation(token);
+  if (!r.ok) return { ok: false, message: "링크를 확인할 수 없습니다. 병원에 다시 요청해 주세요." };
+  const { invite } = r;
+  if (!invite.phone) return { ok: false, message: "병원에 등록된 휴대폰 번호가 없습니다." };
+
+  const admin = createAdminSupabaseClient();
+  const checked = await checkOtp(admin, invite.phone, code);
+  if (!checked.ok) return checked;
+
+  let accountId = await findAccountByPhone(admin, invite.phone, [invite.patientId]);
+  let isNewAccount = false;
+  if (!accountId) {
+    const { data: created } = await admin.from("patient_accounts").insert({ phone: invite.phone }).select("id").single();
+    if (!created) return { ok: false, message: "계정 생성에 실패했습니다." };
+    accountId = created.id as string;
+    isNewAccount = true;
   }
 
-  return { ok: true, isNewAccount };
+  // 이 환자 연결(이미 있으면 그대로)
+  await admin
+    .from("patient_account_links")
+    .upsert(
+      { patient_account_id: accountId, patient_id: invite.patientId, institution_id: invite.institutionId },
+      { onConflict: "patient_account_id,patient_id", ignoreDuplicates: true },
+    );
+  // 최초 인증 시각만 남긴다(링크는 계속 쓸 수 있다)
+  await admin.from("patient_invitations").update({ accepted_at: new Date().toISOString() }).eq("id", invite.id).is("accepted_at", null);
+
+  if (!(await startPatientSession(admin, accountId))) return { ok: false, message: "로그인에 실패했습니다." };
+  return { ok: true, next: invite.shareId ? `/portal/s/${invite.shareId}` : "/portal/records", isNewAccount };
+}
+
+/** 포털 로그인(링크 없이) — 휴대폰 번호 → 인증번호. 이미 병원에서 받은 링크로 한 번 인증한 번호만 */
+export async function requestPatientOtp(
+  formData: FormData,
+): Promise<{ ok: true; phone: string } | { ok: false; message: string; retryAfterSeconds?: number }> {
+  const phone = normalizePhone(String(formData.get("phone") ?? ""));
+  if (!phone) return { ok: false, message: "올바른 휴대폰 번호를 입력해 주세요. (010으로 시작하는 11자리)" };
+  const admin = createAdminSupabaseClient();
+  const accountId = await findAccountByPhone(admin, phone);
+  if (!accountId) {
+    return { ok: false, message: "아직 연결된 기록이 없는 번호입니다. 병원에서 받은 문자 링크로 먼저 들어와 주세요." };
+  }
+  const r = await issueOtp(admin, phone, "케어로그");
+  return r.ok ? { ok: true, phone } : r;
+}
+
+export async function verifyPatientOtp(
+  formData: FormData,
+): Promise<{ ok: true; isNewAccount: boolean } | { ok: false; message: string }> {
+  const phone = normalizePhone(String(formData.get("phone") ?? ""));
+  if (!phone) return { ok: false, message: "올바른 휴대폰 번호가 아닙니다." };
+  const admin = createAdminSupabaseClient();
+  const checked = await checkOtp(admin, phone, String(formData.get("code") ?? ""));
+  if (!checked.ok) return checked;
+  const accountId = await findAccountByPhone(admin, phone);
+  if (!accountId) return { ok: false, message: "연결된 계정을 찾을 수 없습니다." };
+  if (!(await startPatientSession(admin, accountId))) return { ok: false, message: "로그인에 실패했습니다." };
+  return { ok: true, isNewAccount: false };
 }
 
 // ─── US3: 환자 상담 내역 조회 ─────────────────────────────────────────────────

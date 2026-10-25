@@ -25,8 +25,9 @@ Supabase(PostgreSQL) 기반. 전체 스키마는 `supabase/schema.sql` 참고.
 | `chairs` | 진료 공간 단위 (A/B/C 등), 기관별 관리 |
 | `chair_audit_logs` | 체어 기록 감사 로그 (삽입 전용, 불변) |
 | `activity_logs` | 최근 활동 피드용 상담 이벤트 로그 (트리거 자동 기록) |
-| `patient_invitations` | 환자 포털 SMS 초대 기록 (72시간 유효) |
-| `patient_accounts` | 환자 포털 계정 (주민번호 해시 기반, Supabase Auth 분리) |
+| `patient_invitations` | 환자 포털 SMS 링크 기록 (30일, 기간 내 반복 열기 · spec 038) |
+| `patient_accounts` | 환자 포털 계정 (휴대폰 번호 기반 · spec 038, Supabase Auth 분리) |
+| `patient_shares` | 환자용 상담 안내(직원 기록과 별도 문서 · spec 038) |
 | `patient_otps` | 환자 OTP 인증 코드 (5분 만료) |
 | `patient_sessions` | 환자 세션 토큰 (30일 HttpOnly 쿠키) |
 | `patient_account_links` | PatientAccount ↔ 기관 내 patient 레코드 M:N 연결 |
@@ -328,8 +329,9 @@ $$;
 | `token` | text UNIQUE | 64자 랜덤 토큰 (UUID × 2 연결) |
 | `consent_given` | boolean NOT NULL | 개인정보 제공 동의 여부 |
 | `invited_by` | uuid FK → auth.users.id | 발송한 직원 |
-| `expires_at` | timestamptz | 만료 시각 (기본: +72시간) |
-| `accepted_at` | timestamptz | 수락 시각 (NULL = 미수락) |
+| `expires_at` | timestamptz | 만료 시각 (기본: +30일 · spec 038 — 기간 안에는 몇 번이든 열림) |
+| `accepted_at` | timestamptz | 최초 인증 시각 (NULL = 아직 안 엶 · 더는 재사용을 막지 않음) |
+| `share_id` | uuid FK → patient_shares.id | 이 링크가 여는 상담 안내(NULL = 기록 목록으로) |
 | `created_at` | timestamptz | 생성 시각 |
 
 **인덱스**: `idx_patient_invitations_token`, `idx_patient_invitations_patient`
@@ -338,14 +340,33 @@ $$;
 
 ## `patient_accounts`
 
-주민번호 해시 기반 환자 포털 계정. 전화번호 저장 없음.
+환자 포털 계정. **spec 038(2026-10-25)부터 키 = 인증된 휴대폰 번호**(주민번호 미수집). 기존 주민번호 계정은
+같은 번호로 인증하면 그 계정에 `phone`을 채워 이어 쓴다(ⓔ). `rrn_hash`는 신규 미수집 · 이후 삭제 예정.
 
 | 컬럼 | 타입 | 설명 |
 |---|---|---|
 | `id` | uuid PK | gen_random_uuid() |
-| `rrn_hash` | text NOT NULL UNIQUE | SHA-256(pepper+정규화된_주민번호) — 영구 식별자 |
+| `phone` | text UNIQUE(부분) | 인증된 휴대폰 번호(010XXXXXXXX) — 계정 키 |
+| `rrn_hash` | text UNIQUE NULL | (레거시) SHA-256(pepper+정규화된_주민번호) — 신규 미수집 |
 | `created_at` | timestamptz | 가입 시각 |
 | `last_login_at` | timestamptz | 마지막 로그인 |
+
+---
+
+## `patient_shares` (spec 038)
+
+환자용 상담 안내 — 직원이 기록에서 골라 만든 환자용 문서(직원 기록은 그대로). RLS 정책 0(서버 service_role만).
+
+| 컬럼 | 타입 | 설명 |
+|---|---|---|
+| `id` | uuid PK | |
+| `institution_id` / `patient_id` | FK | 보낸 기관·환자 |
+| `consultation_id` | bigint FK → consultation.id (set null) | 원본 상담 기록 |
+| `title` / `content` | text | 제목("상담 안내") · 환자용 본문 HTML(그림 포함, sanitize) |
+| `prescriptions` | jsonb | 추천 관리 제품 |
+| `created_by` / `author_name` | | 보낸 직원 |
+| `sent_at` | timestamptz | 문자 발송 시각 |
+| `first_viewed_at` / `last_viewed_at` / `view_count` | | 환자 열람(직원 카드 "환자가 확인했어요") |
 
 ---
 

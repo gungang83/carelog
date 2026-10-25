@@ -11,9 +11,9 @@ import { ConsultationCard, type CardRecord } from "@/components/consultation/con
 import {
   ConsultationHistory,
   RelinkControls,
-  SmsControls,
   type ConsultationHistoryItem,
 } from "@/components/consultation-history";
+import { getSharesForConsultations, type ShareStatus } from "@/app/actions/patient-shares";
 import { getRecentParticipants } from "@/app/actions/chairs";
 import { getReviewFlagsFor } from "@/app/actions/review-flags";
 import type { SearchedConsultation } from "@/app/actions/consultations";
@@ -46,6 +46,7 @@ export function PatientConsultations({
   const [recent, setRecent] = useState<Participant[]>([]);
   const [flags, setFlags] = useState<Record<string, ReviewFlag[]>>({});
   const [highlight, setHighlight] = useState<string | null>(null);
+  const [shares, setShares] = useState<Record<string, ShareStatus[]>>({});
 
   const drafts = legacy.filter((c) => c.status === "draft");
   const imagesById = useMemo(
@@ -62,6 +63,7 @@ export function PatientConsultations({
     const ids = cards.map((r) => r.id);
     if (ids.length === 0) return;
     getReviewFlagsFor(ids).then(setFlags).catch(() => {});
+    getSharesForConsultations(ids).then(setShares).catch(() => {});
   };
   useEffect(reloadFlags, [rows]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -163,7 +165,7 @@ export function PatientConsultations({
                           ))}
                         </div>
                       )}
-                      <SmsControls item={{ id: r.id, sms_sent_at: r.sms_sent_at }} patientId={patientId} />
+                      <ShareStatusLine items={shares[r.id] ?? []} />
                       {r.chair_id && <RelinkControls item={{ id: r.id }} patientId={patientId} />}
                     </div>
                   }
@@ -183,5 +185,32 @@ export function PatientConsultations({
         </div>
       )}
     </div>
+  );
+}
+
+function fmt(iso: string | null): string {
+  if (!iso) return "";
+  const d = new Date(iso);
+  return Number.isNaN(d.getTime()) ? "" : d.toLocaleString("ko-KR", { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" });
+}
+
+/** 보낸 상담 안내와 환자 확인 여부(spec 038) */
+function ShareStatusLine({ items }: { items: ShareStatus[] }) {
+  if (items.length === 0) return <p className="text-xs text-slate-400">아직 보낸 상담 안내가 없어요 — [📩 환자에게 보내기]</p>;
+  return (
+    <ul className="flex flex-col gap-0.5 text-xs">
+      {items.map((s) => (
+        <li key={s.id} className="flex flex-wrap items-center gap-2">
+          <span className="text-slate-500">📩 {fmt(s.sent_at)} 보냄</span>
+          {s.first_viewed_at ? (
+            <span className="rounded-full bg-emerald-50 px-2 py-0.5 font-semibold text-emerald-700">
+              ✓ 환자가 확인했어요 ({fmt(s.first_viewed_at)}{s.view_count > 1 ? ` · ${s.view_count}회` : ""})
+            </span>
+          ) : (
+            <span className="rounded-full bg-slate-100 px-2 py-0.5 text-slate-500">아직 안 열어 봤어요</span>
+          )}
+        </li>
+      ))}
+    </ul>
   );
 }
