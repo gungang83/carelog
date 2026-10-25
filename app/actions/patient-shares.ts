@@ -12,7 +12,8 @@ import { getMyAuthorInfo, getMyInstitution, getMyInstitutionId } from "@/lib/aut
 import { getPatientSession } from "@/lib/patient-session";
 import { sanitizeRichHtml } from "@/lib/sanitize-html";
 import { deductCredit } from "@/lib/credits";
-import { sendSms } from "@/lib/sms/solapi";
+import { alimtalkReady, sendAlimtalk, sendSms } from "@/lib/sms/solapi";
+import { parseConsultSettings } from "@/lib/consult-settings";
 import { sendPushToPatient } from "@/app/actions/patient-portal";
 import { insertInvitation, institutionSmsSender, koreanMonthDay, patientLinkUrl } from "@/lib/patient-invite";
 
@@ -47,6 +48,12 @@ export type ShareContext = {
   patient: { id: string; name: string; maskedPhone: string | null };
   /** 이 환자에게 개인정보 제공 동의를 확인한 기록이 있는지(최초 1회) */
   consentDone: boolean;
+  /** 병원 대표번호(설정) — 없으면 빈 문자열 */
+  contactPhone: string;
+  /** 대표번호 넣기 기본 선택(설정) */
+  includeContactDefault: boolean;
+  /** 이번 발송 경로 — 알림톡 설정이 있으면 알림톡(실패 시 문자) */
+  channel: "alimtalk" | "sms";
 };
 
 export async function getShareContext(consultationId: string): Promise<{ ok: true; ctx: ShareContext } | Fail> {
@@ -71,6 +78,8 @@ export async function getShareContext(consultationId: string): Promise<{ ok: tru
   if (!p) return { ok: false, message: "환자를 찾을 수 없습니다." };
 
   const admin = createAdminSupabaseClient();
+  const { data: instRow } = await admin.from("institutions").select("consult_settings").eq("id", auth.institutionId).maybeSingle();
+  const settings = parseConsultSettings(instRow?.consult_settings);
   const { data: consent } = await admin
     .from("patient_invitations")
     .select("id")
@@ -91,6 +100,9 @@ export async function getShareContext(consultationId: string): Promise<{ ok: tru
         maskedPhone: phone ? `${phone.slice(0, 3)}-****-${phone.slice(-4)}` : null,
       },
       consentDone: (consent ?? []).length > 0,
+      contactPhone: settings.contact_phone,
+      includeContactDefault: settings.include_contact && !!settings.contact_phone,
+      channel: alimtalkReady("share") ? "alimtalk" : "sms",
     },
   };
 }
@@ -158,6 +170,8 @@ export async function sendPatientShare(params: {
   prescriptions: string[];
   /** 이번에 동의를 확인했는지(최초 1회 필수) */
   consent: boolean;
+  /** 이번 문자에 "문의: 병원 대표번호"를 넣을지(기본값 = 병원 설정, 보낼 때 바꿈) */
+  includeContact?: boolean;
 }): Promise<{ ok: true; shareId: string } | (Fail & { needConsent?: boolean })> {
   const auth = await requireStaff();
   if (!auth.ok) return auth;
@@ -210,15 +224,32 @@ export async function sendPatientShare(params: {
     return { ok: false, message: `링크 생성 실패: ${inv.message}` };
   }
 
-  // 문자: 언제·어디서 받은 상담인지 + 짧은 링크(병원별 발신번호가 있으면 그 번호로)
+  // 언제·어디서 받은 상담인지 + 짧은 링크(+ 고른 경우 병원 대표번호). 알림톡 설정이 있으면 알림톡, 실패하면 문자.
   const inst = await getMyInstitution();
   const instName = inst?.institution.name ?? "케어로그";
   const when = koreanMonthDay(ctx.consultedAt);
-  const sms = await sendSms(
-    phone,
-    `[${instName}] ${ctx.patient.name}님, ${when ? `${when} ` : ""}${instName}에서 받으신 상담 내용을 정리해 보내 드려요. 아래 링크에서 확인해 주세요.\n${patientLinkUrl(inv.token)}`,
-    { from: await institutionSmsSender(admin, auth.institutionId) },
-  );
+  const contact = params.includeContact && ctx.contactPhone ? ctx.contactPhone : "";
+  const from = await institutionSmsSender(admin, auth.institutionId);
+  const smsText =
+    `[${instName}] ${ctx.patient.name}님, ${when ? `${when} ` : ""}${instName}에서 받으신 상담 내용을 정리해 보내 드려요. 아래 링크에서 확인해 주세요.` +
+    `\n${patientLinkUrl(inv.token)}${contact ? `\n문의: ${instName} ${contact}` : ""}`;
+  let sms: { ok: true } | { ok: false; message: string } = { ok: false, message: "" };
+  if (ctx.channel === "alimtalk") {
+    // 템플릿 변수 — specs/038 §7 문구와 글자까지 일치해야 한다
+    sms = await sendAlimtalk(
+      phone,
+      "share",
+      {
+        "#{병원}": instName,
+        "#{환자}": ctx.patient.name,
+        "#{날짜}": when || "오늘",
+        "#{문의}": contact ? `문의: ${instName} ${contact}` : "궁금한 점은 병원으로 편하게 문의해 주세요.",
+        "#{링크}": inv.token,
+      },
+      { from },
+    );
+  }
+  if (!sms.ok) sms = await sendSms(phone, smsText, { from });
   if (!sms.ok) {
     await admin.from("patient_invitations").delete().eq("id", inv.id);
     await admin.from("patient_shares").delete().eq("id", share.id);

@@ -24,6 +24,7 @@ export function ShareComposer({ consultationId, onClose, onSent }: { consultatio
   const [rx, setRx] = useState<Record<string, boolean>>({});
   const [html, setHtml] = useState("");
   const [consent, setConsent] = useState(false);
+  const [includeContact, setIncludeContact] = useState(false); // 병원 설정이 기본값 — 보내는 순간 바꿀 수 있다
   const [busy, setBusy] = useState<"" | "draft" | "send">("");
   const [msg, setMsg] = useState("");
   const [sent, setSent] = useState(false);
@@ -38,6 +39,7 @@ export function ShareComposer({ consultationId, onClose, onSent }: { consultatio
         return;
       }
       setCtx(r.ctx);
+      setIncludeContact(r.ctx.includeContactDefault);
       const bl = splitRecordBlocks(r.ctx.content);
       setPicked(Object.fromEntries(bl.map((b) => [b.id, b.defaultOn])));
       setImgs(Object.fromEntries(recordImages(r.ctx.content).map((u) => [u, true])));
@@ -79,7 +81,14 @@ export function ShareComposer({ consultationId, onClose, onSent }: { consultatio
     if (!ctx) return;
     setBusy("send");
     setMsg("");
-    const r = await sendPatientShare({ consultationId, content: html, images: chosenImgs, prescriptions: chosenRx, consent });
+    const r = await sendPatientShare({
+      consultationId,
+      content: html,
+      images: chosenImgs,
+      prescriptions: chosenRx,
+      consent,
+      includeContact,
+    });
     setBusy("");
     if (r.ok) {
       setSent(true);
@@ -206,6 +215,22 @@ export function ShareComposer({ consultationId, onClose, onSent }: { consultatio
                   </span>
                 </label>
               )}
+              {/* 이번 메시지에 병원 대표번호 넣기 — 기본값은 설정 › 환자 문자 · 알림톡 */}
+              <label className={`mb-3 flex items-center gap-2 text-sm ${ctx.contactPhone ? "text-slate-700" : "text-slate-400"}`}>
+                <input
+                  type="checkbox"
+                  checked={includeContact && !!ctx.contactPhone}
+                  disabled={!ctx.contactPhone}
+                  onChange={(e) => setIncludeContact(e.target.checked)}
+                />
+                {ctx.contactPhone ? (
+                  <>
+                    메시지에 <b>&quot;문의: {ctx.contactPhone}&quot;</b> 넣기
+                  </>
+                ) : (
+                  <>병원 대표번호를 넣으려면 설정 › 환자 문자 · 알림톡에서 번호를 등록하세요</>
+                )}
+              </label>
               <div className="flex flex-wrap items-center gap-2">
                 <button
                   type="button"
@@ -213,10 +238,11 @@ export function ShareComposer({ consultationId, onClose, onSent }: { consultatio
                   disabled={busy !== "" || !html.replace(/<[^>]*>/g, "").trim() || !ctx.patient.maskedPhone || (!ctx.consentDone && !consent)}
                   className="rounded-lg bg-sky-600 px-5 py-2 text-sm font-semibold text-white hover:bg-sky-700 disabled:opacity-40"
                 >
-                  {busy === "send" ? "보내는 중…" : "문자로 보내기"}
+                  {busy === "send" ? "보내는 중…" : ctx.channel === "alimtalk" ? "카카오 알림톡으로 보내기" : "문자로 보내기"}
                 </button>
                 <span className="text-xs text-slate-500">
-                  환자는 문자 링크 → 등록 번호로 인증번호 한 번 → 이 안내를 봅니다(주민번호 묻지 않음).
+                  {ctx.channel === "alimtalk" ? "알림톡이 안 되면 문자로 대신 보냅니다. " : ""}
+                  환자는 링크 → 등록 번호로 인증번호 한 번 → 이 안내를 봅니다(주민번호 묻지 않음).
                 </span>
               </div>
               {msg && <p className="mt-2 text-sm text-rose-600">{msg}</p>}

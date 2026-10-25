@@ -18,6 +18,7 @@ import { listConsultAssetsForManage } from "@/app/actions/consult-assets";
 import { TreatmentItemsManager } from "@/components/settings/treatment-items-manager";
 import { listTreatmentItemsForManage } from "@/app/actions/treatment-items";
 import { ConsultSafetySettings } from "@/components/settings/consult-safety-settings";
+import { PatientMessageSettings } from "@/components/settings/patient-message-settings";
 import { getConsultSettings } from "@/app/actions/consult-settings";
 import {
   CollapsibleSection,
@@ -137,6 +138,16 @@ export default async function SettingsPage() {
             subtitle="녹음 방치 감지 경고 · 자동 저장 기준"
           >
             <ConsultSafetySettings initial={consultSettings} />
+          </CollapsibleSection>
+          )}
+
+          {isOwnerOrAdmin && (
+          <CollapsibleSection
+            emoji="📩"
+            title="환자 문자 · 알림톡"
+            subtitle="병원 대표번호 · 보낼 때 대표번호 넣기 기본값"
+          >
+            <PatientMessageSettings initial={consultSettings} />
           </CollapsibleSection>
           )}
 
