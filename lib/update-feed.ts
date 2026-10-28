@@ -342,6 +342,14 @@ export const UPDATE_FEED: UpdateFeedEntry[] = [
     ],
     internal: "spec 038 §5.8 · 알림톡은 채널·템플릿 검수 후 자동 전환",
   },
+  {
+    id: "2026-10-28-link-preview",
+    date: "2026-10-28",
+    emoji: "🖼",
+    title: "안내 링크 미리보기 이미지",
+    items: ["환자에게 보낸 문자의 링크 미리보기에 케어로그 이미지가 표시됩니다."],
+    internal: "app/opengraph-image.tsx · app/icon.png (Next 기본 favicon 교체)",
+  },
 ];
 
 // ── 결정 상태 (DB update_feed_decisions) ──────────────────────────────
