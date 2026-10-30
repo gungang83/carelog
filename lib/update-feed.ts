@@ -350,6 +350,18 @@ export const UPDATE_FEED: UpdateFeedEntry[] = [
     items: ["환자에게 보낸 문자의 링크 미리보기에 케어로그 이미지가 표시됩니다."],
     internal: "app/opengraph-image.tsx · app/icon.png (Next 기본 favicon 교체)",
   },
+  {
+    id: "2026-10-30-draw-engine",
+    date: "2026-10-30",
+    emoji: "✏️",
+    title: "그림 다시 고치기",
+    items: [
+      "상담 기록에 넣은 그림을 선택하고 [✏️ 고치기]를 누르면, 그렸던 화살표·글자를 하나씩 지우거나 더 그릴 수 있습니다.",
+      "지우개는 누른 선을 통째로 지웁니다. [↪ 다시]와 [모두 지우기]도 생겼습니다.",
+      "기공지 그림 지시·첨부 사진 고치기도 같은 그리기 도구를 씁니다.",
+    ],
+    internal: "spec 039 1단계 — 이 날 이후 그린 그림부터 고치기 가능(예전 그림은 덧그리기만)",
+  },
 ];
 
 // ── 결정 상태 (DB update_feed_decisions) ──────────────────────────────

@@ -23,10 +23,10 @@ import {
 } from "@/lib/lab-orders";
 import { PatientPicker, type PickedPatient } from "@/components/patients/patient-picker";
 import { ToothChart } from "@/components/lab/tooth-chart";
-import { SketchPad } from "@/components/lab/sketch-pad";
 import { ToothViewer } from "@/components/dental/tooth-viewer";
 import { AttachmentGallery } from "@/components/lab/attachment-gallery";
-import { ImageAnnotator } from "@/components/image-annotator";
+import { DrawEditor, type DrawResult } from "@/components/draw/draw-editor";
+import { DRAW_DOC_SUFFIX, upgradeDoc, type DrawDoc } from "@/lib/draw/doc";
 
 const labBucket = "lab-orders";
 
@@ -131,8 +131,13 @@ export function LabOrderComposer({
   const [teethOpen, setTeethOpen] = useState(false); // spec 037 — 치아 모형(2D·3D) 스냅샷에 그려 첨부
   // 첨부 미리보기: path → 주소(이번에 올린 건 로컬 주소, 기존 첨부는 10분 서명 URL — 화면 표시용, 저장 안 함)
   const [previews, setPreviews] = useState<Record<string, string>>({});
-  // 첨부 수정(그림 도구) — 대상 위치와 원본 파일
-  const [editTarget, setEditTarget] = useState<{ index: number; file: File } | null>(null);
+  // 첨부 수정(그리기 엔진) — 대상 위치 + 바탕(원본)·편집용 기록(있으면 예전 표시를 층으로 복원)
+  const [editTarget, setEditTarget] = useState<{
+    index: number;
+    image: Blob | null;
+    doc: DrawDoc | null;
+    ref: string;
+  } | null>(null);
 
   // 수정 화면으로 연 기존 첨부의 미리보기 주소 받기
   useEffect(() => {
@@ -155,7 +160,24 @@ export function LabOrderComposer({
 
   // ── 첨부 업로드(서명 업로드 URL — 액션 바디 한도 우회) ──
   /** replaceAt를 주면 그 자리의 첨부를 새 파일로 바꾼다(수정) */
-  const uploadBlob = async (blob: Blob, name: string, kind: LabAttachmentKind, replaceAt?: number) => {
+  /** 첨부 목록에 넣지 않고 저장소에만 올린다(그림의 원본·편집용 기록) → 경로 */
+  const putFile = async (blob: Blob, name: string): Promise<string | null> => {
+    const prep = await createLabAttachmentUpload(setIdRef.current, name, "sketch", blob.size);
+    if (!prep.ok) {
+      setMsg(prep.message);
+      return null;
+    }
+    const { error } = await createBrowserSupabaseClient()
+      .storage.from(labBucket)
+      .uploadToSignedUrl(prep.path, prep.token, blob, { contentType: blob.type || "application/octet-stream" });
+    if (error) {
+      setMsg(`업로드 실패: ${error.message}`);
+      return null;
+    }
+    return prep.path;
+  };
+
+  const uploadBlob = async (blob: Blob, name: string, kind: LabAttachmentKind, replaceAt?: number, draw?: string) => {
     const replaced = replaceAt !== undefined ? (attachments[replaceAt]?.bytes ?? 0) : 0;
     const total = attachments.reduce((s, a) => s + a.bytes, 0) - replaced + blob.size;
     if (total > LAB_ATTACH_LIMITS.total) {
@@ -180,7 +202,7 @@ export function LabOrderComposer({
         setMsg(`업로드 실패: ${error.message}`);
         return;
       }
-      const meta: LabAttachmentMeta = { kind, name, bytes: blob.size, path: prep.path };
+      const meta: LabAttachmentMeta = { kind, name, bytes: blob.size, path: prep.path, ...(draw ? { draw } : {}) };
       setPreviews((prev) => ({ ...prev, [prep.path]: URL.createObjectURL(blob) }));
       setAttachments((prev) =>
         replaceAt !== undefined && replaceAt < prev.length ? prev.map((a, i) => (i === replaceAt ? meta : a)) : [...prev, meta],
@@ -227,36 +249,70 @@ export function LabOrderComposer({
     await uploadBlob(file, file.name, "video");
   };
 
-  /** 첨부(사진·그림)를 그림 도구로 열기 */
+  /** 그리기 결과 저장 — 원본(없던 것)·편집용 기록을 저장소에 두고, 보기용 그림을 첨부로 */
+  const saveDrawing = async (r: DrawResult, kind: LabAttachmentKind, replaceAt?: number) => {
+    setUploading(true);
+    try {
+      const doc: DrawDoc = { ...r.doc, base: { ...r.doc.base } };
+      if (r.base && !doc.base.ref) {
+        const ref = await putFile(r.base, `base_${Date.now()}.${r.base.type.split("/")[1] || "png"}`);
+        if (ref) doc.base.ref = ref;
+      }
+      const draw = await putFile(
+        new Blob([JSON.stringify(doc)], { type: "application/json" }),
+        `drawing_${Date.now()}${DRAW_DOC_SUFFIX}`,
+      );
+      if (kind === "photo") {
+        const compressed = await compressImageFile(r.file); // 사진은 다시 webp로(5MB 제한)
+        await uploadBlob(compressed, compressed.name, "photo", replaceAt, draw ?? undefined);
+      } else {
+        await uploadBlob(r.file, `sketch_${Date.now()}.png`, "sketch", replaceAt, draw ?? undefined);
+      }
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  /** 첨부(사진·그림)를 그리기 엔진으로 열기 — 편집용 기록이 있으면 원본 위에 예전 표시를 층으로 복원 */
   const openEdit = async (index: number) => {
     const a = attachments[index];
-    const url = a && previews[a.path];
-    if (!a || !url) return;
+    if (!a) return;
     try {
+      if (a.draw) {
+        const r = await getLabAttachmentPreviewUrls([a.draw]);
+        const url = r.ok ? r.urls[a.draw] : null;
+        const doc = url ? upgradeDoc(await (await fetch(url)).json()) : null;
+        if (doc) {
+          let image: Blob | null = null;
+          if (doc.base.ref) {
+            const local = previews[doc.base.ref];
+            const signed = local ? null : await getLabAttachmentPreviewUrls([doc.base.ref]);
+            const baseUrl = local ?? (signed?.ok ? signed.urls[doc.base.ref] : null);
+            if (baseUrl) image = await (await fetch(baseUrl)).blob();
+          }
+          if (image || doc.base.kind === "blank") {
+            setEditTarget({ index, image, doc, ref: doc.base.ref ?? a.path });
+            return;
+          }
+        }
+      }
+      // 기록이 없으면(예전 첨부) 지금 그림 위에 덧그리기 — 지금 그림이 원본
+      const url = previews[a.path];
+      if (!url) return;
       const blob = await (await fetch(url)).blob();
-      setEditTarget({ index, file: new File([blob], a.name, { type: blob.type || "image/png" }) });
+      setEditTarget({ index, image: blob, doc: null, ref: a.path });
     } catch {
       setMsg("첨부를 열지 못했습니다 — 잠시 뒤 다시 시도해 주세요.");
     }
   };
 
-  const saveEdit = async (file: File) => {
+  const saveEdit = async (r: DrawResult) => {
     if (!editTarget) return;
     const { index } = editTarget;
     const a = attachments[index];
     setEditTarget(null);
     if (!a) return;
-    if (a.kind === "photo") {
-      const compressed = await compressImageFile(file); // 사진은 다시 webp로(5MB 제한)
-      await uploadBlob(compressed, compressed.name, "photo", index);
-    } else {
-      await uploadBlob(file, `sketch_${Date.now()}.png`, "sketch", index);
-    }
-  };
-
-  const handleSketchDone = async (blob: Blob) => {
-    setSketchOpen(false);
-    await uploadBlob(blob, `sketch_${Date.now()}.png`, "sketch");
+    await saveDrawing(r, a.kind === "photo" ? "photo" : "sketch", index);
   };
 
   const patientName = patient?.name ?? editPatientName.trim();
@@ -751,19 +807,42 @@ export function LabOrderComposer({
         </button>
       </div>
 
-      {sketchOpen && <SketchPad onDone={(b) => void handleSketchDone(b)} onCancel={() => setSketchOpen(false)} />}
-      {/* 첨부 수정 — 그림 도구로 열어 저장하면 그 자리의 첨부가 바뀐다 */}
+      {/* 그림 지시(빈 종이에 손그림) — 그리기 엔진 */}
+      {sketchOpen && (
+        <DrawEditor
+          title="그림 지시 (손그림)"
+          saveLabel="첨부에 담기"
+          fileName="sketch"
+          requireInk
+          onClose={() => setSketchOpen(false)}
+          onSave={(r) => {
+            setSketchOpen(false);
+            void saveDrawing(r, "sketch");
+          }}
+        />
+      )}
+      {/* 첨부 수정 — 그리기 엔진으로 열어 저장하면 그 자리의 첨부가 바뀐다(원본은 저장소에 그대로) */}
       {editTarget && (
-        <ImageAnnotator file={editTarget.file} saveLabel="수정 저장" onClose={() => setEditTarget(null)} onSave={(f) => void saveEdit(f)} />
+        <DrawEditor
+          image={editTarget.image}
+          doc={editTarget.doc}
+          base={{ ref: editTarget.ref }}
+          title="첨부 고치기"
+          saveLabel="수정 저장"
+          onClose={() => setEditTarget(null)}
+          onSave={(r) => void saveEdit(r)}
+        />
       )}
       {/* 치아 모형(2D·3D)을 원하는 각도로 돌려 찍고 그 위에 그려 손그림 첨부로(전송 시 drawing) */}
       {teethOpen && (
         <ToothViewer
           doneLabel="첨부하기"
           onClose={() => setTeethOpen(false)}
-          onDone={async (image) => {
+          onDone={async (image, _text, drawing) => {
             setTeethOpen(false);
-            await uploadBlob(image, `teeth_${Date.now()}.png`, "sketch");
+            // 그려서 담았으면 편집용 기록까지(나중에 고치기), 아니면 화면 그림만
+            if (drawing) await saveDrawing(drawing, "sketch");
+            else await uploadBlob(image, `teeth_${Date.now()}.png`, "sketch");
           }}
         />
       )}

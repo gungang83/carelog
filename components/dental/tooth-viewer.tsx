@@ -10,7 +10,7 @@ import { facialLayout, occlusalLayout, toothLabel, type Fdi, type ToothView } fr
 import { DentalTeeth, type ToothPaint } from "@/components/dental/dental-teeth";
 import type { Capture3D } from "@/components/dental/dental-3d";
 import { readViewMode, writeViewMode, type ViewMode as Mode } from "@/lib/dental/view-mode";
-import { ImageAnnotator } from "@/components/image-annotator";
+import { DrawEditor, type DrawResult } from "@/components/draw/draw-editor";
 
 // three.js는 3D를 고를 때만 불러온다
 const Dental3D = dynamic(() => import("@/components/dental/dental-3d").then((m) => m.Dental3D), {
@@ -64,8 +64,8 @@ export function ToothViewer({
   onClose,
   doneLabel = "기록에 담기",
 }: {
-  /** 기록에 담기 — 지금 화면 PNG(그렸으면 그린 그림) + 표시한 치아 텍스트 */
-  onDone: (image: File, text: string) => Promise<void> | void;
+  /** 기록에 담기 — 지금 화면 PNG(그렸으면 그린 그림) + 표시한 치아 텍스트 + 그렸으면 그리기 결과(편집용 기록 포함, spec 039) */
+  onDone: (image: File, text: string, drawing?: DrawResult) => Promise<void> | void;
   onClose: () => void;
   /** 완료 버튼 문구 — 기공지에선 "첨부하기" */
   doneLabel?: string;
@@ -78,7 +78,7 @@ export function ToothViewer({
   const [marks, setMarks] = useState<Record<Fdi, string>>({});
   const [busy, setBusy] = useState(false);
   /** 그려서 담기 — 찍은 스냅샷(그림 도구로 연다) */
-  const [snapshot, setSnapshot] = useState<File | null>(null);
+  const [snapshot, setSnapshot] = useState<{ file: File; kind: "teeth2d" | "teeth3d" } | null>(null);
   const svgRef = useRef<SVGSVGElement>(null);
   const captureRef = useRef<Capture3D | null>(null);
 
@@ -131,8 +131,8 @@ export function ToothViewer({
     return new File([blob], `teeth_${Date.now()}.png`, { type: "image/png" });
   };
 
-  const finish = async (file: File) => {
-    await onDone(file, marked.length > 0 ? text() : "");
+  const finish = async (file: File, drawing?: DrawResult) => {
+    await onDone(file, marked.length > 0 ? text() : "", drawing);
   };
 
   const run = async (fn: () => Promise<void>) => {
@@ -200,7 +200,7 @@ export function ToothViewer({
           </button>
           <button
             type="button"
-            onClick={() => void run(async () => setSnapshot(await capture()))}
+            onClick={() => void run(async () => setSnapshot({ file: await capture(), kind: mode === "3d" ? "teeth3d" : "teeth2d" }))}
             disabled={busy}
             className="rounded-lg border border-sky-200 bg-sky-50 px-3 py-1.5 text-sm font-semibold text-sky-700 hover:bg-sky-100 disabled:opacity-40"
             title="지금 보이는 화면을 찍어 그 위에 그립니다"
@@ -270,13 +270,16 @@ export function ToothViewer({
       </div>
       {/* 스냅샷 위에 그리기 — 저장하면 그린 그림이 담긴다 */}
       {snapshot && (
-        <ImageAnnotator
-          file={snapshot}
+        <DrawEditor
+          image={snapshot.file}
+          base={{ kind: snapshot.kind }}
+          title="치아 그림에 그리기"
+          fileName="teeth"
           saveLabel={doneLabel}
           onClose={() => setSnapshot(null)}
-          onSave={(f) =>
+          onSave={(r) =>
             void run(async () => {
-              await finish(f);
+              await finish(r.file, r);
               setSnapshot(null);
             })
           }

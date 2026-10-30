@@ -4,7 +4,8 @@ import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { CONSULT_ASSET_CATEGORIES, categoryLabel, type ConsultAsset, type PickerData } from "@/lib/consult-assets";
 import { getPickerData, createConsultAsset } from "@/app/actions/consult-assets";
 import { compressImageFile } from "@/lib/image/optimize";
-import { ImageAnnotator } from "@/components/image-annotator";
+import { DrawEditor, type DrawResult } from "@/components/draw/draw-editor";
+import type { DrawPaper } from "@/lib/draw/doc";
 
 export type AssetInsertPayload = {
   kind: "image" | "video_link";
@@ -23,7 +24,7 @@ export function AssetPicker({
   onClose,
 }: {
   onInsert: (asset: AssetInsertPayload) => void;
-  onInsertAnnotated?: (file: File) => void;
+  onInsertAnnotated?: (r: DrawResult) => void;
   onClose: () => void;
 }) {
   const [data, setData] = useState<PickerData | null>(null);
@@ -35,7 +36,8 @@ export function AssetPicker({
   const [preview, setPreview] = useState<ConsultAsset | null>(null);
   const [withCaption, setWithCaption] = useState(true);
   const [uploadTitle, setUploadTitle] = useState("");
-  const [stageFile, setStageFile] = useState<File | null>(null);
+  // 스테이지 — 자료 이미지(원본 = 자료 URL, 다시 올리지 않음) 또는 빈 종이
+  const [stage, setStage] = useState<{ image: Blob | null; ref?: string; paper?: DrawPaper } | null>(null);
   const [stageBusy, setStageBusy] = useState(false);
   const [error, setError] = useState("");
   const [isPending, startTransition] = useTransition();
@@ -82,8 +84,7 @@ export function AssetPicker({
     setError("");
     try {
       const res = await fetch(a.image_url);
-      const blob = await res.blob();
-      setStageFile(new File([blob], "stage.webp", { type: blob.type || "image/webp" }));
+      setStage({ image: await res.blob(), ref: a.image_url });
     } catch {
       setError("이미지를 열지 못했습니다.");
     } finally {
@@ -93,26 +94,7 @@ export function AssetPicker({
 
   // spec 028 확장 — 빈 캔버스(백지·모눈·줄노트) → 바로 스테이지
   const openBlankCanvas = (tpl: "blank" | "grid" | "lined") => {
-    const W = 1600;
-    const H = 1200;
-    const canvas = document.createElement("canvas");
-    canvas.width = W;
-    canvas.height = H;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return;
-    ctx.fillStyle = "#ffffff";
-    ctx.fillRect(0, 0, W, H);
-    ctx.strokeStyle = "#e2e8f0";
-    ctx.lineWidth = 1;
-    if (tpl === "grid") {
-      for (let x = 0; x <= W; x += 50) { ctx.beginPath(); ctx.moveTo(x + 0.5, 0); ctx.lineTo(x + 0.5, H); ctx.stroke(); }
-      for (let y = 0; y <= H; y += 50) { ctx.beginPath(); ctx.moveTo(0, y + 0.5); ctx.lineTo(W, y + 0.5); ctx.stroke(); }
-    } else if (tpl === "lined") {
-      for (let y = 80; y <= H; y += 70) { ctx.beginPath(); ctx.moveTo(40, y + 0.5); ctx.lineTo(W - 40, y + 0.5); ctx.stroke(); }
-    }
-    canvas.toBlob((blob) => {
-      if (blob) setStageFile(new File([blob], `${tpl}.webp`, { type: blob.type || "image/webp" }));
-    }, "image/webp", 0.9);
+    setStage({ image: null, paper: tpl === "blank" ? "plain" : tpl });
   };
 
   // 즉석 업로드 → 기관 Library 등록 + 바로 삽입 (기능 권한 없으면 서버가 거절 메시지)
@@ -299,14 +281,16 @@ export function AssetPicker({
         )}
 
         {/* spec 026 스테이지 — 그리며 설명 → 기록에 담기 */}
-        {stageFile && (
-          <ImageAnnotator
-            file={stageFile}
+        {stage && (
+          <DrawEditor
+            image={stage.image}
+            base={{ ref: stage.ref, paper: stage.paper }}
+            title={stage.image ? "크게 보며 그리기" : "빈 캔버스"}
             saveLabel="기록에 담기"
-            onClose={() => setStageFile(null)}
-            onSave={(f) => {
-              setStageFile(null);
-              onInsertAnnotated?.(f);
+            onClose={() => setStage(null)}
+            onSave={(r) => {
+              setStage(null);
+              onInsertAnnotated?.(r);
               onClose();
             }}
           />

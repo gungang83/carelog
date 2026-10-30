@@ -1382,8 +1382,10 @@ function BoardContent({
       {showTeeth && (
         <ToothViewer
           onClose={() => setShowTeeth(false)}
-          onDone={async (image, text) => {
-            await editorRef.current?.insertImageFile(image);
+          onDone={async (image, text, drawing) => {
+            // 그려서 담았으면 편집용 기록까지(나중에 ✏️ 고치기), 아니면 화면 그림만
+            if (drawing) await editorRef.current?.insertDrawing(drawing);
+            else await editorRef.current?.insertImageFile(image);
             if (text) editorRef.current?.insertText(text);
             setShowTeeth(false);
           }}

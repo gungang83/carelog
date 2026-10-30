@@ -11,28 +11,11 @@ import React, { forwardRef, useImperativeHandle, useRef, useState } from "react"
 import StarterKit from "@tiptap/starter-kit";
 import Placeholder from "@tiptap/extension-placeholder";
 import Image from "@tiptap/extension-image";
-import { ImageAnnotator } from "@/components/image-annotator";
+import { DrawEditor, type DrawResult } from "@/components/draw/draw-editor";
 import { AssetPicker } from "@/components/consult-assets/asset-picker";
 import { EstimateBuilder } from "@/components/estimate/estimate-builder";
-import { createBrowserSupabaseClient } from "@/lib/supabase/client";
-import { compressImageFile } from "@/lib/image/optimize";
-
-// ── Supabase image upload ─────────────────────────────────────
-// spec 017 — 업로드 전 압축(다운스케일+webp)으로 저장·이그레스 절감.
-async function uploadImage(file: File): Promise<string> {
-  const supabase = createBrowserSupabaseClient();
-  const bucket =
-    process.env.NEXT_PUBLIC_SUPABASE_CONSULTATION_BUCKET ?? "consultation-images";
-  const optimized = await compressImageFile(file);
-  const ext =
-    optimized.type === "image/webp" ? "webp" : (optimized.name.split(".").pop()?.toLowerCase() ?? "png");
-  const path = `inline/${crypto.randomUUID()}.${ext}`;
-  const { error } = await supabase.storage
-    .from(bucket)
-    .upload(path, optimized, { contentType: optimized.type || undefined });
-  if (error) throw new Error(error.message);
-  return supabase.storage.from(bucket).getPublicUrl(path).data.publicUrl;
-}
+import { loadConsultDrawing, saveConsultDrawing, uploadConsultImage as uploadImage } from "@/lib/draw/consult-store";
+import type { DrawDoc } from "@/lib/draw/doc";
 
 // ── 이미지 정렬(spec 025 상담 캔버스) — HTML 플로우 내 자유 배치 ──
 //    left/right = 글 감싸기(float). 왼쪽 정렬 이미지 2장을 붙이면 나란히 배치가 된다.
@@ -47,23 +30,28 @@ function alignStyle(align: ImgAlign): string {
 // ── Resizable image node view (React component) ───────────────
 function ResizableImageView({ node, updateAttributes, selected, editor, getPos }: NodeViewProps) {
   const imgRef = useRef<HTMLImageElement>(null);
-  const [stageFile, setStageFile] = useState<File | null>(null); // spec 026 스테이지(다시 열어 그리기)
+  // spec 026 스테이지 / spec 039 고치기 — 그리기 엔진으로 연다(편집용 기록이 있으면 예전 표시를 층으로 복원)
+  const [stage, setStage] = useState<{
+    purpose: "stage" | "edit";
+    image: Blob | null;
+    doc: DrawDoc | null;
+    ref: string;
+  } | null>(null);
   const [stageBusy, setStageBusy] = useState(false);
-  const { src, alt, width, align } = node.attrs as {
+  const { src, alt, width, align, draw } = node.attrs as {
     src: string;
     alt: string;
     width: number | null;
     align: ImgAlign;
+    draw: string | null;
   };
 
-  // spec 026 — 기록 속 이미지를 스테이지로 크게 열어 그리며 설명 → "기록에 담기"로 스냅샷 추가
-  async function openStage() {
+  // stage = 크게 열어 그리며 설명 → "기록에 담기"로 스냅샷 추가 / edit = 이 그림을 고쳐 그 자리에서 바꾸기
+  async function openStage(purpose: "stage" | "edit") {
     if (stageBusy) return;
     setStageBusy(true);
     try {
-      const res = await fetch(src);
-      const blob = await res.blob();
-      setStageFile(new File([blob], "stage.webp", { type: blob.type || "image/webp" }));
+      setStage({ purpose, ...(await loadConsultDrawing(src, draw)) });
     } catch {
       alert("이미지를 열지 못했습니다. 다시 시도해 주세요.");
     } finally {
@@ -71,16 +59,21 @@ function ResizableImageView({ node, updateAttributes, selected, editor, getPos }
     }
   }
 
-  async function handleStageSave(f: File) {
-    setStageFile(null);
+  async function handleStageSave(r: DrawResult) {
+    const purpose = stage?.purpose ?? "stage";
+    setStage(null);
     setStageBusy(true);
     try {
-      const url = await uploadImage(f);
+      const saved = await saveConsultDrawing(r);
+      if (purpose === "edit") {
+        updateAttributes({ src: saved.src, draw: saved.draw });
+        return;
+      }
       const pos = typeof getPos === "function" ? getPos() : null;
       if (pos != null) {
         editor
           .chain()
-          .insertContentAt(pos + node.nodeSize, { type: "image", attrs: { src: url, alt: alt ?? "" } })
+          .insertContentAt(pos + node.nodeSize, { type: "image", attrs: { src: saved.src, alt: alt ?? "", draw: saved.draw } })
           .run();
       } else {
         // ⚠️ setImage는 현재 선택(=직전 이미지 노드)을 교체한다 — 이미지+빈 문단을 이어 삽입해
@@ -88,11 +81,11 @@ function ResizableImageView({ node, updateAttributes, selected, editor, getPos }
         editor
           .chain()
           .focus()
-          .insertContent([{ type: "image", attrs: { src: url } }, { type: "paragraph" }])
+          .insertContent([{ type: "image", attrs: { src: saved.src, draw: saved.draw } }, { type: "paragraph" }])
           .run();
       }
     } catch {
-      alert("스냅샷 저장에 실패했습니다. 다시 시도해 주세요.");
+      alert("그림 저장에 실패했습니다. 다시 시도해 주세요.");
     } finally {
       setStageBusy(false);
     }
@@ -186,7 +179,7 @@ function ResizableImageView({ node, updateAttributes, selected, editor, getPos }
             title="크게 열어 그리며 설명 — '기록에 담기'로 그린 스냅샷 추가 (spec 026 스테이지)"
             onMouseDown={(e) => {
               e.preventDefault();
-              openStage();
+              void openStage("stage");
             }}
             style={{
               padding: "2px 6px",
@@ -201,15 +194,38 @@ function ResizableImageView({ node, updateAttributes, selected, editor, getPos }
           >
             {stageBusy ? "여는 중…" : "🖊 크게"}
           </button>
+          <button
+            type="button"
+            title={draw ? "그린 표시를 하나씩 고치거나 지워서 이 그림을 바꿉니다 (spec 039)" : "이 그림 위에 더 그려서 바꿉니다"}
+            onMouseDown={(e) => {
+              e.preventDefault();
+              void openStage("edit");
+            }}
+            style={{
+              padding: "2px 6px",
+              fontSize: "11px",
+              fontWeight: 600,
+              borderRadius: "4px",
+              border: "none",
+              cursor: "pointer",
+              background: "#7c3aed",
+              color: "#fff",
+            }}
+          >
+            ✏️ 고치기
+          </button>
         </div>
       )}
-      {/* spec 026 스테이지 — 전체화면 그리기(주석 도구 재사용) */}
-      {stageFile && (
-        <ImageAnnotator
-          file={stageFile}
-          saveLabel="기록에 담기"
-          onClose={() => setStageFile(null)}
-          onSave={handleStageSave}
+      {/* spec 026 스테이지 · spec 039 고치기 — 그리기 엔진 */}
+      {stage && (
+        <DrawEditor
+          image={stage.image}
+          doc={stage.doc}
+          base={{ ref: stage.ref }}
+          title={stage.purpose === "edit" ? "그림 고치기" : "크게 보며 그리기"}
+          saveLabel={stage.purpose === "edit" ? "고친 그림으로 바꾸기" : "기록에 담기"}
+          onClose={() => setStage(null)}
+          onSave={(r) => void handleStageSave(r)}
         />
       )}
       {/* Resize handle */}
@@ -258,6 +274,12 @@ const ResizableImage = Image.extend({
         parseHTML: (el) => el.getAttribute("data-align"),
         renderHTML: () => ({}),
       },
+      // spec 039 — 편집용 기록(.draw.json) URL. 있으면 다시 열 때 그린 표시를 층으로 복원
+      draw: {
+        default: null,
+        parseHTML: (el) => el.getAttribute("data-draw"),
+        renderHTML: () => ({}),
+      },
     };
   },
 
@@ -265,6 +287,7 @@ const ResizableImage = Image.extend({
   renderHTML({ HTMLAttributes, node }) {
     const width = node.attrs.width as number | null;
     const align = node.attrs.align as ImgAlign;
+    const draw = node.attrs.draw as string | null;
     const style =
       (width ? `width:${width}px;` : "") + "max-width:100%;height:auto;border-radius:8px;" + alignStyle(align);
     return [
@@ -273,6 +296,7 @@ const ResizableImage = Image.extend({
         ...HTMLAttributes,
         ...(width ? { width } : {}),
         ...(align ? { "data-align": align } : {}),
+        ...(draw ? { "data-draw": draw } : {}),
         style,
       },
     ];
@@ -294,6 +318,8 @@ export type RichTextEditorHandle = {
   insertText: (text: string) => void;
   /** 이미지 파일을 업로드해 본문에 삽입(spec 036 치간칫솔 차트 등 외부 도구의 결과물). */
   insertImageFile: (file: File) => Promise<void>;
+  /** 그리기 엔진 결과(보기용 그림 + 편집용 기록)를 본문에 넣는다 — 나중에 [✏️ 고치기]로 다시 열 수 있다(spec 039). */
+  insertDrawing: (r: DrawResult) => Promise<void>;
   clear: () => void;
   setHTML: (html: string) => void;
   /** 현재 에디터 내용을 HTML로 즉시 읽는다(자동저장 — React 상태 갱신 대기 없이 동기 캡처). */
@@ -336,6 +362,15 @@ function RichTextEditor({ value, onChange, placeholder }, ref) {
         .chain()
         .focus()
         .insertContent([{ type: "image", attrs: { src: url } }, { type: "paragraph" }])
+        .run();
+    },
+    async insertDrawing(r: DrawResult) {
+      if (!editorRef.current) return;
+      const saved = await saveConsultDrawing(r);
+      editorRef.current
+        .chain()
+        .focus()
+        .insertContent([{ type: "image", attrs: { src: saved.src, draw: saved.draw } }, { type: "paragraph" }])
         .run();
     },
     clear() {
@@ -398,17 +433,17 @@ function RichTextEditor({ value, onChange, placeholder }, ref) {
     immediatelyRender: false,
   });
 
-  async function handleAnnotateSave(annotated: File) {
+  async function handleAnnotateSave(r: DrawResult) {
     setAnnotateFile(null);
     if (!editor) return;
     setUploading(true);
     try {
-      const url = await uploadImage(annotated);
+      const saved = await saveConsultDrawing(r);
       // 이미지+빈 문단 삽입 — setImage는 선택을 교체해 연속 삽입 시 직전 이미지가 사라진다(다중 이미지 버그).
       editor
         .chain()
         .focus()
-        .insertContent([{ type: "image", attrs: { src: url } }, { type: "paragraph" }])
+        .insertContent([{ type: "image", attrs: { src: saved.src, draw: saved.draw } }, { type: "paragraph" }])
         .run();
     } catch {
       alert("이미지 업로드에 실패했습니다. 다시 시도해 주세요.");
@@ -646,10 +681,11 @@ function RichTextEditor({ value, onChange, placeholder }, ref) {
 
       {/* Annotator modal */}
       {annotateFile && (
-        <ImageAnnotator
-          file={annotateFile}
+        <DrawEditor
+          image={annotateFile}
+          fileName={annotateFile.name.replace(/\.[^.]+$/, "") || "annotated"}
           onClose={() => setAnnotateFile(null)}
-          onSave={handleAnnotateSave}
+          onSave={(r) => void handleAnnotateSave(r)}
         />
       )}
 
@@ -657,7 +693,7 @@ function RichTextEditor({ value, onChange, placeholder }, ref) {
       {showPicker && (
         <AssetPicker
           onInsert={insertAsset}
-          onInsertAnnotated={handleAnnotateSave}
+          onInsertAnnotated={(r) => void handleAnnotateSave(r)}
           onClose={() => setShowPicker(false)}
         />
       )}

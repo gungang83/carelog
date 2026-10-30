@@ -105,7 +105,7 @@ components/
 ├── patients/patient-consultations.tsx  # 환자 페이지 상담 기록 — 공용 ConsultationCard + [이 환자 상담 시작](상담보드, 저장 즉시 연결)
 ├── dental/                        # spec 037 치아 도식 — dental-teeth(DentalTeeth·DentalArchSvg) · dental-library(/admin/dental 2D 보관함) · dental-3d(three.js 뷰어, dynamic 로드) · tooth-viewer(상담보드 치아 그림 2D·3D)
 ├── care/interdental-chart.tsx     # spec 036 치간칫솔 사이즈 차트(교합면 도식 위 치간 26곳)
-├── image-annotator.tsx            # 이미지 주석 캔버스 모달 (펜·직선·화살표·사각형·텍스트·지우개)
+├── draw/draw-editor.tsx           # spec 039 그리기 엔진 화면(공용) — 펜·직선·화살표·사각형·텍스트·획 지우개·이동·확대, 되돌리기/다시. 결과 = 보기용 PNG + 편집용 기록(DrawDoc)
 ├── station-manager.tsx            # 체어 번호 설정
 └── ui/
     └── dropdown-menu.tsx          # Radix UI 드롭다운 래퍼
@@ -295,9 +295,9 @@ PatientHome (Client)
 ConsultationForm (Client)
   → RichTextEditor (Tiptap)
       → 이미지 삽입 (툴바 버튼 / 드래그 앤 드롭 / Ctrl+V 붙여넣기)
-        → ImageAnnotator (캔버스 주석 모달)
-          → 주석 완료 → Supabase Storage 즉시 업로드 (브라우저 클라이언트)
-          → 반환된 publicUrl을 에디터에 <img> 태그로 삽입
+        → DrawEditor (spec 039 그리기 엔진)
+          → 저장 → lib/draw/consult-store.saveConsultDrawing: 원본·보기용 그림·편집용 기록(.draw.json) 업로드
+          → <img src=보기용 data-draw=기록URL> 삽입 → 이미지 선택 [✏️ 고치기]로 층 복원해 다시 편집
       → 텍스트 + 이미지가 섞인 HTML 생성 (content 상태)
   → saveConsultation(patientId, content, formData) [Server Action]
     → getMyInstitutionId() → institution_id 포함 INSERT
@@ -740,7 +740,7 @@ AI 전사 성공(app/actions/transcribe.ts: transcribeEngine·transcribeAndSumma
 
 ```
 [스테이지] 픽커 미리보기 '🖊 크게 열고 그리기' / 에디터 이미지 선택 → '🖊 크게'
-  → fetch(이미지) → ImageAnnotator(saveLabel='기록에 담기' — 펜·화살표·도형·텍스트·터치·핀치줌 재사용)
+  → fetch(이미지) → DrawEditor(saveLabel='기록에 담기' — spec 039 그리기 엔진, 편집용 기록 있으면 층 복원)
   → 담기: 그린 스냅샷 업로드 → 에디터 삽입(기록 이미지의 경우 해당 노드 바로 뒤에)
 [영상] consult_assets kind='video_link'(외부 URL만, 파일 업로드 X — 이그레스·체어타임 보호)
   → 픽커 '기록에 넣기' → 본문에 "▶ 제목 (영상): URL" 평문 삽입
@@ -788,4 +788,17 @@ AI 전사 성공(app/actions/transcribe.ts: transcribeEngine·transcribeAndSumma
 [권한] lib/permissions.ts FEATURES(상담자료·치료항목) + permission_overrides(개인) → lib/auth/feature-gate.ts requireFeature
   설정→기능 권한(admin): 직원×기능 3상태(기본/허용/차단). staff 개인 허용 시 설정 관리 섹션 노출
 [EO 연동] sync-master: clinic_type→분과 동기화 + 퇴사(active:false)→institution_members 자동 비활성(기록 귀속 보존)
+```
+
+
+## 그리기 엔진 (spec 039)
+
+```
+lib/draw/doc.ts       DrawDoc v1(바탕 base{kind,ref,w,h,view?,paper?} · items[{tool,pts,style,text?}] · 원본 픽셀 좌표) · upgradeDoc(예전 버전 올려 읽기)
+lib/draw/render.ts    도구 등록부 TOOLS(pen·line·arrow·rect·text — 새 도구는 한 줄 추가) · drawBase/drawItems · hitItem(획 지우개) · flattenDoc(보기용 PNG)
+components/draw/draw-editor.tsx   화면(공용 모달) — props: image? · doc?(다시 열기) · base{kind,ref,paper} → onSave({file, doc, base})
+lib/draw/consult-store.ts         상담 이미지 버킷: saveConsultDrawing(원본·PNG·.draw.json) / loadConsultDrawing(src, data-draw)
+쓰는 곳: 상담 에디터(붙여넣기·드롭·[🖊 크게]·[✏️ 고치기]) · 자료 픽커(스테이지·빈 캔버스) · 치아 그림(ToothViewer 그려서 담기)
+        · 기공지(그림 지시·첨부 고치기·치아 모형 — 원본/기록은 lab-orders 버킷, 첨부 meta.draw, EO 전송 제외)
+원칙: 원본 무수정 · 보기용 PNG는 항상 저장(엔진이 바뀌어도 표시 불변) · 외부 창 /draw(EO)는 3단계
 ```

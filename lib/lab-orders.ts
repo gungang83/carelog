@@ -65,6 +65,8 @@ export type LabAttachmentMeta = {
   name: string;
   bytes: number;
   path: string; // lab-orders 비공개 버킷 내 경로(서명 URL은 전송 시점 생성)
+  /** spec 039 — 그린 첨부의 편집용 기록(.draw.json) 경로. Carelog 내부용(EO로 보내지 않음 — 전송기가 kind·name·bytes만 싣는다) */
+  draw?: string;
 };
 
 /** 용량 제한(카드 #1957 합의): 사진 5MB · 동영상 50MB/30초 · 건당 합계 100MB */
