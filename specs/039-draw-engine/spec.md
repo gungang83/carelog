@@ -73,12 +73,18 @@ type DrawItem = {
 - 편집용 기록은 **같은 위치에 `<그림 이름>.draw.json`** 으로 나란히 저장. 상담 기록 이미지 태그에는
   `data-draw="<경로>"` 표시 → 다시 열 때 기록을 불러와 층을 복원. 기록이 없는 예전 그림은 지금처럼 그 위에 덧칠.
 
-### 2-3. 외부 창 `/draw` (EO 등)
+### 2-3. 외부 창 `/draw` (EO 등) — 계약 확정 (헤임달 #2262 회신, 2026-10-30)
 
-- 로그인·저장 없음(DB·저장소·환자 정보 무접촉). 같은 엔진을 iframe으로 띄우고 postMessage로 주고받는다.
+- 로그인·저장 없음(DB·저장소·환자 정보 무접촉). 같은 엔진을 EO가 iframe으로 띄우고 postMessage로 주고받는다.
 - 열기 `{type:"carelog-draw/open", v:1, base, image?:Blob, doc?:DrawDoc, tools?}`
   → 완료 `{type:"carelog-draw/done", v:1, png:Blob, doc:DrawDoc}` / 취소 `{type:"carelog-draw/cancel", v:1}`
-- `frame-ancestors`로 허용 도메인(EO)만 · 양쪽 origin 확인. 결과 저장은 부른 쪽 몫.
+- 결과 저장은 부른 쪽(EO) 몫. ★돌려주는 DrawDoc의 `base.ref`는 **비워서** 보낸다 — Carelog 저장소 경로를 절대 넣지 않음(EO가 자기 경로로 채움).
+- ★"저장 안 함"을 **브라우저가 막게** — `/draw` 응답 헤더(CSP):
+  - `frame-ancestors <EO 도메인>` (EO 화면 안에서만 뜸)
+  - `connect-src 'none'`(불가하면 `'self'`) — 페이지가 어디로도 데이터를 못 보냄
+  - `form-action 'none'` · 외부 스크립트·분석 도구 없음
+- postMessage: 양쪽 모두 **targetOrigin 명시("*" 금지) + 받은 메시지 origin 검사**.
+- 경로 공개: middleware 공개 경로에 `/draw` 추가(로그인 불요), 페이지는 서버 데이터 접근 코드 없음.
 
 ## 3. 단계
 
@@ -86,7 +92,7 @@ type DrawItem = {
 |---|---|---|
 | **1. 엔진 통합** | `lib/draw` + `components/draw` 신설, ImageAnnotator·SketchPad를 한 엔진으로 통합, 편집용 기록 저장·다시 열어 고치기. 쓰는 곳 5곳을 `openDraw`로 교체. **겉모습·사용법은 지금과 같게**(회귀 없음) | 상담 에디터·스테이지·치아 그림·기공지 손그림·첨부 수정 |
 | 2. 엑스레이·임상 도구 | 엑스레이 바탕(밝기·대비·반전), 실측 보정+길이 측정, 도장(임플란트·크라운 등), 타원·형광펜 | 상담(엑스레이 설명) |
-| 3. 외부 창 `/draw` | iframe + postMessage 규격 v1 — EO 대화방 [✏️ 그리기] | EO(헤임달 카드 합의 후) |
+| 3. 외부 창 `/draw` | iframe + postMessage 규격 v1 + CSP(§2-3) — EO 대화방 [✏️ 그리기] | EO(계약 확정 #2262 · EO 구현 = 마르코) |
 | 4. 3D 직접 그리기 | `space:"model"` — 치아 모형 표면에 직접 표시, 스냅샷은 보기용 PNG로 | 상담·기공지 |
 
 ## 4. 미결
