@@ -1,7 +1,7 @@
 "use client";
 
 // spec 040 — 잇몸 기록 층(layer). 치아 엔진(DentalChart) 위에 잇몸·주머니·눈금·숫자만 얹는다.
-//   잇몸 = 뿌리를 덮는 반투명 분홍(퇴축되면 뿌리가 드러남) · 잇몸선 = 빨강 · 주머니 = 깊이 색 막대(자라나는 움직임)
+//   잇몸 = 뿌리를 덮는 반투명 분홍(윗변 = 잇몸선, 퇴축되면 뿌리가 드러남) · 주머니 = 깊이 색 막대(자라나는 움직임)
 //   마우스를 올리면 그 부위에 mm 눈금이 펼쳐지고, 포인터 높이 = 깊이 미리보기.
 
 import { forwardRef, useMemo } from "react";
@@ -93,7 +93,6 @@ export const PerioChart = forwardRef<SVGSVGElement, Props>(function PerioChart(
           return (
             <g key={`gum-${i}`}>
               <polygon points={`${x0},${gy(first.t, first.p).toFixed(1)} ${pts} ${x1},${gy(last.t, last.p).toFixed(1)} ${x1},${edge} ${x0},${edge}`} fill="#f9a8d4" opacity={0.4} />
-              <polyline points={pts} fill="none" stroke="#e11d48" strokeWidth={1.6} strokeLinejoin="round" strokeLinecap="round" />
             </g>
           );
         })}

@@ -482,8 +482,7 @@ export function PerioEditor({ patient, examId, initialData, consultationId, onCl
           <span className="mr-4">🖱 부위 위에서 위아래로 움직여 깊이 → 누르면 기록</span>
           <span className="mr-4">👆 짚고 끌었다 떼면 기록 · 옆으로 밀면 이동</span>
           <span className="mr-4">⌨ 0–9 · ⇧0/1/2=10–12 · F · B 출혈 · ←→ · ↑↓ 면 · ⌫</span>
-          <span className="mr-2 text-rose-300">━ 잇몸선</span>
-          <span className="mr-2 text-pink-200">▒ 잇몸</span>
+          <span className="mr-2 text-pink-200">▒ 잇몸(윗변 = 잇몸선)</span>
           <span className="text-slate-300">┅ CEJ</span>
         </div>
       )}

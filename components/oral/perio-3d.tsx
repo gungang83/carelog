@@ -214,7 +214,7 @@ export default function Perio3D({ data, mode, jaw, cursor, hover, follow, onPick
       return sp;
     };
 
-    // ── 측정값 층: 잇몸 커튼(반투명 분홍) · 잇몸선(빨강) · 주머니 막대(깊이 색) · 출혈 · 치태 ──
+    // ── 측정값 층: 잇몸 띠(반투명 분홍 — 윗변 = 잇몸선) · 주머니 막대(깊이 색) · 출혈 · 치태 ──
     // ── 치아 번호 — 치관에 희미하게(보는 면 쪽), 고른 치아는 교합면 너머에 진하게 ──
     const tagTex = (txt: string, on: boolean) => {
       const k = `tag:${txt}:${on ? 1 : 0}`;
@@ -355,9 +355,7 @@ export default function Perio3D({ data, mode, jaw, cursor, hover, follow, onPick
             const r = siteVal(ix, "rec", t, s, p);
             return typeof r === "number" ? r : 0;
           };
-          // 잇몸선
-          const margin = SITES.map((p) => v3(sitePoint3D(f, s, p, rec(p), 0.45)));
-          layer.add(new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(margin), 12, 0.2, 6), new THREE.MeshStandardMaterial({ color: "#e11d48" })));
+          // 잇몸선(빨간 관)은 없앰 — 분홍 잇몸 띠의 윗변이 곧 잇몸선(2026-11-14 대표)
           // ★주머니 막대·숫자는 면 묶음으로 — 치아에 가려지지 않게 맨 위에 그리고, 그 면이 화면을 등지면 숨긴다(매 프레임)
           const fg = new THREE.Group();
           for (const p of SITES) {

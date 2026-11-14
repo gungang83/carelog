@@ -56,13 +56,8 @@ function sideRings(fdi: Fdi, trunk: number | null): { rings: Ring[]; apexY: numb
   const neck = pos >= 6 ? 0.78 : pos >= 4 ? 0.7 : 0.66;
   const rings: Ring[] = [];
   if (trunk !== null) {
-    // 다근치: 치근간(root trunk)만 몸통에 두고, 그 아래는 갈래(rootTubes)로
-    // 아래로 갈수록 원뿔처럼 좁아져 갈래들 사이로 스며든다 — 분지부가 평평한 천장(경계선) 없이 갈래 사이 V자 골로 이어짐
-    for (const t of [1, 0.85, 0.7, 0.55, 0.4, 0.25, 0.1, 0]) {
-      const s = neck * (1 - 0.62 * Math.pow(t, 1.4));
-      rings.push({ y: -t * trunk * 1.1, sx: s, sy: s * 0.95 });
-    }
-    return { rings: [...rings, ...crownRings(pos, neck, h)], apexY: -trunk * 1.35, table: crownScale(pos, neck, 0.9), neck };
+    // 다근치: 치근간(root trunk)·분지부 천장은 toothLocalPoints가 점마다 만든다(분지부 입구 높이가 방향마다 다름) — 여기선 치관만
+    return { rings: crownRings(pos, neck, h), apexY: -trunk * 0.82, table: crownScale(pos, neck, 0.9), neck };
   }
   for (const t of [0.92, 0.75, 0.5, 0.25, 0]) {
     const s = neck * (1 - 0.82 * Math.pow(t, 1.5));
@@ -97,9 +92,10 @@ function rootAnatomy(fdi: Fdi): RootAnatomy | null {
     return {
       trunk: 4,
       roots: [
-        { start: [-0.22, -0.2], apex: [-0.22 + 0.1 * spread, -0.2 - 0.16 * spread], len: r * 0.95, rx: 0.2 * md, rz: 0.27 * bl },
-        { start: [0.24, -0.2], apex: [0.24 + 0.12 * spread, -0.2 - 0.12 * spread], len: r * 0.88, rx: 0.18 * md, rz: 0.21 * bl },
-        { start: [0, 0.24], apex: [0.02, 0.24 + 0.3 * spread], len: r * 1.05, rx: 0.27 * md, rz: 0.22 * bl },
+        // 시작부는 치근간 벽 안쪽에 맞춘다(뿌리가 몸통 밖으로 혹처럼 튀지 않게) — 아래로 갈수록 벌어진다
+        { start: [-0.19, -0.15], apex: [-0.2 + 0.1 * spread, -0.18 - 0.16 * spread], len: r * 0.95, rx: 0.18 * md, rz: 0.2 * bl },
+        { start: [0.21, -0.15], apex: [0.22 + 0.12 * spread, -0.18 - 0.12 * spread], len: r * 0.88, rx: 0.16 * md, rz: 0.18 * bl },
+        { start: [0, 0.17], apex: [0.02, 0.22 + 0.3 * spread], len: r * 1.05, rx: 0.25 * md, rz: 0.19 * bl },
       ],
     };
   }
@@ -108,8 +104,8 @@ function rootAnatomy(fdi: Fdi): RootAnatomy | null {
     return {
       trunk: 3,
       roots: [
-        { start: [-0.24, 0], apex: [m, 0], len: r, rx: 0.2 * md, rz: 0.42 * bl },
-        { start: [0.25, 0], apex: [d, 0], len: r * 0.92, rx: 0.18 * md, rz: 0.38 * bl },
+        { start: [-0.2, 0], apex: [m, 0], len: r, rx: 0.17 * md, rz: 0.35 * bl },
+        { start: [0.21, 0], apex: [d, 0], len: r * 0.92, rx: 0.16 * md, rz: 0.33 * bl },
       ],
     };
   }
@@ -117,15 +113,38 @@ function rootAnatomy(fdi: Fdi): RootAnatomy | null {
     return {
       trunk: r * 0.5,
       roots: [
-        { start: [0, -0.18], apex: [0, -0.27], len: r, rx: 0.3 * md, rz: 0.17 * bl },
-        { start: [0, 0.18], apex: [0, 0.28], len: r * 0.95, rx: 0.28 * md, rz: 0.16 * bl },
+        { start: [0, -0.16], apex: [0, -0.27], len: r, rx: 0.3 * md, rz: 0.17 * bl },
+        { start: [0, 0.16], apex: [0, 0.28], len: r * 0.95, rx: 0.28 * md, rz: 0.16 * bl },
       ],
     };
   }
   return null;
 }
 
-/** 치근 갈래 하나 — 시작부(치근간 안쪽으로 1mm 겹침)에서 근첨까지 가늘어지며, 원심·바깥으로 살짝 휜다. 정점·면을 이어 붙인다. */
+/** 뿌리 갈래가 시작하는 높이 — 분지부 천장(−0.82·치근간) 바로 위, 몸통 안. 처음부터 제 굵기로(가는 끝이 분지부 입구로 비치지 않게) */
+const rootTop = (trunk: number) => -0.72 * trunk;
+
+/** 뿌리 단면 배율 — 시작부(몸통 안)는 90%에서 분지부 아래로 제 굵기, 근첨으로 가늘어짐 */
+function rootK(t: number, y: number, y0: number, trunk: number) {
+  const a = Math.min(1, Math.max(0, (y0 - y) / (trunk * 0.6)));
+  return (0.9 + 0.1 * a * a * (3 - 2 * a)) * (1 - 0.8 * Math.pow(t, 1.8));
+}
+
+/** 뿌리 갈래의 높이 y(mm, 치경선 0·아래 −)에서의 단면 타원(중심·반지름 mm) — addRootTube와 같은 식 */
+function rootRingAt(b: RootBranch, trunk: number, md: number, bl: number, y: number) {
+  const y0 = rootTop(trunk);
+  const t = Math.max(0, Math.min(1, (y0 - y) / (b.len + y0)));
+  const e = Math.pow(t, 1.3);
+  const k = rootK(t, y, y0, trunk);
+  return {
+    cx: (b.start[0] + (b.apex[0] - b.start[0]) * e) * md,
+    cz: (b.start[1] + (b.apex[1] - b.start[1]) * e) * bl,
+    ax: b.rx * k,
+    az: b.rz * k,
+  };
+}
+
+/** 치근 갈래 하나 — 시작부(분지부 천장 바로 위, 몸통 안)에서 근첨까지 가늘어지며, 원심·바깥으로 살짝 휜다. 정점·면을 이어 붙인다. */
 function addRootTube(
   b: RootBranch,
   trunk: number,
@@ -136,7 +155,7 @@ function addRootTube(
   shade: number[],
   idx: number[],
 ) {
-  const y0 = 1; // 치경부 안쪽(치관 속)에서 시작 — 윗면이 밖으로 드러나지 않게
+  const y0 = rootTop(trunk); // 치근간 몸통 안쪽에서 시작 — 윗면이 밖으로 드러나지 않게
   const levels = [0.96, 0.88, 0.76, 0.64, 0.52, 0.4, 0.3, 0.2, 0.1, 0]; // 근첨 쪽 → 시작부(아래 → 위, 몸통과 같은 감기 방향)
   const base = verts.length;
   for (const t of levels) {
@@ -144,10 +163,8 @@ function addRootTube(
     const cx = (b.start[0] + (b.apex[0] - b.start[0]) * e) * md;
     const cz = (b.start[1] + (b.apex[1] - b.start[1]) * e) * bl;
     const y = y0 + (-b.len - y0) * t;
-    // 치경부에선 몸통 안쪽에 들어가도록 좁게 시작 → 분지부 아래에서 바깥으로 벌어짐 → 근첨으로 가늘어짐
-    const yFlare = Math.min(1, Math.max(0, (y0 - y) / (trunk + y0)));
-    const flare = 0.72 + 0.28 * yFlare * yFlare * (3 - 2 * yFlare);
-    const k = flare * (1 - 0.8 * Math.pow(t, 1.8));
+    // 제 굵기로 시작해 근첨으로 가늘어짐(몸통 벽이 아래 끝에서 이 단면으로 흘러 붙는다 — toothLocalPoints)
+    const k = rootK(t, y, y0, trunk);
     for (let i = 0; i < M; i++) {
       const th = (i / M) * Math.PI * 2;
       verts.push([cx + Math.cos(th) * b.rx * k, y, cz + Math.sin(th) * b.rz * k]);
@@ -158,7 +175,7 @@ function addRootTube(
   verts.push([b.apex[0] * md, -b.len, b.apex[1] * bl]);
   shade.push(1);
   const top = verts.length;
-  verts.push([b.start[0] * md, y0, b.start[1] * bl]);
+  verts.push([b.start[0] * md, y0 + 1.2, b.start[1] * bl]); // 윗면은 둥근 지붕(혹시 비쳐도 평평한 마개로 보이지 않게)
   shade.push(1);
   for (let k = 0; k < levels.length - 1; k++) {
     for (let i = 0; i < M; i++) {
@@ -257,6 +274,72 @@ function toothLocalPoints(fdi: Fdi, segs = 16) {
   const shade: number[] = [];
   const field = (x: number, z: number, r: number) => occlusalField(anat, x / md, z / bl, aspect, r, pos);
 
+  // ── 다근치의 치근간(root trunk) + 분지부(furcation) ──
+  //  치경부에서 분지부까지 거의 곧은 몸통 → 아래 끝은 방향마다 높이가 다르다: 뿌리 쪽은 길게 내려가 뿌리로 이어지고,
+  //  뿌리 사이(분지부 입구)는 짧게 올라가 ∩ 아치. 그 안쪽은 위로 오목한 천장(vault) — 크라운이 아래로 볼록 튀어나오지 않게.
+  //  입구 쪽 몸통 벽은 아래로 갈수록 살짝 패여(발육 함요) 분지부로 이어진다.
+  let lowerLayers = 0;
+  if (roots) {
+    const T = roots.trunk;
+    const nk = pos >= 6 ? 0.78 : 0.7;
+    // 점마다 "뿌리 방향과 얼마나 가까운가"(1 = 뿌리 바로 위, 0 = 뿌리 사이)
+    const nearest: number[] = [];
+    const near = outline.map(([x, z]) => {
+      const a = Math.atan2(z / bl, x / md);
+      let w = 0;
+      let best = 0;
+      roots.roots.forEach((r, ri) => {
+        const ra = Math.atan2(r.start[1], r.start[0]);
+        let d = Math.abs(a - ra);
+        d = Math.min(d, Math.PI * 2 - d);
+        const ww = Math.exp(-((d / 0.8) ** 2)); // 넓게 — 입구가 ∩ 아치로 둥글게 올라가도록
+        if (ww > w) {
+          w = ww;
+          best = ri;
+        }
+      });
+      nearest.push(best);
+      return w;
+    });
+    const bottomY = near.map((w) => -T - 3 * w); // 입구 = 치근간 길이, 뿌리 쪽은 3mm 더 내려가 뿌리 표면에 붙는다
+    const roofY = -T * 0.82; // 분지부 천장 꼭대기(입구보다 위)
+    // 아래 끝 점: 뿌리 쪽이면 그 높이의 뿌리 단면 위(같은 방향)로 옮겨, 몸통 벽이 뿌리로 끊김 없이 흘러가게
+    const bottom = outline.map(([x, z], i) => {
+      const dent = 1 - 0.13 * (1 - near[i]);
+      const plain: [number, number, number] = [x * nk * 0.95 * dent, bottomY[i], z * nk * 0.95 * dent * 0.97];
+      const rr = rootRingAt(roots.roots[nearest[i]], T, md, bl, bottomY[i]);
+      // (뿌리 반지름 ax·az는 mm)
+      const th = Math.atan2((plain[2] - rr.cz) / (rr.az || 1), (plain[0] - rr.cx) / (rr.ax || 1));
+      const onRoot: [number, number, number] = [rr.cx + Math.cos(th) * rr.ax, bottomY[i], rr.cz + Math.sin(th) * rr.az];
+      const w = Math.pow(near[i], 0.6);
+      return [plain[0] + (onRoot[0] - plain[0]) * w, bottomY[i], plain[2] + (onRoot[2] - plain[2]) * w] as [number, number, number];
+    });
+    const wallAt = (i: number, t: number): [number, number, number] => {
+      // t: 0 = 치경선, 1 = 아래 끝 — 치경선 단면에서 아래 끝 점으로 부드럽게(위쪽은 곧게, 아래에서 휘어 들어감)
+      const [x, z] = outline[i];
+      const top: [number, number, number] = [x * nk, 0, z * nk * 0.97];
+      const b = bottom[i];
+      const g = t * t * (3 - 2 * t);
+      return [top[0] + (b[0] - top[0]) * g, b[1] * t, top[2] + (b[2] - top[2]) * g];
+    };
+    // 천장(안쪽 → 바깥 테두리) — 위로 오목
+    for (const q of [0.22, 0.45, 0.66, 0.84, 0.95]) {
+      outline.forEach((_, i) => {
+        const [bx, by, bz] = wallAt(i, 1);
+        verts.push([bx * q, roofY + (by - roofY) * q * q, bz * q]);
+        shade.push(0.93);
+      });
+      lowerLayers++;
+    }
+    // 몸통 벽(아래 끝 → 치경선)
+    for (const t of [1, 0.85, 0.66, 0.45, 0.24, 0]) {
+      outline.forEach((_, i) => {
+        verts.push(wallAt(i, t));
+        shade.push(1);
+      });
+      lowerLayers++;
+    }
+  }
   rings.forEach((ring) => {
     outline.forEach(([x, z]) => {
       verts.push([x * ring.sx, ring.y, z * ring.sy]);
@@ -301,7 +384,7 @@ function toothLocalPoints(fdi: Fdi, segs = 16) {
   }
 
   const idx: number[] = [];
-  const bands = rings.length + 4 + levels.length;
+  const bands = lowerLayers + rings.length + 4 + levels.length;
   for (let k = 0; k < bands - 1; k++) {
     for (let i = 0; i < M; i++) {
       const a = k * M + i;
