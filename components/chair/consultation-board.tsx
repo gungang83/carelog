@@ -1395,9 +1395,9 @@ function BoardContent({
         <PerioEditor
           patient={targetPatient}
           onClose={() => setShowPerio(false)}
-          onInsert={async (image, text) => {
-            await editorRef.current?.insertImageFile(image);
-            editorRef.current?.insertText(text);
+          onInsert={async (image, text, snap) => {
+            // 그림을 누르면 [✏️ 고치기]로 다시 열리게 기록까지 함께 담는다
+            await editorRef.current?.insertPerio(image, text, snap);
             setShowPerio(false);
           }}
         />

@@ -12,6 +12,9 @@ import StarterKit from "@tiptap/starter-kit";
 import Placeholder from "@tiptap/extension-placeholder";
 import Image from "@tiptap/extension-image";
 import { DrawEditor, type DrawResult } from "@/components/draw/draw-editor";
+import { PerioEditor } from "@/components/oral/perio-editor";
+import { loadPerioSnapshot, savePerioSnapshot, type PerioSnapshot } from "@/lib/oral/perio-store";
+import { summaryText } from "@/lib/oral/perio";
 import { AssetPicker } from "@/components/consult-assets/asset-picker";
 import { EstimateBuilder } from "@/components/estimate/estimate-builder";
 import { loadConsultDrawing, saveConsultDrawing, uploadConsultImage as uploadImage } from "@/lib/draw/consult-store";
@@ -38,13 +41,62 @@ function ResizableImageView({ node, updateAttributes, selected, editor, getPos }
     ref: string;
   } | null>(null);
   const [stageBusy, setStageBusy] = useState(false);
-  const { src, alt, width, align, draw } = node.attrs as {
+  const { src, alt, width, align, draw, perio } = node.attrs as {
     src: string;
     alt: string;
     width: number | null;
     align: ImgAlign;
     draw: string | null;
+    perio: string | null;
   };
+  // spec 040 — 잇몸 기록 차트 그림이면 [✏️ 고치기] = 잇몸 기록을 다시 연다
+  const [perioEdit, setPerioEdit] = useState<PerioSnapshot | null>(null);
+
+  async function openPerio() {
+    if (!perio || stageBusy) return;
+    setStageBusy(true);
+    const snap = await loadPerioSnapshot(perio);
+    setStageBusy(false);
+    if (!snap) return alert("잇몸 기록을 열지 못했습니다. 다시 시도해 주세요.");
+    setPerioEdit(snap);
+  }
+
+  /** 고친 잇몸 기록으로 그림·요약 글을 그 자리에서 바꾼다(예전 요약 글을 찾으면 교체, 못 찾으면 그림 뒤에 새로) */
+  async function applyPerio(file: File, text: string, snap: PerioSnapshot) {
+    const old = perioEdit;
+    setPerioEdit(null);
+    setStageBusy(true);
+    try {
+      const [newSrc, newPerio] = await Promise.all([uploadImage(file), savePerioSnapshot(snap)]);
+      updateAttributes({ src: newSrc, perio: newPerio });
+      const esc = (t: string) => t.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+      const html = text
+        .split("\n")
+        .filter(Boolean)
+        .map((l) => `<p>${esc(l)}</p>`)
+        .join("");
+      const oldLines = old ? summaryText(old.data, old.date).split("\n") : [];
+      const nodes: { size: number; offset: number; text: string; para: boolean }[] = [];
+      editor.state.doc.forEach((n, offset) => nodes.push({ size: n.nodeSize, offset, text: n.textContent, para: n.type.name === "paragraph" }));
+      let range: { from: number; to: number } | null = null;
+      for (let i = 0; oldLines.length && i + oldLines.length <= nodes.length; i++) {
+        if (oldLines.every((l, j) => nodes[i + j].para && nodes[i + j].text === l)) {
+          const last = nodes[i + oldLines.length - 1];
+          range = { from: nodes[i].offset, to: last.offset + last.size };
+          break;
+        }
+      }
+      if (range) editor.chain().insertContentAt(range, html).run();
+      else {
+        const pos = typeof getPos === "function" ? getPos() : null;
+        if (pos != null) editor.chain().insertContentAt(pos + node.nodeSize, html).run();
+      }
+    } catch {
+      alert("잇몸 기록을 바꾸지 못했습니다. 다시 시도해 주세요.");
+    } finally {
+      setStageBusy(false);
+    }
+  }
 
   // stage = 크게 열어 그리며 설명 → "기록에 담기"로 스냅샷 추가 / edit = 이 그림을 고쳐 그 자리에서 바꾸기
   async function openStage(purpose: "stage" | "edit") {
@@ -196,10 +248,17 @@ function ResizableImageView({ node, updateAttributes, selected, editor, getPos }
           </button>
           <button
             type="button"
-            title={draw ? "그린 표시를 하나씩 고치거나 지워서 이 그림을 바꿉니다 (spec 039)" : "이 그림 위에 더 그려서 바꿉니다"}
+            title={
+              perio
+                ? "잇몸 기록을 다시 열어 고칩니다 — 그림과 요약 글이 함께 바뀝니다 (spec 040)"
+                : draw
+                  ? "그린 표시를 하나씩 고치거나 지워서 이 그림을 바꿉니다 (spec 039)"
+                  : "이 그림 위에 더 그려서 바꿉니다"
+            }
             onMouseDown={(e) => {
               e.preventDefault();
-              void openStage("edit");
+              if (perio) void openPerio();
+              else void openStage("edit");
             }}
             style={{
               padding: "2px 6px",
@@ -215,6 +274,17 @@ function ResizableImageView({ node, updateAttributes, selected, editor, getPos }
             ✏️ 고치기
           </button>
         </div>
+      )}
+      {/* spec 040 — 잇몸 기록 다시 열기 */}
+      {perioEdit && (
+        <PerioEditor
+          initialData={perioEdit.data}
+          examId={perioEdit.examId ?? null}
+          patient={perioEdit.patientId ? { id: perioEdit.patientId, name: "" } : null}
+          date={perioEdit.date}
+          onClose={() => setPerioEdit(null)}
+          onInsert={(file, text, snap) => applyPerio(file, text, snap)}
+        />
       )}
       {/* spec 026 스테이지 · spec 039 고치기 — 그리기 엔진 */}
       {stage && (
@@ -280,6 +350,12 @@ const ResizableImage = Image.extend({
         parseHTML: (el) => el.getAttribute("data-draw"),
         renderHTML: () => ({}),
       },
+      // spec 040 — 잇몸 기록 다시 열기용 기록(.perio.json) URL
+      perio: {
+        default: null,
+        parseHTML: (el) => el.getAttribute("data-perio"),
+        renderHTML: () => ({}),
+      },
     };
   },
 
@@ -288,6 +364,7 @@ const ResizableImage = Image.extend({
     const width = node.attrs.width as number | null;
     const align = node.attrs.align as ImgAlign;
     const draw = node.attrs.draw as string | null;
+    const perio = node.attrs.perio as string | null;
     const style =
       (width ? `width:${width}px;` : "") + "max-width:100%;height:auto;border-radius:8px;" + alignStyle(align);
     return [
@@ -297,6 +374,7 @@ const ResizableImage = Image.extend({
         ...(width ? { width } : {}),
         ...(align ? { "data-align": align } : {}),
         ...(draw ? { "data-draw": draw } : {}),
+        ...(perio ? { "data-perio": perio } : {}),
         style,
       },
     ];
@@ -320,6 +398,8 @@ export type RichTextEditorHandle = {
   insertImageFile: (file: File) => Promise<void>;
   /** 그리기 엔진 결과(보기용 그림 + 편집용 기록)를 본문에 넣는다 — 나중에 [✏️ 고치기]로 다시 열 수 있다(spec 039). */
   insertDrawing: (r: DrawResult) => Promise<void>;
+  /** 잇몸 기록(spec 040) — 차트 그림 + 요약 글. 그림을 누르면 [✏️ 고치기]로 다시 열 수 있다 */
+  insertPerio: (image: File, text: string, snap: PerioSnapshot) => Promise<void>;
   clear: () => void;
   setHTML: (html: string) => void;
   /** 현재 에디터 내용을 HTML로 즉시 읽는다(자동저장 — React 상태 갱신 대기 없이 동기 캡처). */
@@ -371,6 +451,15 @@ function RichTextEditor({ value, onChange, placeholder }, ref) {
         .chain()
         .focus()
         .insertContent([{ type: "image", attrs: { src: saved.src, draw: saved.draw } }, { type: "paragraph" }])
+        .run();
+    },
+    async insertPerio(image: File, text: string, snap: PerioSnapshot) {
+      if (!editorRef.current) return;
+      const [src, perio] = await Promise.all([uploadImage(image), savePerioSnapshot(snap)]);
+      editorRef.current
+        .chain()
+        .focus()
+        .insertContent([{ type: "image", attrs: { src, perio } }, ...text.split(/\n+/).filter(Boolean).map((l) => ({ type: "paragraph", content: [{ type: "text", text: l }] }))])
         .run();
     },
     clear() {

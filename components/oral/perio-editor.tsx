@@ -33,6 +33,7 @@ import {
 import { PerioChart, plaqueSurface, type PerioHover } from "@/components/oral/perio-chart";
 import { saveOralExam } from "@/app/actions/oral-exams";
 import { svgToPngBlob } from "@/lib/svg-to-png";
+import type { PerioSnapshot } from "@/lib/oral/perio-store";
 
 type Jaw = "all" | "upper" | "lower";
 
@@ -66,12 +67,15 @@ export type PerioEditorProps = {
   initialData?: PerioData | null;
   consultationId?: string | null;
   onClose: () => void;
-  /** 상담 기록에 담기(상담보드) — 차트 그림 + 복붙용 글 */
-  onInsert?: (image: File, text: string) => Promise<void> | void;
+  /** 상담 기록에 담기(상담보드) — 차트 그림 + 복붙용 글 + 다시 열기용 기록 */
+  onInsert?: (image: File, text: string, snapshot: PerioSnapshot) => Promise<void> | void;
   onSaved?: (id: string) => void;
+  /** 기록 날짜(다시 열어 고칠 때 원래 날짜 유지) — 없으면 오늘 */
+  date?: string;
 };
 
-export function PerioEditor({ patient, examId, initialData, consultationId, onClose, onInsert, onSaved }: PerioEditorProps) {
+export function PerioEditor({ patient, examId, initialData, consultationId, onClose, onInsert, onSaved, date }: PerioEditorProps) {
+  const day = date ?? today();
   const [data, setData] = useState<PerioData>(() => normalizePerio(initialData ?? emptyPerio()));
   const [id, setId] = useState<string | null>(examId ?? null);
   const [mode, setMode] = useState<MeasureId>("pd");
@@ -97,7 +101,7 @@ export function PerioEditor({ patient, examId, initialData, consultationId, onCl
   const missing = useMemo(() => new Set(data.entries.filter((e) => e.m === "state" && e.v === "missing").map((e) => e.t)), [data]);
   const summary = useMemo(() => summarize(data), [data]);
   const rows = useMemo(() => (exporting || jaw === "all" ? PERIO_ROWS : PERIO_ROWS.filter((r) => r.upper === (jaw === "upper"))), [exporting, jaw]);
-  const geo = useMemo(() => chartLayout({ rows, thirdMolars: data.thirdMolars, k: 6, padX: 34, top: exporting ? 24 : 8 }), [rows, data.thirdMolars, exporting]);
+  const geo = useMemo(() => chartLayout({ rows, thirdMolars: data.thirdMolars, k: 6, padX: 52, jawHeader: 30, jawGap: 16, top: exporting ? 24 : 8 }), [rows, data.thirdMolars, exporting]);
   // 전체 부위 수 = (위턱 + 아래턱 한 줄 부위) × 두 면
   const totalSites = useMemo(
     () => 2 * (rowSites(true, data.thirdMolars, missing).length + rowSites(false, data.thirdMolars, missing).length),
@@ -292,8 +296,14 @@ export function PerioEditor({ patient, examId, initialData, consultationId, onCl
       if (!svg) return;
       const blob = await svgToPngBlob(svg, 2);
       setExporting(false);
-      if (patient) await save(true);
-      await onInsert(new File([blob], `perio_${Date.now()}.png`, { type: "image/png" }), summaryText(data, today()));
+      const savedId = patient ? await save(true) : null;
+      await onInsert(new File([blob], `perio_${Date.now()}.png`, { type: "image/png" }), summaryText(data, day), {
+        v: 1,
+        date: day,
+        data,
+        examId: savedId ?? id,
+        patientId: patient?.id ?? null,
+      });
     });
 
   const close = () => {
@@ -327,7 +337,7 @@ export function PerioEditor({ patient, examId, initialData, consultationId, onCl
               {summary.sites}
             </text>
           </svg>
-          {patient && <span className="max-w-28 truncate text-sm font-semibold text-slate-800">{patient.name}</span>}
+          {patient?.name && <span className="max-w-28 truncate text-sm font-semibold text-slate-800">{patient.name}</span>}
         </div>
 
         <div className="order-3 flex w-full gap-1 overflow-x-auto rounded-2xl bg-slate-100 p-1 md:order-none md:w-auto">
@@ -406,7 +416,7 @@ export function PerioEditor({ patient, examId, initialData, consultationId, onCl
             touch={touchUi}
             exporting={exporting}
             onPointer={onPointer}
-            title={exporting ? `잇몸 기록 ${today()}${patient ? ` · ${patient.name}` : ""}` : undefined}
+            title={exporting ? `잇몸 기록 ${day}${patient?.name ? ` · ${patient.name}` : ""}` : undefined}
           />
         </div>
       </div>

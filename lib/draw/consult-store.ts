@@ -58,3 +58,14 @@ export async function loadConsultDrawing(
   }
   return { image: await (await fetch(src)).blob(), doc: null, ref: src };
 }
+
+/** 상담 이미지 버킷에 JSON 올리기(그림·잇몸 기록 등 "다시 열기"용 기록) → 공개 URL */
+export async function uploadConsultJson(value: unknown, suffix: string): Promise<string> {
+  const supabase = createBrowserSupabaseClient();
+  const path = `inline/${crypto.randomUUID()}${suffix}`;
+  const { error } = await supabase.storage
+    .from(bucket())
+    .upload(path, new Blob([JSON.stringify(value)], { type: "application/json" }), { contentType: "application/json" });
+  if (error) throw new Error(error.message);
+  return supabase.storage.from(bucket()).getPublicUrl(path).data.publicUrl;
+}

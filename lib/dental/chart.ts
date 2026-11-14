@@ -15,12 +15,14 @@ export type ChartRowSpec = {
   rootUp: boolean;
 };
 
-/** 치주 차트 표준 4줄: 상악 협측 · 상악 구개측 · 하악 설측 · 하악 협측(교합면이 줄 사이에서 마주 보게) */
+/** 치주 차트 4줄: 위턱 바깥·안쪽 → 아래턱 바깥·안쪽.
+ *  ★같은 턱의 두 줄은 같은 방향(위턱 = 치관이 아래, 아래턱 = 치관이 위) — "같은 치아를 바깥/안쪽에서 본 것"으로 읽히게.
+ *  (예전처럼 마주 보게 그리면 위·아래 대합치처럼 보여 헷갈린다 — 2026-11-14 대표 피드백) */
 export const PERIO_ROWS: ChartRowSpec[] = [
   { key: "UB", upper: true, side: "B", rootUp: true },
-  { key: "UL", upper: true, side: "L", rootUp: false },
-  { key: "LL", upper: false, side: "L", rootUp: true },
+  { key: "UL", upper: true, side: "L", rootUp: true },
   { key: "LB", upper: false, side: "B", rootUp: false },
+  { key: "LL", upper: false, side: "L", rootUp: false },
 ];
 
 export type ChartOpts = {
@@ -40,6 +42,8 @@ export type ChartOpts = {
   label?: number;
   rowGap?: number;
   jawGap?: number;
+  /** 턱마다 첫 줄 위 머리표 자리(px) */
+  jawHeader?: number;
   top?: number;
 };
 
@@ -59,6 +63,8 @@ export type ChartRow = {
   labelY: number;
   /** 로컬 +y(치관) → 화면 y 부호·배율 */
   sy: number;
+  /** 이 턱의 첫 줄이면 머리표 y(위턱/아래턱) */
+  jawHeaderY?: number;
 };
 
 export type ChartGeo = {
@@ -82,6 +88,7 @@ export function chartLayout(o: ChartOpts): ChartGeo {
   const label = o.label ?? 18;
   const rowGap = o.rowGap ?? 0;
   const jawGap = o.jawGap ?? 22;
+  const jawHeader = o.jawHeader ?? 0;
   const third = o.thirdMolars ?? false;
 
   const jaws = [true, false].filter((u) => o.rows.some((r) => r.upper === u));
@@ -103,21 +110,24 @@ export function chartLayout(o: ChartOpts): ChartGeo {
   const rows: ChartRow[] = [];
   let y = o.top ?? 8;
   o.rows.forEach((spec, i) => {
-    if (i > 0 && spec.upper !== o.rows[i - 1].upper) y += jawGap;
+    const jawStart = i === 0 || spec.upper !== o.rows[i - 1].upper;
+    if (i > 0 && jawStart) y += jawGap;
     else if (i > 0) y += rowGap;
+    const jawHeaderY = jawStart && jawHeader ? y + jawHeader * 0.7 : undefined;
+    if (jawStart) y += jawHeader;
     const teeth = archTeeth(spec.upper, third);
     if (spec.rootUp) {
       const toothTop = y + label;
       const cej = toothTop + rootShow * k;
       const toothBottom = toothTop + toothH;
-      rows.push({ spec, teeth, top: y, cej, toothTop, toothBottom, bandTop: toothBottom, bandBottom: toothBottom + band, labelY: y + 13, sy: k, bottom: toothBottom + band });
+      rows.push({ spec, teeth, top: y, cej, toothTop, toothBottom, bandTop: toothBottom, bandBottom: toothBottom + band, labelY: y + 13, sy: k, bottom: toothBottom + band, jawHeaderY });
       y = toothBottom + band;
     } else {
       const bandTop = y;
       const toothTop = y + band;
       const cej = toothTop + crownShow * k;
       const toothBottom = toothTop + toothH;
-      rows.push({ spec, teeth, top: y, cej, toothTop, toothBottom, bandTop, bandBottom: toothTop, labelY: toothBottom + 13, sy: -k, bottom: toothBottom + label });
+      rows.push({ spec, teeth, top: y, cej, toothTop, toothBottom, bandTop, bandBottom: toothTop, labelY: toothBottom + 13, sy: -k, bottom: toothBottom + label, jawHeaderY });
       y = toothBottom + label;
     }
   });

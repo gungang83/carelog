@@ -184,17 +184,31 @@ export const PerioChart = forwardRef<SVGSVGElement, Props>(function PerioChart(
     const hv = live && hover && hover.hit.row === row ? hover : null;
     return (
       <>
-        {/* 줄 표시 — 작은 치열 아이콘 + 면 글자(B/P/L) */}
-        <g transform={`translate(4 ${(row.toothTop + row.toothBottom) / 2 - 12})`}>
-          <rect width={22} height={24} rx={6} fill={side === "B" ? "#e0f2fe" : "#ede9fe"} />
-          <path
-            d={row.spec.upper ? "M5 17 Q11 3 17 17" : "M5 7 Q11 21 17 7"}
-            fill="none"
-            stroke={side === "B" ? "#0284c7" : "#7c3aed"}
-            strokeWidth={side === "B" ? 2.6 : 1.2}
-            strokeDasharray={side === "B" ? undefined : "2 1.5"}
-          />
-          <text x={11} y={row.spec.upper ? 22 : 6} textAnchor="middle" fontSize={7} fontWeight={800} fill={side === "B" ? "#0369a1" : "#6d28d9"} dy={row.spec.upper ? 0 : 2}>
+        {/* 턱 머리표 — 위턱 / 아래턱 */}
+        {row.jawHeaderY !== undefined && (
+          <g>
+            <line x1={6} x2={geo.width - 6} y1={row.jawHeaderY + 4} y2={row.jawHeaderY + 4} stroke="#e2e8f0" strokeWidth={1} />
+            <rect x={6} y={row.jawHeaderY - 13} width={74} height={22} rx={11} fill="#0f172a" />
+            <path
+              d={row.spec.upper ? "M15 3 Q22 -9 29 3" : "M15 -7 Q22 5 29 -7"}
+              transform={`translate(0 ${row.jawHeaderY})`}
+              fill="none"
+              stroke="#ffffff"
+              strokeWidth={2.2}
+              strokeLinecap="round"
+            />
+            <text x={54} y={row.jawHeaderY + 3} textAnchor="middle" fontSize={11} fontWeight={800} fill="#ffffff">
+              {row.spec.upper ? "위턱" : "아래턱"}
+            </text>
+          </g>
+        )}
+        {/* 줄 표시 — 바깥(협측) / 안쪽(구개·설측) */}
+        <g transform={`translate(6 ${(row.toothTop + row.toothBottom) / 2 - 26})`}>
+          <rect width={38} height={52} rx={10} fill={side === "B" ? "#e0f2fe" : "#ede9fe"} />
+          <text x={19} y={21} textAnchor="middle" fontSize={11} fontWeight={800} fill={side === "B" ? "#0369a1" : "#6d28d9"}>
+            {side === "B" ? "바깥" : "안쪽"}
+          </text>
+          <text x={19} y={40} textAnchor="middle" fontSize={13} fontWeight={900} fill={side === "B" ? "#0284c7" : "#7c3aed"}>
             {side === "B" ? "B" : row.spec.upper ? "P" : "L"}
           </text>
         </g>
