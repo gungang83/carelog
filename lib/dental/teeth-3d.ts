@@ -341,3 +341,78 @@ export function buildGapPoints3D(opts: ArchOpts3D = {}): GapPoint3D[] {
     return { id: g.id, upper: up, position: toWorld(up, g.x + g.nx * off, g.y + g.ny * off, h, h * 0.22) };
   });
 }
+
+// ── 치아 기준틀(3D 위에 층을 얹는 기능용) ───────────────────────────────────
+// 치주 차트(spec 040) 3D처럼 "몇 번 치아 어느 면, CEJ에서 몇 mm"를 3D 좌표와 오가게 한다.
+
+export type V3 = [number, number, number];
+export type ToothFrame3D = {
+  fdi: Fdi;
+  upper: boolean;
+  /** CEJ 높이의 치아 중심(월드 mm) */
+  cej: V3;
+  /** 단위 벡터: 원심 쪽 · 설측(안쪽) 쪽 · 치근 쪽 */
+  distal: V3;
+  lingual: V3;
+  root: V3;
+  /** CEJ에서의 근원심·협설 반폭(mm) */
+  halfMd: number;
+  halfBl: number;
+  crown: number;
+  rootLen: number;
+};
+
+const sub = (a: V3, b: V3): V3 => [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
+const unit = (v: V3): V3 => {
+  const l = Math.hypot(...v) || 1;
+  return [v[0] / l, v[1] / l, v[2] / l];
+};
+
+/** 치경부 단면 배율(치관 최대폭 대비) — sideRings와 같은 값 */
+export const neckFactor = (fdi: Fdi) => (toothPos(fdi) >= 6 ? 0.78 : toothPos(fdi) >= 4 ? 0.7 : 0.66);
+
+export function toothFrames3D(opts: ArchOpts3D = {}): ToothFrame3D[] {
+  const { layout, toWorld } = archFrame(opts);
+  return layout.teeth.map((t) => {
+    const [a, b, c, d, e, f] = t.matrix;
+    const up = isUpper(t.fdi);
+    const { md, bl, crown: h, root: r } = dims(t.fdi);
+    const w = (x: number, z: number, hy: number) => toWorld(up, a * x + c * z + e, b * x + d * z + f, h, hy);
+    const cej = w(0, 0, 0);
+    const nf = neckFactor(t.fdi);
+    return {
+      fdi: t.fdi,
+      upper: up,
+      cej,
+      distal: unit(sub(w(1, 0, 0), cej)),
+      lingual: unit(sub(w(0, 1, 0), cej)),
+      root: up ? [0, 1, 0] : [0, -1, 0],
+      halfMd: (md / 2) * nf,
+      halfBl: (bl / 2) * nf,
+      crown: h,
+      rootLen: r,
+    };
+  });
+}
+
+/** 기준틀 위 한 점: 면(B/L)·부위(D/C/M)의 표면, CEJ에서 치근 쪽으로 mm(음수 = 치관 쪽) · out = 표면 밖으로 띄울 거리 */
+export function sitePoint3D(f: ToothFrame3D, side: "B" | "L", pos: "D" | "C" | "M", mmRootward: number, out = 0): V3 {
+  const x = (pos === "D" ? 0.62 : pos === "M" ? -0.62 : 0) * f.halfMd;
+  const sgn = side === "B" ? -1 : 1;
+  // 치근 쪽으로 갈수록 가늘어진다(근첨에서 약 40%)
+  const taper = 1 - 0.6 * Math.max(0, Math.min(1, mmRootward / f.rootLen));
+  const z = sgn * (f.halfBl * (pos === "C" ? 1 : 0.86) * taper + out);
+  return [
+    f.cej[0] + f.distal[0] * x * taper + f.lingual[0] * z + f.root[0] * mmRootward,
+    f.cej[1] + f.distal[1] * x * taper + f.lingual[1] * z + f.root[1] * mmRootward,
+    f.cej[2] + f.distal[2] * x * taper + f.lingual[2] * z + f.root[2] * mmRootward,
+  ];
+}
+
+/** 3D 점 → 그 치아의 면·부위·CEJ 기준 mm(+ 치관 쪽, 2D 차트와 같은 부호) */
+export function pointToSite3D(f: ToothFrame3D, p: V3): { side: "B" | "L"; pos: "D" | "C" | "M"; mm: number } {
+  const v = sub(p, f.cej);
+  const dot = (u: V3) => v[0] * u[0] + v[1] * u[1] + v[2] * u[2];
+  const md = dot(f.distal) / f.halfMd;
+  return { side: dot(f.lingual) < 0 ? "B" : "L", pos: md > 0.34 ? "D" : md < -0.34 ? "M" : "C", mm: -dot(f.root) };
+}

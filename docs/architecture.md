@@ -825,5 +825,8 @@ components/oral/perio-chart.tsx   잇몸 기록 층 — 잇몸(반투명 분홍)
 components/oral/perio-editor.tsx  입력 화면 — 차트 위에서 바로: 마우스 = 높이로 깊이·클릭 기록 / 터치 = 짚고 끌어 떼기 · 키보드 · 기록에 담기(PNG+글)
 app/actions/oral-exams.ts    list/get/save/delete(oral_exams)
 진입                         상담보드 [🩺 잇몸 기록] (환자 연결 상담이면 회차 저장) · 환자 페이지 "잇몸 기록" 섹션(상담 없이도)
+lib/dental/teeth-3d.ts       ★치아 엔진 3D — toothFrames3D(치아별 기준틀) · sitePoint3D / pointToSite3D(면·부위·mm ↔ 3D 점)
+components/oral/perio-3d.tsx 잇몸 기록 3D 층 — 잇몸 띠·잇몸선·주머니·눈금 + 따라 돌기(포인터 아래 점을 축으로 최대 28°)
+lib/oral/perio-pick.ts       PerioPick — 2D·3D 공용 "가리킨 곳"(같은 입력 규칙)
 lib/svg-to-png.ts            SVG → PNG 공용
 ```

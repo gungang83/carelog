@@ -374,6 +374,18 @@ export const UPDATE_FEED: UpdateFeedEntry[] = [
     ],
     internal: "spec 040 1단계 · SQL 20261114000002 실행 후 회차 저장",
   },
+  {
+    id: "2026-11-14-perio-3d",
+    date: "2026-11-14",
+    emoji: "🦷",
+    title: "잇몸 기록 3D·바로 재기",
+    items: [
+      "잇몸 기록은 차트 위에서 바로 잽니다 — 치아 위에서 마우스 높이가 곧 깊이, 누르면 기록(폰은 짚고 끌었다 떼기).",
+      "3D로 바꾸면 가리킨 치아 쪽으로 화면이 살짝 돌아 바깥·안쪽 면을 보기 쉽게 해 줍니다.",
+      "상담 기록에 담은 잇몸 기록 그림은 눌러서 [✏️ 고치기]로 다시 열 수 있습니다.",
+    ],
+    internal: "spec 040 §13~15 · 치아 엔진 범용화(chart.ts·dental-chart·toothFrames3D)",
+  },
 ];
 
 // ── 결정 상태 (DB update_feed_decisions) ──────────────────────────────

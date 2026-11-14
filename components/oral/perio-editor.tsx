@@ -7,6 +7,8 @@
 //   키보드: 0~9, Shift+0/1/2 = 10~12, F, B(방금 칸 출혈), ←→, ↑↓(면), Backspace, Ctrl+Z.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import dynamic from "next/dynamic";
+import { readViewMode, writeViewMode, type ViewMode } from "@/lib/dental/view-mode";
 import { isUpper } from "@/lib/dental/teeth";
 import { PERIO_ROWS, chartLayout, siteX, sitesLeftToRight, type ChartHit } from "@/lib/dental/chart";
 import type { ChartPointer } from "@/components/dental/dental-chart";
@@ -30,7 +32,17 @@ import {
   type MeasureValue,
   type PerioData,
 } from "@/lib/oral/perio";
-import { PerioChart, plaqueSurface, type PerioHover } from "@/components/oral/perio-chart";
+import { PerioChart, plaqueSurface } from "@/components/oral/perio-chart";
+import { pickFromHit, type PerioPick } from "@/lib/oral/perio-pick";
+
+type EditorHover = { pick: PerioPick; value: MeasureValue | null; hit?: ChartHit } | null;
+
+// three.js는 3D를 고를 때만 불러온다
+const Perio3D = dynamic(() => import("@/components/oral/perio-3d"), {
+  ssr: false,
+  loading: () => <div className="flex h-full items-center justify-center text-sm text-slate-400">3D 불러오는 중…</div>,
+});
+const VIEW_KEY = "carelog.perio.view";
 import { saveOralExam } from "@/app/actions/oral-exams";
 import { svgToPngBlob } from "@/lib/svg-to-png";
 import type { PerioSnapshot } from "@/lib/oral/perio-store";
@@ -84,13 +96,20 @@ export function PerioEditor({ patient, examId, initialData, consultationId, onCl
   const firstTooth = rowTeeth(true, data.thirdMolars)[0];
   const [cursor, setCursor] = useState<Cursor>({ t: firstTooth, s: "B", p: "D" });
   const [dir, setDir] = useState<1 | -1>(mesialDir(firstTooth));
-  const [hover, setHover] = useState<PerioHover>(null);
+  const [hover, setHover] = useState<EditorHover>(null);
   const [flash, setFlash] = useState<string | null>(null);
   const [exporting, setExporting] = useState(false);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState("");
   const [dirty, setDirty] = useState(false);
   const [help, setHelp] = useState(false);
+  const [view, setViewState] = useState<ViewMode>(() => readViewMode(VIEW_KEY));
+  const setView = (v: ViewMode) => {
+    setViewState(v);
+    writeViewMode(VIEW_KEY, v);
+    setHover(null);
+  };
+  const [follow, setFollow] = useState(true);
   const history = useRef<PerioData[]>([]);
   const lastSite = useRef<Cursor | null>(null);
   const scrub = useRef(false);
@@ -143,34 +162,33 @@ export function PerioEditor({ patient, examId, initialData, consultationId, onCl
     if (next) setCursor(next);
   };
 
+  /** 가리킨 곳 → 지금 모드의 값(깊이·퇴축). 2D·3D 공용 */
   const valueFor = useCallback(
-    (hit: ChartHit): MeasureValue | null => {
-      const side = hit.row.spec.side;
+    (pk: PerioPick): MeasureValue | null => {
       if (mode === "pd") {
-        if (hit.zone === "band") return null;
-        if (hit.zone === "label") return hit.row.spec.rootUp === hit.y < hit.row.toothTop ? "F" : null;
-        const r = siteVal(ix, "rec", hit.t, side, hit.p);
-        const depth = -(typeof r === "number" ? r : 0) - hit.mm;
+        if (pk.zone === "band") return null;
+        if (pk.zone === "beyond") return "F";
+        const r = siteVal(ix, "rec", pk.t, pk.s, pk.p);
+        const depth = -(typeof r === "number" ? r : 0) - pk.mm;
         if (depth < -0.6) return null;
         const n = Math.round(depth);
         return n > 15 ? "F" : Math.max(0, n);
       }
       if (mode === "rec") {
-        if (hit.zone === "band" || hit.zone === "label") return null;
-        return Math.max(-3, Math.min(10, Math.round(-hit.mm)));
+        if (pk.zone === "band" || pk.zone === "beyond") return null;
+        return Math.max(-3, Math.min(10, Math.round(-pk.mm)));
       }
       return null;
     },
     [mode, ix],
   );
 
-  const act = (h: NonNullable<PerioHover>) => {
-    const { t, p, row } = h.hit;
-    const s = row.spec.side;
+  const act = (pk: PerioPick, value: MeasureValue | null) => {
+    const { t, p, s } = pk;
     setMsg("");
     if (mode === "pd" || mode === "rec") {
-      if (h.value === null) return;
-      setEntry({ m: mode, t, s, p }, h.value);
+      if (value === null) return;
+      setEntry({ m: mode, t, s, p }, value);
       advanceFrom({ t, s, p });
     } else if (mode === "bop") {
       setEntry({ m: "bop", t, s, p }, siteVal(ix, "bop", t, s, p) === true ? undefined : true);
@@ -186,28 +204,30 @@ export function PerioEditor({ patient, examId, initialData, consultationId, onCl
     }
   };
 
-  const onPointer = (e: ChartPointer) => {
-    if (e.type === "leave") {
+  /** 포인터 공용 처리 — 마우스: 올리면 미리보기·누르면 기록 / 손가락·펜: 짚고 끌어 떼면 기록 */
+  const handlePick = (type: "move" | "down" | "up" | "leave", pointerType: string, pk: PerioPick | null, hit?: ChartHit | null) => {
+    if (type === "leave") {
       if (!scrub.current) setHover(null);
       return;
     }
-    const h = e.hit ? { hit: e.hit, value: valueFor(e.hit) } : null;
-    if (e.pointerType === "mouse") {
-      if (e.type === "move") setHover(h);
-      if (e.type === "down" && h) act(h);
+    const h: EditorHover = pk ? { pick: pk, value: valueFor(pk), hit: hit ?? undefined } : null;
+    if (pointerType === "mouse") {
+      if (type === "move") setHover(h);
+      if (type === "down" && h) act(h.pick, h.value);
       return;
     }
-    // 손가락·펜: 짚고 끌어서 떼면 기록
-    if (e.type === "down") {
+    if (type === "down") {
       scrub.current = true;
       setHover(h);
-    } else if (e.type === "move" && scrub.current) setHover(h);
-    else if (e.type === "up" && scrub.current) {
+    } else if (type === "move" && scrub.current) setHover(h);
+    else if (type === "up" && scrub.current) {
       scrub.current = false;
-      if (h) act(h);
+      if (h) act(h.pick, h.value);
       setHover(null);
     }
   };
+
+  const onPointer = (e: ChartPointer) => handlePick(e.type, e.pointerType, e.hit ? pickFromHit(e.hit) : null, e.hit);
 
   // 다음 칸이 화면 밖이면 부드럽게 따라간다(폰)
   useEffect(() => {
@@ -290,12 +310,15 @@ export function PerioEditor({ patient, examId, initialData, consultationId, onCl
     run(async () => {
       if (!onInsert) return;
       setHover(null);
+      const was = view;
+      if (was === "3d") setViewState("2d");
       setExporting(true);
       await nextFrame();
       const svg = chartRef.current;
       if (!svg) return;
       const blob = await svgToPngBlob(svg, 2);
       setExporting(false);
+      if (was === "3d") setViewState("3d");
       const savedId = patient ? await save(true) : null;
       await onInsert(new File([blob], `perio_${Date.now()}.png`, { type: "image/png" }), summaryText(data, day), {
         v: 1,
@@ -403,6 +426,20 @@ export function PerioEditor({ patient, examId, initialData, consultationId, onCl
         </div>
       )}
 
+      {view === "3d" && !exporting ? (
+        <div className="relative min-h-0 flex-1 p-2 sm:p-3">
+          <Perio3D
+            data={data}
+            mode={mode}
+            jaw={jaw}
+            cursor={cursor}
+            hover={hover ? { pick: hover.pick, value: hover.value } : null}
+            follow={follow}
+            onPick={(type, pointerType, pk) => handlePick(type, pointerType, pk)}
+            className="h-full w-full"
+          />
+        </div>
+      ) : (
       <div ref={scrollRef} className="min-h-0 flex-1 overflow-auto px-2 py-3 sm:px-4">
         <div className="mx-auto min-w-[760px] max-w-[1400px] [@media(pointer:coarse)]:min-w-[1150px]">
           <PerioChart
@@ -411,7 +448,7 @@ export function PerioEditor({ patient, examId, initialData, consultationId, onCl
             data={data}
             mode={mode}
             cursor={cursor}
-            hover={hover}
+            hover={hover?.hit ? { hit: hover.hit, value: hover.value } : null}
             flash={flash}
             touch={touchUi}
             exporting={exporting}
@@ -420,9 +457,32 @@ export function PerioEditor({ patient, examId, initialData, consultationId, onCl
           />
         </div>
       </div>
+      )}
 
       {/* 아래 막대 — 보기 도구 + 요약(숫자만) */}
       <div className="flex flex-wrap items-center gap-2 border-t border-slate-200/70 bg-white px-3 py-2 text-xs">
+        <div className="flex rounded-xl border border-slate-200 bg-white p-0.5">
+          {(["2d", "3d"] as ViewMode[]).map((v) => (
+            <button
+              key={v}
+              type="button"
+              onClick={() => setView(v)}
+              className={`h-8 rounded-lg px-2.5 text-xs font-bold transition ${view === v ? "bg-slate-900 text-white" : "text-slate-500 hover:bg-slate-100"}`}
+            >
+              {v.toUpperCase()}
+            </button>
+          ))}
+        </div>
+        {view === "3d" && (
+          <button
+            type="button"
+            onClick={() => setFollow((f) => !f)}
+            title="가리킨 치아 쪽으로 화면이 살짝 따라 돌기"
+            className={`h-9 rounded-xl border px-2.5 text-xs font-bold transition ${follow ? "border-sky-600 bg-sky-50 text-sky-700" : "border-slate-200 bg-white text-slate-400"}`}
+          >
+            ↻ 따라 보기
+          </button>
+        )}
         <div className="flex rounded-xl border border-slate-200 bg-white p-0.5">
           {(["upper", "all", "lower"] as Jaw[]).map((j) => (
             <button
