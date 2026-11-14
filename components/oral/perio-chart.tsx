@@ -1,318 +1,322 @@
 "use client";
 
-// spec 040 — 치주 차트 그림(4줄: 상악 협측·구개측, 하악 설측·협측).
-// 치아는 치아 도식 라이브러리(spec 037) 2D 정면 모양 — 로컬 y=0 이 CEJ, mm 단위라 잇몸선·포켓을 실제 비율로 그린다.
-//   잇몸선(빨강) = CEJ에서 퇴축만큼 뿌리 쪽 · 포켓 바닥(파랑) = 잇몸선에서 PD만큼 더 · 그 사이 = 파란 주머니.
-// 인라인 속성만 쓴다(그대로 PNG로 구워 상담 기록에 담기 위해).
+// spec 040 — 잇몸 기록 층(layer). 치아 엔진(DentalChart) 위에 잇몸·주머니·눈금·숫자만 얹는다.
+//   잇몸 = 뿌리를 덮는 반투명 분홍(퇴축되면 뿌리가 드러남) · 잇몸선 = 빨강 · 주머니 = 깊이 색 막대(자라나는 움직임)
+//   마우스를 올리면 그 부위에 mm 눈금이 펼쳐지고, 포인터 높이 = 깊이 미리보기.
 
 import { forwardRef, useMemo } from "react";
-import { dims, isPatientRight, isUpper, toothShape, type Fdi } from "@/lib/dental/teeth";
+import { DentalChart, type ChartPointer } from "@/components/dental/dental-chart";
+import { dims, isUpper, type Fdi } from "@/lib/dental/teeth";
+import { mmToY, siteX, sitesLeftToRight, type ChartGeo, type ChartHit, type ChartRow } from "@/lib/dental/chart";
 import {
   MOB_LABEL,
+  entryKey,
   indexOf,
   pdColor,
   pdNum,
-  rowTeeth,
   siteVal,
   surfaceVal,
   toothVal,
   type Cursor,
+  type MeasureId,
+  type MeasureValue,
   type PerioData,
   type Pos,
-  type Side,
+  type Surface,
 } from "@/lib/oral/perio";
 
-const K = 6; // px per mm
-const GAP = 6; // 치아 사이(px)
-const ROOT_SHOW = 15; // 뿌리 쪽으로 보여 줄 길이(mm)
-const CROWN_SHOW = 11.5;
-const NUM_BAND = 30;
-const LABEL_BAND = 18;
-const PAD_X = 34;
+export type PerioHover = { hit: ChartHit; value: MeasureValue | null } | null;
 
-type RowSpec = { key: string; upper: boolean; side: Side; rootUp: boolean; title: string };
-const ROWS: RowSpec[] = [
-  { key: "UB", upper: true, side: "B", rootUp: true, title: "상악 협측" },
-  { key: "UL", upper: true, side: "L", rootUp: false, title: "상악 구개측" },
-  { key: "LL", upper: false, side: "L", rootUp: true, title: "하악 설측" },
-  { key: "LB", upper: false, side: "B", rootUp: false, title: "하악 협측" },
-];
-const POS_X: Record<Pos, number> = { D: 0.3, C: 0, M: -0.3 }; // 로컬 x(×근원심 폭) — +x = 원심
-
-export type PerioChartProps = {
+type Props = {
+  geo: ChartGeo;
   data: PerioData;
+  mode: MeasureId;
   cursor?: Cursor | null;
-  /** 말로 입력·검토 전 칸 강조 */
-  onSiteClick?: (t: Fdi, s: Side, p: Pos) => void;
+  hover?: PerioHover;
+  /** 방금 바뀐 칸(톡 튀는 움직임) */
+  flash?: string | null;
+  touch?: boolean;
+  exporting?: boolean;
+  onPointer?: (e: ChartPointer) => void;
   title?: string;
 };
 
-type Geo = {
-  width: number;
-  height: number;
-  rows: { spec: RowSpec; top: number; cej: number; toothTop: number; toothBottom: number; numY: number; labelY: number }[];
-  x: Record<Fdi, number>;
-};
+/** 정면 줄의 부위 → 치태 면(D·M은 그대로, 가운데는 그 줄의 면) */
+export const plaqueSurface = (p: Pos, side: "B" | "L"): Surface => (p === "C" ? side : p);
 
-function layout(thirdMolars: boolean): Geo {
-  const upper = rowTeeth(true, thirdMolars);
-  const lower = rowTeeth(false, thirdMolars);
-  const rowW = (teeth: Fdi[]) => teeth.reduce((s, t) => s + dims(t).md * K + GAP, 0);
-  const inner = Math.max(rowW(upper), rowW(lower));
-  const width = Math.ceil(inner + PAD_X * 2);
-  const x: Record<Fdi, number> = {};
-  for (const teeth of [upper, lower]) {
-    let cx = width / 2 - rowW(teeth) / 2;
-    for (const t of teeth) {
-      const w = dims(t).md * K;
-      x[t] = Math.round((cx + w / 2 + GAP / 2) * 100) / 100;
-      cx += w + GAP;
-    }
-  }
-  const toothH = (ROOT_SHOW + CROWN_SHOW) * K;
-  const rows: Geo["rows"] = [];
-  let y = 26;
-  ROWS.forEach((spec, i) => {
-    if (i === 2) y += 26; // 상·하악 사이
-    if (spec.rootUp) {
-      const labelY = y + 12;
-      const toothTop = y + LABEL_BAND;
-      const cej = toothTop + ROOT_SHOW * K;
-      const toothBottom = toothTop + toothH;
-      rows.push({ spec, top: y, cej, toothTop, toothBottom, numY: toothBottom + 4, labelY });
-      y = toothBottom + NUM_BAND;
-    } else {
-      const numY = y;
-      const toothTop = y + NUM_BAND;
-      const cej = toothTop + CROWN_SHOW * K;
-      const toothBottom = toothTop + toothH;
-      rows.push({ spec, top: y, cej, toothTop, toothBottom, numY, labelY: toothBottom + 13 });
-      y = toothBottom + LABEL_BAND + 4;
-    }
-  });
-  return { width, height: Math.ceil(y + 6), rows, x };
-}
-
-export const PerioChart = forwardRef<SVGSVGElement, PerioChartProps>(function PerioChart({ data, cursor, onSiteClick, title }, ref) {
-  const geo = useMemo(() => layout(data.thirdMolars), [data.thirdMolars]);
+export const PerioChart = forwardRef<SVGSVGElement, Props>(function PerioChart(
+  { geo, data, mode, cursor, hover, flash, touch, exporting, onPointer, title },
+  ref,
+) {
   const ix = useMemo(() => indexOf(data), [data]);
-  const font = "system-ui, -apple-system, 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif";
+  const missing = (t: Fdi) => toothVal(ix, "state", t) === "missing";
+  const k = geo.k;
+  const live = !exporting;
 
-  return (
-    <svg
-      ref={ref}
-      xmlns="http://www.w3.org/2000/svg"
-      viewBox={`0 0 ${geo.width} ${geo.height}`}
-      width={geo.width}
-      height={geo.height}
-      fontFamily={font}
-      style={{ maxWidth: "100%", height: "auto", userSelect: "none" }}
-    >
-      <rect x={0} y={0} width={geo.width} height={geo.height} fill="#ffffff" />
-      {title && (
-        <text x={geo.width / 2} y={16} textAnchor="middle" fontSize={12} fontWeight={700} fill="#0f172a">
-          {title}
-        </text>
-      )}
-      {geo.rows.map(({ spec, cej, toothTop, toothBottom, numY, labelY }) => {
-        const teeth = rowTeeth(spec.upper, data.thirdMolars);
-        const sy = spec.rootUp ? K : -K; // 로컬 +y(치관) → 화면
-        const toY = (localY: number) => cej + localY * sy;
-        const rootEdgeY = spec.rootUp ? toothTop : toothBottom;
-        const clipId = `clip-${spec.key}`;
-        const siteX = (t: Fdi, p: Pos) => geo.x[t] + POS_X[p] * dims(t).md * K * (isPatientRight(t) ? -1 : 1);
+  const recAt = (t: Fdi, row: ChartRow, p: Pos) => {
+    if (live && mode === "rec" && hover?.hit.t === t && hover.hit.p === p && hover.hit.row === row && typeof hover.value === "number") return hover.value;
+    const r = siteVal(ix, "rec", t, row.spec.side, p);
+    return typeof r === "number" ? r : 0;
+  };
 
-        // 잇몸선·포켓 — 결손 치아에서 끊는다
-        const groups: { t: Fdi; p: Pos; gm: number; bottom: number | null }[][] = [];
-        let cur: (typeof groups)[number] = [];
-        for (const t of teeth) {
-          if (toothVal(ix, "state", t) === "missing") {
-            if (cur.length) groups.push(cur);
-            cur = [];
-            continue;
-          }
-          const order: Pos[] = isPatientRight(t) ? ["D", "C", "M"] : ["M", "C", "D"];
-          for (const p of order) {
-            const rec = siteVal(ix, "rec", t, spec.side, p);
-            const r = typeof rec === "number" ? rec : 0;
-            const pdv = siteVal(ix, "pd", t, spec.side, p);
-            const n = pdv === "F" ? dims(t).root : pdNum(pdv);
-            cur.push({ t, p, gm: -r, bottom: n === null ? null : -r - n });
-          }
-        }
+  const over = (row: ChartRow) => {
+    const side = row.spec.side;
+    const edge = row.spec.rootUp ? row.toothTop : row.toothBottom;
+    // 잇몸선 — 결손 치아에서 끊는다
+    const groups: { t: Fdi; p: Pos }[][] = [];
+    let cur: { t: Fdi; p: Pos }[] = [];
+    for (const t of row.teeth) {
+      if (missing(t)) {
         if (cur.length) groups.push(cur);
+        cur = [];
+        continue;
+      }
+      for (const p of sitesLeftToRight(t)) cur.push({ t, p });
+    }
+    if (cur.length) groups.push(cur);
+    const gy = (t: Fdi, p: Pos) => mmToY(row, -recAt(t, row, p));
+    const hv = live && hover && hover.hit.row === row ? hover : null;
 
-        return (
-          <g key={spec.key}>
-            <defs>
-              <clipPath id={clipId}>
-                <rect x={0} y={toothTop} width={geo.width} height={toothBottom - toothTop} />
-              </clipPath>
-            </defs>
-            <text x={6} y={(toothTop + toothBottom) / 2} fontSize={10} fill="#64748b" transform={`rotate(-90 6 ${(toothTop + toothBottom) / 2})`} textAnchor="middle" dy={8}>
-              {spec.title}
-            </text>
-            <g clipPath={`url(#${clipId})`}>
-              {/* 치아 */}
-              {teeth.map((t) => {
-                const shape = toothShape(t, "facial");
-                const sx = (isPatientRight(t) ? -1 : 1) * K;
-                const state = toothVal(ix, "state", t);
-                const missing = state === "missing";
-                const implant = state === "implant";
+    return (
+      <>
+        {groups.map((g, i) => {
+          const first = g[0];
+          const last = g[g.length - 1];
+          const x0 = geo.x[first.t] - (dims(first.t).md * k) / 2 - 3;
+          const x1 = geo.x[last.t] + (dims(last.t).md * k) / 2 + 3;
+          const pts = g.map((s) => `${siteX(geo, s.t, s.p)},${gy(s.t, s.p).toFixed(1)}`).join(" ");
+          return (
+            <g key={`gum-${i}`}>
+              <polygon points={`${x0},${gy(first.t, first.p).toFixed(1)} ${pts} ${x1},${gy(last.t, last.p).toFixed(1)} ${x1},${edge} ${x0},${edge}`} fill="#f9a8d4" opacity={0.4} />
+              <polyline points={pts} fill="none" stroke="#e11d48" strokeWidth={1.6} strokeLinejoin="round" strokeLinecap="round" />
+            </g>
+          );
+        })}
+        <line x1={0} x2={geo.width} y1={row.cej} y2={row.cej} stroke="#94a3b8" strokeWidth={0.6} strokeDasharray="3 3" />
+
+        {/* 주머니 막대 — 잇몸선에서 깊이만큼(깊이 색) */}
+        {row.teeth.flatMap((t) =>
+          missing(t)
+            ? []
+            : sitesLeftToRight(t).map((p) => {
+                const v = siteVal(ix, "pd", t, side, p);
+                const n = v === "F" ? dims(t).root : pdNum(v);
+                if (n === null || n === 0) return null;
+                const y0 = gy(t, p);
+                const y1 = mmToY(row, -recAt(t, row, p) - n);
+                const w = Math.max(5, dims(t).md * k * 0.2);
+                const key = entryKey({ m: "pd", t, s: side, p });
                 return (
-                  <g key={t} transform={`matrix(${sx} 0 0 ${sy} ${geo.x[t]} ${cej})`} opacity={missing ? 0.18 : 1}>
-                    {shape.root && (
-                      <path
-                        d={shape.root}
-                        fill={implant ? "#cbd5e1" : "#f1e3c8"}
-                        stroke="#94a3b8"
-                        strokeWidth={0.18}
-                        strokeDasharray={implant ? "0.6 0.4" : undefined}
-                        opacity={0.9}
-                      />
-                    )}
-                    <path d={shape.crown} fill={implant ? "#e2e8f0" : "#fffdf7"} stroke="#94a3b8" strokeWidth={0.18} />
-                  </g>
-                );
-              })}
-              {/* 잇몸(분홍, 반투명) — 잇몸선에서 뿌리 쪽 끝까지 뿌리를 덮는다. 퇴축되면 덮이지 않은 뿌리가 드러나 보인다 */}
-              {groups.map((g, gi) => {
-                const pts = g.map((s) => `${siteX(s.t, s.p).toFixed(1)},${toY(s.gm).toFixed(1)}`);
-                const first = g[0];
-                const last = g[g.length - 1];
-                const x0 = geo.x[first.t] - (dims(first.t).md * K) / 2 - GAP / 2;
-                const x1 = geo.x[last.t] + (dims(last.t).md * K) / 2 + GAP / 2;
-                const y0 = toY(first.gm);
-                const y1 = toY(last.gm);
-                return (
-                  <polygon
-                    key={`gum-${gi}`}
-                    points={`${x0},${y0} ${pts.join(" ")} ${x1},${y1} ${x1},${rootEdgeY} ${x0},${rootEdgeY}`}
-                    fill="#f9a8d4"
-                    opacity={0.42}
+                  <rect
+                    key={`${key}-${String(v)}`}
+                    className={live ? "perio-grow" : undefined}
+                    style={{ transformOrigin: row.spec.rootUp ? "50% 100%" : "50% 0%" }}
+                    x={siteX(geo, t, p) - w / 2}
+                    y={Math.min(y0, y1)}
+                    width={w}
+                    height={Math.abs(y1 - y0)}
+                    rx={w / 2}
+                    fill={pdColor(pdNum(v))}
+                    opacity={0.62}
                   />
                 );
-              })}
-              {/* 잇몸 주머니(파랑) + 잇몸선(빨강) */}
-              {groups.map((g, gi) => {
-                const top = g.map((s) => `${siteX(s.t, s.p).toFixed(1)},${toY(s.gm).toFixed(1)}`);
-                const segs: string[] = [];
-                // 포켓은 잰 부위끼리만 잇는다
-                let run: typeof g = [];
-                const flush = () => {
-                  if (run.length === 1) {
-                    // 한 부위만 잰 곳은 좁은 띠로
-                    const s0 = run[0];
-                    const x = siteX(s0.t, s0.p);
-                    const w = Math.max(3, dims(s0.t).md * K * 0.1);
-                    segs.push(`${(x - w).toFixed(1)},${toY(s0.gm).toFixed(1)} ${(x + w).toFixed(1)},${toY(s0.gm).toFixed(1)} ${x.toFixed(1)},${toY(s0.bottom!).toFixed(1)}`);
-                  } else if (run.length) {
-                    const a = run.map((s) => `${siteX(s.t, s.p).toFixed(1)},${toY(s.gm).toFixed(1)}`);
-                    const b = [...run].reverse().map((s) => `${siteX(s.t, s.p).toFixed(1)},${toY(s.bottom!).toFixed(1)}`);
-                    segs.push([...a, ...b].join(" "));
-                  }
-                  run = [];
-                };
-                for (const s of g) {
-                  if (s.bottom === null) flush();
-                  else run.push(s);
-                }
-                flush();
+              }),
+        )}
+
+        {/* 마우스를 올린 부위 — 기둥 강조 + mm 눈금(포인터 근처 숫자가 커진다) + 미리보기 */}
+        {hv && (mode === "pd" || mode === "rec") && (() => {
+          const { t, p } = hv.hit;
+          const x = siteX(geo, t, p);
+          const w = (dims(t).md * k) / 3;
+          const gm = -recAt(t, row, p);
+          const marks = mode === "pd" ? [...Array(16).keys()] : [-3, -2, -1, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
+          const cur = typeof hv.value === "number" ? hv.value : hv.value === "F" ? 16 : null;
+          const yOf = (n: number) => (mode === "pd" ? mmToY(row, gm - n) : mmToY(row, -n));
+          const prevN = mode === "pd" && cur !== null ? (hv.value === "F" ? dims(t).root : cur) : null;
+          return (
+            <g pointerEvents="none">
+              <rect x={x - w / 2} y={row.toothTop} width={w} height={row.toothBottom - row.toothTop} fill="#0ea5e9" opacity={0.08} />
+              {prevN !== null && prevN > 0 && (
+                <rect
+                  x={x - Math.max(5, dims(t).md * k * 0.2) / 2}
+                  y={Math.min(mmToY(row, gm), mmToY(row, gm - prevN))}
+                  width={Math.max(5, dims(t).md * k * 0.2)}
+                  height={Math.abs(mmToY(row, gm - prevN) - mmToY(row, gm))}
+                  rx={3}
+                  fill={pdColor(prevN)}
+                  opacity={0.35}
+                  stroke={pdColor(prevN)}
+                  strokeDasharray="3 2"
+                />
+              )}
+              {marks.map((n) => {
+                const y = yOf(n);
+                if (y < row.toothTop || y > row.toothBottom) return null;
+                const d = cur === null ? 9 : Math.abs(n - cur);
+                const size = 7 + Math.max(0, 6 - d * 2.4);
+                const on = cur === n;
+                // 숫자는 지금 값 + 3mm 간격만(지금 값 바로 옆은 비움) — 1mm마다 다 쓰면 겹친다
+                const showNum = on || (n % 3 === 0 && d >= 2);
                 return (
-                  <g key={`pk-${gi}`}>
-                    {segs.map((pts, i) => (
-                      <polygon key={i} points={pts} fill="#3b82f6" opacity={0.35} stroke="#2563eb" strokeWidth={1.2} />
-                    ))}
-                    <polyline points={top.join(" ")} fill="none" stroke="#e11d48" strokeWidth={1.6} strokeLinejoin="round" />
+                  <g key={n}>
+                    <line x1={x + w / 2 - (n % 3 === 0 ? 6 : 3)} x2={x + w / 2} y1={y} y2={y} stroke="#0284c7" strokeWidth={on ? 1.8 : 0.8} />
+                    {showNum && (
+                      <text x={x + w / 2 + 3} y={y + size / 3} fontSize={size} fontWeight={on ? 800 : 600} fill={on ? "#0369a1" : "#64748b"} opacity={d > 2 ? 0.55 : 1}>
+                        {n}
+                      </text>
+                    )}
                   </g>
                 );
               })}
-              {/* CEJ 기준선(점선) */}
-              <line x1={PAD_X - 6} x2={geo.width - PAD_X + 6} y1={cej} y2={cej} stroke="#94a3b8" strokeWidth={0.6} strokeDasharray="3 3" />
             </g>
-            {/* 숫자·출혈·라벨·동요·치태 */}
-            {teeth.map((t) => {
-              const missing = toothVal(ix, "state", t) === "missing";
-              const order: Pos[] = isPatientRight(t) ? ["D", "C", "M"] : ["M", "C", "D"];
-              const mob = Number(toothVal(ix, "mob", t) ?? 0);
-              const implant = toothVal(ix, "state", t) === "implant";
-              const showToothInfo = spec.side === "B";
-              return (
-                <g key={`n-${t}`}>
-                  <text x={geo.x[t]} y={labelY} textAnchor="middle" fontSize={10} fontWeight={600} fill={missing ? "#cbd5e1" : "#334155"}>
-                    {t}
-                    {implant ? "ⁱ" : ""}
+          );
+        })()}
+      </>
+    );
+  };
+
+  const free = (row: ChartRow) => {
+    const side = row.spec.side;
+    const bandMid = (row.bandTop + row.bandBottom) / 2;
+    const pdY = row.spec.rootUp ? row.bandTop + 13 : row.bandBottom - 7;
+    const recY = row.spec.rootUp ? pdY + 11 : pdY - 12;
+    const dropY = row.spec.rootUp ? row.bandBottom - 4 : row.bandTop + 4;
+    const hv = live && hover && hover.hit.row === row ? hover : null;
+    return (
+      <>
+        {/* 줄 표시 — 작은 치열 아이콘 + 면 글자(B/P/L) */}
+        <g transform={`translate(4 ${(row.toothTop + row.toothBottom) / 2 - 12})`}>
+          <rect width={22} height={24} rx={6} fill={side === "B" ? "#e0f2fe" : "#ede9fe"} />
+          <path
+            d={row.spec.upper ? "M5 17 Q11 3 17 17" : "M5 7 Q11 21 17 7"}
+            fill="none"
+            stroke={side === "B" ? "#0284c7" : "#7c3aed"}
+            strokeWidth={side === "B" ? 2.6 : 1.2}
+            strokeDasharray={side === "B" ? undefined : "2 1.5"}
+          />
+          <text x={11} y={row.spec.upper ? 22 : 6} textAnchor="middle" fontSize={7} fontWeight={800} fill={side === "B" ? "#0369a1" : "#6d28d9"} dy={row.spec.upper ? 0 : 2}>
+            {side === "B" ? "B" : row.spec.upper ? "P" : "L"}
+          </text>
+        </g>
+        {row.teeth.map((t) => {
+          if (missing(t)) return null;
+          const mob = Number(toothVal(ix, "mob", t) ?? 0);
+          const implant = toothVal(ix, "state", t) === "implant";
+          return (
+            <g key={`f-${t}`}>
+              {sitesLeftToRight(t).map((p) => {
+                const pdv = siteVal(ix, "pd", t, side, p);
+                const rec = siteVal(ix, "rec", t, side, p);
+                const bop = siteVal(ix, "bop", t, side, p) === true;
+                const plq = surfaceVal(ix, t, plaqueSurface(p, side)) === true;
+                const x = siteX(geo, t, p);
+                const kPd = entryKey({ m: "pd", t, s: side, p });
+                const kRec = entryKey({ m: "rec", t, s: side, p });
+                const kBop = entryKey({ m: "bop", t, s: side, p });
+                return (
+                  <g key={p}>
+                    {pdv !== undefined && (
+                      <text key={`${kPd}-${String(pdv)}`} className={live && flash === kPd ? "perio-pop" : undefined} x={x} y={pdY} textAnchor="middle" fontSize={10.5} fontWeight={800} fill={pdColor(pdNum(pdv))}>
+                        {String(pdv)}
+                      </text>
+                    )}
+                    {typeof rec === "number" && rec !== 0 && (
+                      <text key={`${kRec}-${rec}`} className={live && flash === kRec ? "perio-pop" : undefined} x={x} y={recY} textAnchor="middle" fontSize={8} fontWeight={600} fill="#be185d">
+                        {rec}
+                      </text>
+                    )}
+                    {bop && <circle key={kBop} className={live && flash === kBop ? "perio-drop" : undefined} cx={x} cy={dropY} r={2.8} fill="#dc2626" />}
+                    {plq && <rect x={x - 3} y={bandMid - 3} width={6} height={6} rx={1.5} fill="#ca8a04" opacity={0.85} />}
+                  </g>
+                );
+              })}
+              {mob > 0 && (
+                <g key={`mob-${t}-${mob}`} className={live && flash === entryKey({ m: "mob", t }) ? "perio-pop" : undefined}>
+                  <rect x={geo.x[t] - 11} y={row.labelY - 10} width={22} height={12} rx={6} fill="#fee2e2" transform={`translate(${(dims(t).md * k) / 2 - 8} 0)`} />
+                  <text x={geo.x[t] + (dims(t).md * k) / 2 - 8} y={row.labelY - 1} textAnchor="middle" fontSize={8} fontWeight={800} fill="#b91c1c">
+                    {MOB_LABEL[mob]}
                   </text>
-                  {showToothInfo && mob > 0 && (
-                    <text x={geo.x[t] + 13} y={labelY} fontSize={9} fontWeight={700} fill="#b91c1c">
-                      {MOB_LABEL[mob]}
-                    </text>
-                  )}
-                  {showToothInfo && !missing && (
-                    <g transform={`translate(${geo.x[t] - 21} ${labelY - 8})`}>
-                      {(["M", "D", "B", "L"] as const).map((f, i) =>
-                        surfaceVal(ix, t, f) === true ? (
-                          <rect key={f} x={(i % 2) * 4} y={Math.floor(i / 2) * 4} width={3.4} height={3.4} fill="#a16207" />
-                        ) : null,
-                      )}
-                    </g>
-                  )}
-                  {!missing &&
-                    order.map((p) => {
-                      const pdv = siteVal(ix, "pd", t, spec.side, p);
-                      const rec = siteVal(ix, "rec", t, spec.side, p);
-                      const bop = siteVal(ix, "bop", t, spec.side, p) === true;
-                      const x = siteX(t, p);
-                      const y0 = spec.rootUp ? numY + 11 : numY + NUM_BAND - 6;
-                      const yRec = spec.rootUp ? y0 + 11 : y0 - 12;
-                      const isCursor = cursor && cursor.t === t && cursor.s === spec.side && cursor.p === p;
-                      return (
-                        <g key={p}>
-                          {isCursor && <rect x={x - 6} y={Math.min(y0, yRec) - 10} width={12} height={24} rx={3} fill="#e0f2fe" stroke="#0284c7" strokeWidth={1} />}
-                          {pdv !== undefined && (
-                            <text x={x} y={y0} textAnchor="middle" fontSize={9.5} fontWeight={700} fill={pdColor(pdNum(pdv))}>
-                              {String(pdv)}
-                            </text>
-                          )}
-                          {typeof rec === "number" && rec !== 0 && (
-                            <text x={x} y={yRec} textAnchor="middle" fontSize={7.5} fill="#be185d">
-                              {rec}
-                            </text>
-                          )}
-                          {bop && <circle cx={x} cy={spec.rootUp ? y0 - 11 : y0 + 4} r={2.4} fill="#dc2626" />}
-                        </g>
-                      );
-                    })}
-                  {/* 클릭 영역 */}
-                  {onSiteClick &&
-                    !missing &&
-                    order.map((p) => {
-                      const w = (dims(t).md * K) / 3;
-                      return (
-                        <rect
-                          key={`hit-${p}`}
-                          x={siteX(t, p) - w / 2}
-                          y={Math.min(numY, toothTop)}
-                          width={w}
-                          height={Math.max(toothBottom, numY + NUM_BAND) - Math.min(numY, toothTop)}
-                          fill="transparent"
-                          style={{ cursor: "pointer" }}
-                          onClick={() => onSiteClick(t, spec.side, p)}
-                        />
-                      );
-                    })}
                 </g>
-              );
-            })}
+              )}
+              {implant && (
+                <text x={geo.x[t]} y={bandMid + 3} textAnchor="middle" fontSize={7} fontWeight={700} fill="#64748b" opacity={0.7}>
+                  IMP
+                </text>
+              )}
+            </g>
+          );
+        })}
+
+        {/* 다음 칸 — 숨 쉬는 링 */}
+        {live && cursor && cursor.s === side && isUpper(cursor.t) === row.spec.upper && row.teeth.includes(cursor.t) && !missing(cursor.t) && (
+          <g pointerEvents="none">
+            <circle cx={siteX(geo, cursor.t, cursor.p)} cy={mmToY(row, -recAt(cursor.t, row, cursor.p))} r={6} fill="none" stroke="#0284c7" strokeWidth={2} className="perio-pulse" />
+            <circle cx={siteX(geo, cursor.t, cursor.p)} cy={mmToY(row, -recAt(cursor.t, row, cursor.p))} r={3.2} fill="#0284c7" />
           </g>
-        );
-      })}
-    </svg>
+        )}
+
+        {/* 치아 단위 모드(동요·결손·출혈·치태) — 올린 곳에 다음 값 미리보기 */}
+        {hv && mode !== "pd" && mode !== "rec" && (() => {
+          const { t, p } = hv.hit;
+          const x = mode === "mob" || mode === "state" ? geo.x[t] : siteX(geo, t, p);
+          const label =
+            mode === "mob"
+              ? MOB_LABEL[(Number(toothVal(ix, "mob", t) ?? 0) + 1) % 4]
+              : mode === "state"
+                ? (({ undefined: "결손", missing: "임플란트", implant: "있음" }) as Record<string, string>)[String(toothVal(ix, "state", t))]
+                : mode === "bop"
+                  ? siteVal(ix, "bop", t, side, p) === true
+                    ? "−"
+                    : "●"
+                  : surfaceVal(ix, t, plaqueSurface(p, side)) === true
+                    ? "−"
+                    : "■";
+          const w = mode === "mob" || mode === "state" ? dims(t).md * k : (dims(t).md * k) / 3;
+          return (
+            <g pointerEvents="none">
+              <rect x={x - w / 2} y={row.toothTop} width={w} height={row.toothBottom - row.toothTop} fill="#0ea5e9" opacity={0.08} rx={4} />
+              <g transform={`translate(${x} ${bandMid})`}>
+                <rect x={-17} y={-9} width={34} height={18} rx={9} fill="#0f172a" opacity={0.82} />
+                <text y={4} textAnchor="middle" fontSize={10} fontWeight={800} fill={mode === "bop" ? "#fca5a5" : mode === "plq" ? "#fde68a" : "#ffffff"}>
+                  {label}
+                </text>
+              </g>
+            </g>
+          );
+        })()}
+      </>
+    );
+  };
+
+  // 값 풍선 — 포인터 옆(터치는 손가락 위)에 큰 숫자
+  const bubble =
+    live && hover && (mode === "pd" || mode === "rec") && hover.value !== null ? (
+      <g pointerEvents="none" transform={`translate(${hover.hit.x + (touch ? 0 : 26)} ${hover.hit.y - (touch ? 46 : 0)})`}>
+        <g key={String(hover.value)} className="perio-pop">
+          <circle r={15} fill={mode === "pd" ? pdColor(pdNum(hover.value)) : "#be185d"} opacity={0.94} />
+          <text y={5} textAnchor="middle" fontSize={14} fontWeight={800} fill="#ffffff">
+            {String(hover.value)}
+          </text>
+        </g>
+      </g>
+    ) : null;
+
+  return (
+    <DentalChart
+      ref={ref}
+      geo={geo}
+      title={title}
+      look={(t) => {
+        const st = toothVal(ix, "state", t);
+        return { missing: st === "missing", implant: st === "implant" };
+      }}
+      skip={mode === "state" ? undefined : missing}
+      over={over}
+      free={free}
+      top={bubble}
+      onPointer={onPointer}
+      className="h-auto w-full"
+      style={{ touchAction: "pan-x", cursor: mode === "pd" || mode === "rec" ? "ns-resize" : "pointer" }}
+    />
   );
 });
-
-/** 위·아래턱·면으로 화면 줄을 찾는다(편집기에서 커서 표시용) */
-export function rowTitle(t: Fdi, s: Side): string {
-  return ROWS.find((r) => r.upper === isUpper(t) && r.side === s)?.title ?? "";
-}

@@ -819,8 +819,10 @@ lib/ai/index.ts     askAI(task, {prompt, system, maxTokens}) — 순서대로 �
 
 ```
 lib/oral/perio.ts            지표 등록부 MEASURES(pd·rec·bop·mob·plq·state) · 기록 모델(entries) · 진행(stepCursor — 순서 고정 없음, 진행 방향 이어 감) · summarize/summaryText(측정값만)
-components/oral/perio-chart.tsx   치주 차트 SVG 4줄 — spec 037 2D 정면 모양(CEJ=0, mm) 위에 잇몸(반투명 분홍)·잇몸선(빨강)·주머니(파랑)·숫자·출혈·동요·치태
-components/oral/perio-editor.tsx  입력 화면 — 교합면에서 치아·면(B/P) 고르기 · 정면 mm 눈금(올려 보고 누르기) · 숫자판 · 키보드 · 기록에 담기(PNG+글)
+lib/dental/chart.ts          ★치아 엔진(범용) — 정면 치열 차트 배치·mm↔화면·chartHit(점 → 치아·부위·영역·CEJ 기준 mm) · PERIO_ROWS
+components/dental/dental-chart.tsx  ★치아 엔진 화면 — 치아를 그리고 under/over/free/top 층 + onPointer만 넘김(기능은 층만 얹는다)
+components/oral/perio-chart.tsx   잇몸 기록 층 — 잇몸(반투명 분홍)·잇몸선·주머니 막대(깊이 색, 자라나는 움직임)·mm 눈금·값 풍선·숫자·출혈·동요·치태
+components/oral/perio-editor.tsx  입력 화면 — 차트 위에서 바로: 마우스 = 높이로 깊이·클릭 기록 / 터치 = 짚고 끌어 떼기 · 키보드 · 기록에 담기(PNG+글)
 app/actions/oral-exams.ts    list/get/save/delete(oral_exams)
 진입                         상담보드 [🩺 잇몸 기록] (환자 연결 상담이면 회차 저장) · 환자 페이지 "잇몸 기록" 섹션(상담 없이도)
 lib/svg-to-png.ts            SVG → PNG 공용

@@ -4,9 +4,10 @@
 // 좌표 약속은 lib/dental/teeth.ts와 같다(FDI, 화면 왼쪽 = 환자 우측).
 
 import { archTeeth, isUpper, isPatientRight, type Fdi } from "@/lib/dental/teeth";
+import type { FaceSide, SitePos } from "@/lib/dental/chart";
 
-export type Side = "B" | "L"; // 협측 / 구개·설측(상악은 화면에 P)
-export type Pos = "D" | "C" | "M"; // 원심 · 중앙 · 근심
+export type Side = FaceSide; // 협측 / 구개·설측(상악은 화면에 P)
+export type Pos = SitePos; // 원심 · 중앙 · 근심
 export type Surface = "M" | "D" | "B" | "L"; // 치태(O'Leary) 4면
 export type Level = "site" | "tooth" | "surface";
 

@@ -70,3 +70,16 @@ html {
   display: block;
   clear: both;
 }
+
+/* spec 040 잇몸 기록 — 측정할 때의 작은 움직임(주머니가 자라고, 숫자가 톡 튀고, 다음 칸이 숨쉰다) */
+@keyframes perio-grow { from { transform: scaleY(0); } to { transform: scaleY(1); } }
+.perio-grow { animation: perio-grow 420ms cubic-bezier(.2,.9,.25,1.2) both; transform-box: fill-box; }
+@keyframes perio-pop { 0% { transform: scale(.3); opacity: 0; } 60% { transform: scale(1.4); opacity: 1; } 100% { transform: scale(1); } }
+.perio-pop { animation: perio-pop 340ms ease-out both; transform-box: fill-box; transform-origin: center; }
+@keyframes perio-pulse { 0% { transform: scale(.7); opacity: .85; } 100% { transform: scale(2.3); opacity: 0; } }
+.perio-pulse { animation: perio-pulse 1.4s ease-out infinite; transform-box: fill-box; transform-origin: center; }
+@keyframes perio-drop { 0% { transform: translateY(-10px) scale(.3); opacity: 0; } 70% { transform: translateY(1px) scale(1.2); opacity: 1; } 100% { transform: none; } }
+.perio-drop { animation: perio-drop 380ms ease-out both; transform-box: fill-box; transform-origin: center; }
+@media (prefers-reduced-motion: reduce) {
+  .perio-grow, .perio-pop, .perio-pulse, .perio-drop { animation: none; }
+}
