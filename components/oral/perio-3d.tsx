@@ -1,8 +1,8 @@
 "use client";
 
 // spec 040 — 잇몸 기록 3D. 치아 엔진(teeth-3d: 치아 모양 + 기준틀) 위에 잇몸·주머니·눈금 층을 얹는다.
-// ★마우스가 머문 치아·면 쪽으로 화면이 살짝 돈다 — 가리킨 지점을 축으로 돌려서 그 치아는 포인터 밑에 그대로 있고,
-//   보는 방향만 그 면을 향한다(바깥 = 볼 쪽에서, 안쪽 = 교합면 너머로). 같은 치아·면 위에선 가만히, 한 번에 최대 28°.
+// ★마우스가 머문 치아·면의 "표준 시점"으로 화면이 부드럽게 옮겨 간다 — 바깥 = 그 치아 바깥에서 수평으로,
+//   안쪽 = 교합면 너머에서 내려다보며. 늘 같은 자리에서 보므로 여러 번 옮겨도 각도·거리가 어긋나지 않는다. [⤢ 전체]로 처음 화면.
 // 입력 규칙은 2D와 같다: 가리킨 곳을 "치아·면·부위·CEJ 기준 mm"로 바꿔 넘긴다(onPick).
 // 뿌리를 짚고 위아래로 → 깊이, 빈 곳을 끌면 돌리기.
 
@@ -54,7 +54,8 @@ export default function Perio3D({ data, mode, jaw, cursor, hover, follow, onPick
   const api = useRef<{
     rebuild: () => void;
     redrawHover: () => void;
-    followTo: (t: Fdi, s: Side, pivot?: THREE.Vector3) => void;
+    followTo: (t: Fdi, s: Side) => void;
+    resetView: () => void;
   } | null>(null);
   // 장면 안에서 읽는 최신 값
   const live = useRef({ data, mode, jaw, cursor, hover, follow, onPick, lastPointer: "mouse" });
@@ -162,7 +163,7 @@ export default function Perio3D({ data, mode, jaw, cursor, hover, follow, onPick
               const g = new THREE.BufferGeometry();
               g.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3));
               g.computeVertexNormals();
-              const m = new THREE.Mesh(g, new THREE.MeshStandardMaterial({ color: "#f472b6", transparent: true, opacity: 0.3, depthWrite: false, side: THREE.DoubleSide }));
+              const m = new THREE.Mesh(g, new THREE.MeshStandardMaterial({ color: "#f472b6", transparent: true, opacity: 0.24, depthWrite: false, side: THREE.DoubleSide }));
               m.renderOrder = 2;
               layer.add(m);
             }
@@ -178,7 +179,7 @@ export default function Perio3D({ data, mode, jaw, cursor, hover, follow, onPick
             for (const p of seq) {
               const r = siteVal(ix, "rec", f.fdi, s, p);
               const rec = typeof r === "number" ? r : 0;
-              run.push({ top: v3(sitePoint3D(f, s, p, rec, 0.35)), bottom: v3(sitePoint3D(f, s, p, Math.min(f.rootLen * 0.95, rec + 10), 0.35)) });
+              run.push({ top: v3(sitePoint3D(f, s, p, rec, 0.35)), bottom: v3(sitePoint3D(f, s, p, Math.min(f.rootLen * 0.9, rec + 7), 0.35)) });
             }
           }
           flush();
@@ -255,30 +256,56 @@ export default function Perio3D({ data, mode, jaw, cursor, hover, follow, onPick
       }
     };
 
-    // ── 따라 돌기: 가리킨 점(pivot)을 축으로 보는 방향만 그 면 쪽으로 ──
-    let turn: { pivot: THREE.Vector3; q: THREE.Quaternion; cam0: THREE.Vector3; tgt0: THREE.Vector3; t0: number; zoom: number } | null = null;
+    // ── 따라 보기: 치아·면마다 "표준 시점"으로 부드럽게 옮겨 간다 ──
+    // (예전: 지금 화면에서 상대적으로 돌림 → 여러 번 쌓이면 각도·거리가 어긋나 엉뚱한 곳에서 보게 됨. 이제 늘 같은 자리에서 본다)
+    //   바깥(B) = 그 치아 바깥에서 수평으로(교합면 쪽 살짝) · 안쪽(P/L) = 교합면 너머 위(아래)에서 내려다보며 안쪽 면을
+    const jawCenter = (upper: boolean) => {
+      const c = new THREE.Vector3();
+      let n = 0;
+      frames.forEach((f) => {
+        if (f.upper === upper) {
+          c.add(v3(f.cej));
+          n++;
+        }
+      });
+      return c.multiplyScalar(1 / Math.max(1, n));
+    };
+    const jc = { upper: jawCenter(true), lower: jawCenter(false) };
+    const overview = { target: center.clone(), dir: new THREE.Vector3(0, 0, 1), dist: radius * 2.6 };
+    let goal: { target: THREE.Vector3; dir: THREE.Vector3; dist: number } | null = null;
     let followed = "";
-    const followTo = (t: Fdi, s: Side, pivotIn?: THREE.Vector3) => {
-      const f = frames.get(t);
-      if (!f) return;
-      const pivot = pivotIn ?? v3(sitePoint3D(f, s, "C", 0, 0));
-      const out = v3(f.lingual).multiplyScalar(s === "B" ? -1 : 1);
-      const occl = new THREE.Vector3(0, f.upper ? -1 : 1, 0);
-      const front = new THREE.Vector3(0, 0, 1);
-      const want = (s === "B" ? out.add(front.multiplyScalar(0.3)).add(occl.multiplyScalar(0.22)) : out.multiplyScalar(0.55).add(occl)).normalize();
-      const cur = camera.position.clone().sub(pivot).normalize();
-      const full = new THREE.Quaternion().setFromUnitVectors(cur, want);
-      const ang = 2 * Math.acos(Math.min(1, Math.abs(full.w)));
-      const MAX = (28 * Math.PI) / 180;
-      const q = ang > MAX ? new THREE.Quaternion().slerp(full, MAX / ang) : full;
-      turn = { pivot, q, cam0: camera.position.clone(), tgt0: controls.target.clone(), t0: performance.now(), zoom: 0.96 };
-      // 안쪽을 볼 때 맞은편 턱은 비켜 준다
+    const dimJaw = (hideUpper: boolean | null) =>
       teeth.forEach((m, tt) => {
         const mat = m.material as THREE.MeshStandardMaterial;
-        mat.opacity = s === "L" && live.current.jaw === "all" && isUpper(tt) !== f.upper ? 0.14 : 1;
+        mat.opacity = hideUpper !== null && isUpper(tt) === hideUpper ? 0.1 : 1;
         mat.depthWrite = mat.opacity === 1;
       });
+    const followTo = (t: Fdi, s: Side) => {
+      const f = frames.get(t);
+      if (!f) return;
+      const c = f.upper ? jc.upper : jc.lower;
+      const cej = v3(f.cej);
+      const outH = new THREE.Vector3(cej.x - c.x, 0, cej.z - c.z).normalize(); // 턱 중심 → 치아(바깥 방향)
+      const occl = new THREE.Vector3(0, f.upper ? -1 : 1, 0);
+      const dir =
+        s === "B"
+          ? outH.clone().add(occl.clone().multiplyScalar(0.2)).add(new THREE.Vector3(0, 0, 0.12)).normalize()
+          : occl.clone().multiplyScalar(0.95).add(outH.clone().multiplyScalar(-0.6)).normalize();
+      // 치아(CEJ)를 화면 가운데 — 뿌리 쪽 4mm(잴 곳)를 살짝 더 보이게
+      const target = cej.clone().add(v3(f.root).multiplyScalar(2));
+      goal = { target, dir, dist: radius * (s === "B" ? 1.25 : 1.4) };
+      // 안쪽을 볼 때 맞은편 턱은 비켜 준다(전체 보기일 때)
+      dimJaw(s === "L" && live.current.jaw === "all" ? !f.upper : null);
     };
+    const resetView = () => {
+      goal = { ...overview, target: overview.target.clone(), dir: overview.dir.clone() };
+      followed = "";
+      dimJaw(null);
+    };
+    // 손으로 돌리면 따라 보기를 멈춘다(다음에 머물 때 다시)
+    controls.addEventListener("start", () => {
+      goal = null;
+    });
 
     // ── 포인터 ──
     const ray = new THREE.Raycaster();
@@ -295,7 +322,10 @@ export default function Perio3D({ data, mode, jaw, cursor, hover, follow, onPick
     };
     let pressOnTooth = false;
     let lastMouse: PointerEvent | null = null;
-    let dwell: { key: string; t0: number; pick: PerioPick; point: THREE.Vector3 } | null = null;
+    // 머문 곳 — ★실제 마우스 움직임으로만 갱신(화면이 움직여 포인터 아래가 바뀐 건 머문 걸로 치지 않는다 → 되먹임 없음)
+    let dwell: { key: string; t0: number; pick: PerioPick } | null = null;
+    /** 빈 곳에 머문 시작 — 1초면 전체 보기로 돌아간다(위턱 보다가 아래턱으로 넘어가기 쉽게) */
+    let emptySince = 0;
     const onDown = (ev: PointerEvent) => {
       live.current.lastPointer = ev.pointerType;
       const p = ev.button === 0 || ev.pointerType !== "mouse" ? pick(ev) : null;
@@ -313,10 +343,12 @@ export default function Perio3D({ data, mode, jaw, cursor, hover, follow, onPick
       if (ev.pointerType === "mouse") lastMouse = ev;
       if (ev.pointerType === "mouse" && p) {
         const key = `${p.pick.t}${p.pick.s}`;
-        // 축 = 지금 포인터 아래 점(돌아도 그 점이 포인터 밑에 남게) — 머문 시간은 같은 치아·면이면 이어서 잰다
-        if (!dwell || dwell.key !== key) dwell = { key, t0: performance.now(), pick: p.pick, point: p.point };
-        else dwell = { ...dwell, pick: p.pick, point: p.point };
-      } else if (!p) dwell = null;
+        if (!dwell || dwell.key !== key) dwell = { key, t0: performance.now(), pick: p.pick };
+        emptySince = 0;
+      } else if (!p) {
+        dwell = null;
+        if (ev.pointerType === "mouse" && !emptySince) emptySince = performance.now();
+      }
     };
     const onUp = (ev: PointerEvent) => {
       if (pressOnTooth) live.current.onPick("up", ev.pointerType, pick(ev)?.pick ?? null);
@@ -325,6 +357,7 @@ export default function Perio3D({ data, mode, jaw, cursor, hover, follow, onPick
     };
     const onLeave = () => {
       dwell = null;
+      emptySince = 0;
       lastMouse = null;
       live.current.onPick("leave", "mouse", null);
     };
@@ -352,31 +385,40 @@ export default function Perio3D({ data, mode, jaw, cursor, hover, follow, onPick
     };
 
     let raf = 0;
+    let lastT = performance.now();
     const loop = () => {
       raf = requestAnimationFrame(loop);
       const now = performance.now();
-      // 머문 지 0.3초 → 그 면 쪽으로(돌고 있는 중엔 기다림)
-      if (live.current.follow && dwell && !turn && now - dwell.t0 > 300 && dwell.key !== followed) {
-        followed = dwell.key;
-        followTo(dwell.pick.t, dwell.pick.s, dwell.point);
+      if (live.current.follow && emptySince && followed && now - emptySince > 1000) {
+        emptySince = 0;
+        resetView();
       }
-      if (turn) {
-        const k = Math.min(1, (now - turn.t0) / 550);
-        const e = 1 - Math.pow(1 - k, 3);
-        const q = new THREE.Quaternion().slerp(turn.q, e);
-        const zoom = 1 + (turn.zoom - 1) * e;
-        const cam = turn.cam0.clone().sub(turn.pivot).applyQuaternion(q).multiplyScalar(zoom).add(turn.pivot);
-        if (cam.distanceTo(turn.pivot) > controls.minDistance * 0.5) camera.position.copy(cam);
-        controls.target.copy(turn.tgt0.clone().sub(turn.pivot).applyQuaternion(q).add(turn.pivot));
-        camera.lookAt(controls.target);
-        if (k >= 1) turn = null;
-        // 도는 동안·끝난 뒤 포인터 아래를 다시 읽어 미리보기를 맞춘다(마우스를 안 움직여도)
+      // 같은 치아·면에 0.35초 머물면 그 표준 시점으로
+      if (live.current.follow && dwell && now - dwell.t0 > 350 && dwell.key !== followed) {
+        followed = dwell.key;
+        followTo(dwell.pick.t, dwell.pick.s);
+      }
+      if (goal) {
+        // 부드럽게 다가가기(지수 감쇠) — 방향은 대상 둘레로 돌고(구면), 거리·중심은 직선으로
+        const dt = Math.min(0.05, (now - lastT) / 1000);
+        const a = 1 - Math.exp(-dt / 0.16);
+        const tgt = controls.target.clone().lerp(goal.target, a);
+        const curDir = camera.position.clone().sub(controls.target).normalize();
+        const q = new THREE.Quaternion().setFromUnitVectors(curDir, goal.dir);
+        const dir = curDir.applyQuaternion(new THREE.Quaternion().slerp(q, a));
+        const dist = THREE.MathUtils.lerp(camera.position.distanceTo(controls.target), goal.dist, a);
+        controls.target.copy(tgt);
+        camera.position.copy(tgt).add(dir.multiplyScalar(dist));
+        camera.lookAt(tgt);
+        if (tgt.distanceTo(goal.target) < 0.05 && camera.position.clone().sub(tgt).normalize().angleTo(goal.dir) < 0.003) goal = null;
+        // 움직이는 동안 포인터 아래를 다시 읽어 미리보기 = 기록 값
         if (lastMouse && !lastMouse.buttons) {
           camera.updateMatrixWorld();
           const p = pick(lastMouse);
           live.current.onPick("move", "mouse", p?.pick ?? null);
         }
       }
+      lastT = now;
       controls.update();
       renderer.render(scene, camera);
       // HTML 겹침: 값 풍선 · 다음 칸 링 · 치아 번호
@@ -422,7 +464,7 @@ export default function Perio3D({ data, mode, jaw, cursor, hover, follow, onPick
     };
     loop();
 
-    api.current = { rebuild, redrawHover, followTo };
+    api.current = { rebuild, redrawHover, followTo, resetView };
     rebuild();
 
     return () => {
@@ -462,6 +504,13 @@ export default function Perio3D({ data, mode, jaw, cursor, hover, follow, onPick
   return (
     <div className={`relative overflow-hidden rounded-2xl border border-slate-200 bg-slate-50 ${className ?? ""}`}>
       <div ref={hostRef} className="absolute inset-0" />
+      <button
+        type="button"
+        onClick={() => api.current?.resetView()}
+        className="absolute left-2 top-2 rounded-lg border border-slate-200 bg-white/90 px-2.5 py-1 text-xs font-semibold text-slate-600 shadow-sm hover:bg-white"
+      >
+        ⤢ 전체
+      </button>
       <div ref={ringRef} className="pointer-events-none absolute left-0 top-0 h-[18px] w-[18px] opacity-0">
         <div className="absolute inset-0 rounded-full border-2 border-sky-600" style={{ animation: "perio-pulse 1.4s ease-out infinite" }} />
         <div className="absolute inset-[5px] rounded-full bg-sky-600" />
