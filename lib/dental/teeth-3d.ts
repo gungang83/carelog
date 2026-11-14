@@ -44,7 +44,9 @@ function crownScale(pos: number, neck: number, c: number): [number, number] {
   const top = Math.max(0, (c - 0.42) / 0.58); // 0 → 1
   if (pos <= 2) return [sx * (1 - 0.04 * top), sx * (1 - 0.86 * top)]; // 절단연으로 얇아짐(끝 ≈ 1mm대)
   if (pos === 3) return [sx * (1 - 0.5 * top * top), sx * (1 - 0.55 * top)];
-  return [sx * (1 - 0.1 * top * top), sx * (1 - 0.16 * top * top)];
+  // 구치: 협·설면이 교합면 쪽으로 모인다(교합면 폭 ≈ 치관 협설 최대폭의 60~75%) — 교두정이 테두리 가까이 서고 오목한 접시가 되지 않게
+  if (pos <= 5) return [sx * (1 - 0.12 * top * top), sx * (1 - 0.42 * top * top)];
+  return [sx * (1 - 0.1 * top * top), sx * (1 - 0.34 * top * top)];
 }
 
 /** 치근 + 치관 옆면 단면(교합면 직전까지). y: 0 = 치경선, + 치관, − 치근 (mm). */
@@ -202,7 +204,9 @@ function occlusalField(o: Occlusal, u: number, v: number, aspect: number, r: num
   const posterior = pos >= 4;
   for (const [cu, cv, ch, cr] of o.cusps) {
     // 교두 바깥쪽(치아 가장자리 방향) 비탈은 길게 — 협·설면이 교두정까지 끊김 없이 올라간다(교두 아래 턱이 생기지 않게)
-    const du = u - cu;
+    // 소구치 교두는 근원심으로 길게(교두융선 — 교두정에서 근·원심 변연융선까지 이어지는 능선) — 둥근 혹이 아니라 능선
+    const premolar = pos === 4 || pos === 5;
+    const du = (u - cu) / (premolar ? 1.35 : 1.1);
     const dv = (v - cv) * aspect;
     const rl = Math.hypot(cu, cv * aspect) || 1;
     const out = (du * cu + dv * cv * aspect) / rl;
@@ -210,7 +214,7 @@ function occlusalField(o: Occlusal, u: number, v: number, aspect: number, r: num
     const d = Math.hypot(perp, out > 0 ? out * 0.5 : out) / (cr * 1.4);
     // 교두정 근처는 둥글게, 경사면은 곧게(원뿔)
     const ds = Math.sqrt(d * d + 0.012) - 0.11;
-    terms.push(ch * Math.max(0, 1 - Math.max(0, ds)) ** 1.5); // 교두정은 또렷하게, 경사면은 오목하게
+    terms.push(ch * Math.max(0, 1 - Math.max(0, ds)) ** (premolar ? 1 : 1.5)); // 교두정은 또렷하게(소구치는 경사면을 곧게)
     if (posterior) {
       // 삼각융선 — 교두정에서 중심(0, 0) 쪽으로 70%까지, 내려가며 낮아진다
       const n = segNear(u, v, [cu, cv], [cu * 0.3, cv * 0.3], aspect);
@@ -220,7 +224,7 @@ function occlusalField(o: Occlusal, u: number, v: number, aspect: number, r: num
   // 테두리 능선(변연융선·교두융선) — 테두리에서 높고 안쪽(중심와)으로 내려간다
   //  구치는 근·원심 끝(변연융선)이 높고, 협·설측 가장자리는 교두가 만들므로 낮게 둔다(테두리 전체가 턱처럼 솟지 않게)
   const wm = Math.max(0, Math.min(1, (Math.abs(u) - 0.18) / 0.22));
-  const rimH = pos <= 2 ? 0.9 : pos === 3 ? 0.18 : 0.36 + 0.3 * wm * wm * (3 - 2 * wm); // 견치는 교두정에서 근·원심으로 비탈(오각형)
+  const rimH = pos <= 2 ? 0.9 : pos === 3 ? 0.18 : pos <= 5 ? 0.3 + 0.2 * wm * wm * (3 - 2 * wm) : 0.36 + 0.3 * wm * wm * (3 - 2 * wm); // 견치·소구치는 교두정에서 근·원심으로 비탈(오각형)
   const e = Math.max(0, Math.min(1, (r - 0.5) / 0.45));
   terms.push(rimH * e * e * (3 - 2 * e));
   let f = softMax(terms, 14);
@@ -247,7 +251,8 @@ function toothLocalPoints(fdi: Fdi, segs = 16) {
   const { rings, apexY, table } = sideRings(fdi, roots ? roots.trunk : null);
   const anat = occlusalAnatomy(fdi);
   const aspect = bl / md;
-  const D = anat.depth * h; // 교두정 ~ 와(fossa) 높이 차
+  // 교두정 ~ 와(fossa) 높이 차 — 소구치는 교두가 더 솟는다(협측 교두정 ~ 변연융선 1.5mm 안팎)
+  const D = anat.depth * h * (pos === 4 || pos === 5 ? 1.35 : 1);
   const verts: [number, number, number][] = [];
   const shade: number[] = [];
   const field = (x: number, z: number, r: number) => occlusalField(anat, x / md, z / bl, aspect, r, pos);
@@ -265,9 +270,10 @@ function toothLocalPoints(fdi: Fdi, segs = 16) {
   for (const s of [0.3, 0.55, 0.78, 0.93]) {
     const bulge = 1 + 0.035 * Math.sin(Math.PI * s); // 교합면 바로 아래 살짝 볼록
     outline.forEach(([x, z], i) => {
-      const sx = (lastSide.sx + (table[0] - lastSide.sx) * s * s) * bulge;
-      const sz = (lastSide.sy + (table[1] - lastSide.sy) * s * s) * bulge;
-      const y = lastSide.y + (rimY[i] - lastSide.y) * (1 - (1 - s) ** 1.6);
+      // 안으로 모이는 것과 올라가는 것을 함께(곧게 오므라드는 협·설면) — 먼저 올라갔다가 끝에서 꺾이면 턱(상자) 모양이 된다
+      const sx = (lastSide.sx + (table[0] - lastSide.sx) * s) * bulge;
+      const sz = (lastSide.sy + (table[1] - lastSide.sy) * s) * bulge;
+      const y = lastSide.y + (rimY[i] - lastSide.y) * (1 - (1 - s) ** 1.15);
       verts.push([x * sx, y, z * sz]);
       shade.push(1);
     });

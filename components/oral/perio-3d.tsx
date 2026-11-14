@@ -462,6 +462,14 @@ export default function Perio3D({ data, mode, jaw, cursor, hover, follow, onPick
       });
       redrawHover();
     };
+    /** 빈 곳을 누르면 한 걸음 물러난다 — 보는 방향·돌리기 중심은 그대로 두고 치아가 더 많이 보이는 거리로. 이미 멀면 처음 화면으로 */
+    const WIDE = 2.1;
+    const stepBack = () => {
+      const cur = camera.position.distanceTo(controls.target);
+      if (cur < radius * WIDE * 0.95) {
+        goal = { target: controls.target.clone(), dir: camera.position.clone().sub(controls.target).normalize(), dist: radius * WIDE };
+      } else resetView();
+    };
     // 손으로 돌리기 시작하면 옮겨 가던 걸 멈춘다(그 자리에서 이어 돌리기)
     controls.addEventListener("start", () => {
       goal = null;
@@ -551,7 +559,13 @@ export default function Perio3D({ data, mode, jaw, cursor, hover, follow, onPick
     const hoverAt = (p: { pick: PerioPick } | null, pointerType: string, type: "move" | "up" = "move") => {
       hint = classify(p);
       light(hint?.t ?? null);
-      renderer.domElement.style.cursor = !hint ? "" : hint.kind === "input" ? "crosshair" : "pointer";
+      renderer.domElement.style.cursor = !hint
+        ? camera.position.distanceTo(controls.target) < radius * WIDE * 0.95
+          ? "zoom-out"
+          : ""
+        : hint.kind === "input"
+          ? "crosshair"
+          : "pointer";
       live.current.onPick(type, pointerType, hint?.kind === "input" && p ? p.pick : null);
     };
     const onDown = (ev: PointerEvent) => {
@@ -584,7 +598,11 @@ export default function Perio3D({ data, mode, jaw, cursor, hover, follow, onPick
       const tap = downAt && Math.hypot(ev.clientX - downAt.x, ev.clientY - downAt.y) < 6;
       downAt = null;
       const h = classify(p);
-      if (!tap || !h || !p) return;
+      if (!tap) return;
+      if (!h || !p) {
+        stepBack();
+        return;
+      }
       if (h.kind === "tooth") live.current.onTap(p.pick);
       else if (h.kind === "focus") focusTo(h.t, h.s);
       else if (h.kind === "flip" && focus) focusTo(h.t, h.s !== focus.s ? h.s : other(focus.s));
@@ -636,7 +654,12 @@ export default function Perio3D({ data, mode, jaw, cursor, hover, follow, onPick
         controls.target.copy(tgt);
         camera.position.copy(tgt).add(dir.multiplyScalar(dist));
         camera.lookAt(tgt);
-        if (tgt.distanceTo(goal.target) < 0.05 && camera.position.clone().sub(tgt).normalize().angleTo(goal.dir) < 0.003) goal = null;
+        if (
+          tgt.distanceTo(goal.target) < 0.05 &&
+          camera.position.clone().sub(tgt).normalize().angleTo(goal.dir) < 0.003 &&
+          Math.abs(camera.position.distanceTo(tgt) - goal.dist) < 0.05
+        )
+          goal = null;
         // 움직이는 동안 포인터 아래를 다시 읽어 미리보기 = 기록 값(화면이 움직였다고 다시 옮겨 가진 않는다)
         if (lastMouse && !lastMouse.buttons) {
           camera.updateMatrixWorld();
