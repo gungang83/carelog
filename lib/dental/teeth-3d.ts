@@ -42,7 +42,7 @@ function crownScale(pos: number, neck: number, c: number): [number, number] {
   const grow = c <= 0.42 ? Math.sin(((c / 0.42) * Math.PI) / 2) : 1;
   const sx = neck + (1 - neck) * grow;
   const top = Math.max(0, (c - 0.42) / 0.58); // 0 → 1
-  if (pos <= 2) return [sx * (1 - 0.04 * top), sx * (1 - 0.72 * top)];
+  if (pos <= 2) return [sx * (1 - 0.04 * top), sx * (1 - 0.86 * top)]; // 절단연으로 얇아짐(끝 ≈ 1mm대)
   if (pos === 3) return [sx * (1 - 0.5 * top * top), sx * (1 - 0.55 * top)];
   return [sx * (1 - 0.1 * top * top), sx * (1 - 0.16 * top * top)];
 }
@@ -71,7 +71,7 @@ function sideRings(fdi: Fdi, trunk: number | null): { rings: Ring[]; apexY: numb
 
 function crownRings(pos: number, neck: number, h: number): Ring[] {
   const rings: Ring[] = [];
-  for (const c of [0.12, 0.28, 0.42, 0.58, 0.72, 0.8]) {
+  for (const c of [0.12, 0.28, 0.42, 0.58, 0.72]) {
     const [sx, sy] = crownScale(pos, neck, c);
     rings.push({ y: c * h, sx, sy });
   }
@@ -174,49 +174,75 @@ function addRootTube(
   }
 }
 
-function segDist(u: number, v: number, [a, b]: [[number, number], [number, number]], aspect: number): number {
-  // v는 협설 폭 비율만큼 늘려 실제 거리(근원심 폭 단위)로
-  const ax = a[0];
-  const ay = a[1] * aspect;
-  const bx = b[0];
-  const by = b[1] * aspect;
-  const px = u;
-  const py = v * aspect;
-  const dx = bx - ax;
-  const dy = by - ay;
-  const t = Math.max(0, Math.min(1, ((px - ax) * dx + (py - ay) * dy) / (dx * dx + dy * dy || 1)));
-  return Math.hypot(px - ax - t * dx, py - ay - t * dy);
+/** 부드러운 최댓값(log-sum-exp) — 겹치는 융선·교두 사이가 자연스러운 골이 된다 */
+function softMax(vals: number[], k: number): number {
+  const m = Math.max(...vals);
+  let acc = 0;
+  for (const v of vals) acc += Math.exp(k * (v - m));
+  return m + Math.log(acc) / k;
 }
 
-/** 교합면 높이(0~1)와 구 깊이(음영용) */
-function occlusalField(o: Occlusal, u: number, v: number, aspect: number): { f: number; groove: number } {
-  // 교두 = 뾰족한 원뿔(교두정에서 삼각융선이 중심구로 내려감), 겹치는 곳은 부드러운 최댓값(log-sum-exp) — 교두 사이가 골이 된다
-  const k = 10;
-  let acc = 0;
+/** 선분 위 가장 가까운 점의 비율(0~1)과 거리 */
+function segNear(u: number, v: number, a: [number, number], b: [number, number], aspect: number): { t: number; d: number } {
+  const dx = b[0] - a[0];
+  const dy = (b[1] - a[1]) * aspect;
+  const px = u - a[0];
+  const py = (v - a[1]) * aspect;
+  const t = Math.max(0, Math.min(1, (px * dx + py * dy) / (dx * dx + dy * dy || 1)));
+  return { t, d: Math.hypot(px - t * dx, py - t * dy) };
+}
+
+/**
+ * 교합면 높이(0~1)와 구 깊이(음영용). r = 테두리에서 1, 중심 0(동심 고리 비율).
+ * 구성: 교두(원뿔) · 삼각융선(교두정 → 중심와로 내려가는 능선) · 변연융선·교두융선(테두리 둘레 능선)을 부드러운 최댓값으로 합치고,
+ *       중심구·발육구를 V자로 판다. 교두는 테두리(옆면)와 이어져 협·설면에서 보면 교두정이 윤곽의 봉우리가 된다.
+ */
+function occlusalField(o: Occlusal, u: number, v: number, aspect: number, r: number, pos: number): { f: number; groove: number } {
+  const terms: number[] = [];
+  const posterior = pos >= 4;
   for (const [cu, cv, ch, cr] of o.cusps) {
-    const d = Math.hypot(u - cu, (v - cv) * aspect) / (cr * 1.3);
-    // 교두정 바로 근처만 살짝 둥글게(바늘처럼 뾰족하지 않게) — 부드러운 거리
-    const ds = Math.sqrt(d * d + 0.01) - 0.1;
-    acc += Math.exp(k * ch * Math.pow(Math.max(0, 1 - ds), 1.15));
+    // 교두 바깥쪽(치아 가장자리 방향) 비탈은 길게 — 협·설면이 교두정까지 끊김 없이 올라간다(교두 아래 턱이 생기지 않게)
+    const du = u - cu;
+    const dv = (v - cv) * aspect;
+    const rl = Math.hypot(cu, cv * aspect) || 1;
+    const out = (du * cu + dv * cv * aspect) / rl;
+    const perp = Math.sqrt(Math.max(0, du * du + dv * dv - out * out));
+    const d = Math.hypot(perp, out > 0 ? out * 0.5 : out) / (cr * 1.4);
+    // 교두정 근처는 둥글게, 경사면은 곧게(원뿔)
+    const ds = Math.sqrt(d * d + 0.012) - 0.11;
+    terms.push(ch * Math.max(0, 1 - Math.max(0, ds)) ** 1.5); // 교두정은 또렷하게, 경사면은 오목하게
+    if (posterior) {
+      // 삼각융선 — 교두정에서 중심(0, 0) 쪽으로 70%까지, 내려가며 낮아진다
+      const n = segNear(u, v, [cu, cv], [cu * 0.3, cv * 0.3], aspect);
+      terms.push(ch * (1 - 0.5 * n.t) - (n.d / 0.075) ** 2 * 0.12);
+    }
   }
-  const hill = Math.log(acc / Math.max(1, o.cusps.length * 0.5)) / k;
+  // 테두리 능선(변연융선·교두융선) — 테두리에서 높고 안쪽(중심와)으로 내려간다
+  //  구치는 근·원심 끝(변연융선)이 높고, 협·설측 가장자리는 교두가 만들므로 낮게 둔다(테두리 전체가 턱처럼 솟지 않게)
+  const wm = Math.max(0, Math.min(1, (Math.abs(u) - 0.18) / 0.22));
+  const rimH = pos <= 2 ? 0.9 : pos === 3 ? 0.18 : 0.36 + 0.3 * wm * wm * (3 - 2 * wm); // 견치는 교두정에서 근·원심으로 비탈(오각형)
+  const e = Math.max(0, Math.min(1, (r - 0.5) / 0.45));
+  terms.push(rimH * e * e * (3 - 2 * e));
+  let f = softMax(terms, 14);
   let g = 0;
   let ridge = 0;
   for (const [a, b, depth] of o.grooves) {
-    const w = depth > 0 ? 0.045 : 0.09;
-    const e = Math.exp(-Math.pow(segDist(u, v, [a, b], aspect) / w, 2));
-    if (depth > 0) g = Math.max(g, depth * e);
-    else ridge = Math.max(ridge, -depth * e);
+    const n = segNear(u, v, a, b, aspect);
+    if (depth > 0) g = Math.max(g, depth * Math.exp(-((n.d / 0.055) ** 2)));
+    else ridge = Math.max(ridge, -depth * Math.exp(-((n.d / 0.09) ** 2)));
   }
-  const f = Math.max(o.floor, Math.min(1.05, hill + ridge * 0.6)) - 0.5 * g;
+  // 3D 바닥 보정: 절치 절단연은 얇은 능선(설측와는 설면에 있다 — 절단면이 오목한 쟁반이 되지 않게), 견치 설측와는 얕게
+  const floor = pos <= 2 ? 0.86 : pos === 3 ? 0.34 : o.floor;
+  f = Math.max(floor, Math.min(1.05, f + ridge * 0.25)) - 0.55 * g;
   return { f, groove: g };
 }
 
 /** 치아 한 개 지오메트리(로컬: x = 원심, z = 설측(교합면 로컬 +y), y = 높이) + 정점 음영(구에 어둡게). */
-function toothLocalPoints(fdi: Fdi, segs = 10) {
+function toothLocalPoints(fdi: Fdi, segs = 16) {
   const outline = sampleClosed(occlusalOutline(fdi), segs);
   const M = outline.length;
   const { md, bl, crown: h } = dims(fdi);
+  const pos = toothPos(fdi);
   const roots = rootAnatomy(fdi);
   const { rings, apexY, table } = sideRings(fdi, roots ? roots.trunk : null);
   const anat = occlusalAnatomy(fdi);
@@ -224,6 +250,7 @@ function toothLocalPoints(fdi: Fdi, segs = 10) {
   const D = anat.depth * h; // 교두정 ~ 와(fossa) 높이 차
   const verts: [number, number, number][] = [];
   const shade: number[] = [];
+  const field = (x: number, z: number, r: number) => occlusalField(anat, x / md, z / bl, aspect, r, pos);
 
   rings.forEach((ring) => {
     outline.forEach(([x, z]) => {
@@ -231,18 +258,30 @@ function toothLocalPoints(fdi: Fdi, segs = 10) {
       shade.push(1);
     });
   });
-  // 교합면: 테두리(t=1)에서 중심(t→0)까지 동심 고리, 높이 = 교합면 해부 필드
-  const levels = [1, 0.93, 0.85, 0.77, 0.69, 0.61, 0.53, 0.46, 0.39, 0.32, 0.25, 0.18, 0.11, 0.05];
-  const rimMin = 0.84 * h; // 옆면 마지막 고리(0.8h)보다 아래로 접히지 않게
+  // 옆면 → 교합면 테두리: 점마다 테두리 높이(교두정이면 높고, 교두 사이·구가 지나는 곳은 낮다)까지 이어 올린다
+  //  → 협·설면에서 보면 교두정이 윤곽의 봉우리로 솟는다(평평한 턱 위에 교합면이 얹힌 모양이 아니라)
+  const lastSide = rings[rings.length - 1];
+  const rimY = outline.map(([x, z]) => h - D * (1 - field(x * table[0], z * table[1], 1).f));
+  for (const s of [0.3, 0.55, 0.78, 0.93]) {
+    const bulge = 1 + 0.035 * Math.sin(Math.PI * s); // 교합면 바로 아래 살짝 볼록
+    outline.forEach(([x, z], i) => {
+      const sx = (lastSide.sx + (table[0] - lastSide.sx) * s * s) * bulge;
+      const sz = (lastSide.sy + (table[1] - lastSide.sy) * s * s) * bulge;
+      const y = lastSide.y + (rimY[i] - lastSide.y) * (1 - (1 - s) ** 1.6);
+      verts.push([x * sx, y, z * sz]);
+      shade.push(1);
+    });
+  }
+  // 교합면: 테두리(t=1)에서 중심(t→0)까지 동심 고리 — 테두리 쪽을 촘촘히
+  const levels: number[] = [];
+  for (let i = 0; i <= 26; i++) levels.push(1 - Math.pow(i / 27, 1.15) * 0.985);
   levels.forEach((t) => {
     outline.forEach(([x, z]) => {
       const px = x * table[0] * t;
       const pz = z * table[1] * t;
-      const { f, groove } = occlusalField(anat, px / md, pz / bl, aspect);
-      let y = h - D * (1 - f);
-      if (t === 1) y = Math.max(y, rimMin);
-      verts.push([px, y, pz]);
-      shade.push(1 - 0.3 * Math.min(1, groove));
+      const { f, groove } = field(px, pz, t);
+      verts.push([px, h - D * (1 - f), pz]);
+      shade.push(1 - 0.32 * Math.min(1, groove));
     });
   });
   const apex = verts.length;
@@ -250,13 +289,13 @@ function toothLocalPoints(fdi: Fdi, segs = 10) {
   shade.push(1);
   const center = verts.length;
   {
-    const { f, groove } = occlusalField(anat, 0, 0, aspect);
+    const { f, groove } = field(0, 0, 0);
     verts.push([0, h - D * (1 - f), 0]);
-    shade.push(1 - 0.3 * Math.min(1, groove));
+    shade.push(1 - 0.32 * Math.min(1, groove));
   }
 
   const idx: number[] = [];
-  const bands = rings.length + levels.length;
+  const bands = rings.length + 4 + levels.length;
   for (let k = 0; k < bands - 1; k++) {
     for (let i = 0; i < M; i++) {
       const a = k * M + i;

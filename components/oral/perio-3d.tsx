@@ -204,8 +204,46 @@ export default function Perio3D({ data, mode, jaw, cursor, hover, follow, onPick
     };
 
     // ── 측정값 층: 잇몸 커튼(반투명 분홍) · 잇몸선(빨강) · 주머니 막대(깊이 색) · 출혈 · 치태 ──
+    /** 깊이 막대·숫자 면 묶음(면이 화면을 볼 때만 보임) */
+    let faces: { g: THREE.Group; at: THREE.Vector3; n: THREE.Vector3 }[] = [];
+    /** 치아보다 나중에·깊이 무시로 그리기(가려지지 않게) */
+    const lift = (m: THREE.Mesh | THREE.Sprite, order: number) => {
+      const mat = m.material as THREE.Material;
+      mat.depthTest = false;
+      mat.transparent = true;
+      m.renderOrder = order;
+    };
+    // 잰 값 숫자 — 깊이 색 동그라미에 흰 글자
+    const valueSprite = (txt: string, color: string) => {
+      const k = `v:${txt}:${color}`;
+      let tex = numTex.get(k);
+      if (!tex) {
+        const cv = document.createElement("canvas");
+        cv.width = 64;
+        cv.height = 64;
+        const g = cv.getContext("2d")!;
+        g.fillStyle = color;
+        g.beginPath();
+        g.arc(32, 32, 27, 0, Math.PI * 2);
+        g.fill();
+        g.strokeStyle = "rgba(255,255,255,0.95)";
+        g.lineWidth = 4;
+        g.stroke();
+        g.fillStyle = "#ffffff";
+        g.font = "800 34px system-ui, sans-serif";
+        g.textAlign = "center";
+        g.textBaseline = "middle";
+        g.fillText(txt, 32, 34);
+        tex = new THREE.CanvasTexture(cv);
+        numTex.set(k, tex);
+      }
+      const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex }));
+      sp.scale.setScalar(1.6);
+      return sp;
+    };
     const rebuild = () => {
       disposeGroup(layer);
+      faces = [];
       const { data: d } = live.current;
       const ix = indexOf(d);
       teeth.forEach((mesh, t) => {
@@ -265,6 +303,8 @@ export default function Perio3D({ data, mode, jaw, cursor, hover, follow, onPick
           // 잇몸선
           const margin = SITES.map((p) => v3(sitePoint3D(f, s, p, rec(p), 0.45)));
           layer.add(new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(margin), 12, 0.2, 6), new THREE.MeshStandardMaterial({ color: "#e11d48" })));
+          // ★주머니 막대·숫자는 면 묶음으로 — 치아에 가려지지 않게 맨 위에 그리고, 그 면이 화면을 등지면 숨긴다(매 프레임)
+          const fg = new THREE.Group();
           for (const p of SITES) {
             const v = siteVal(ix, "pd", t, s, p);
             const n = v === "F" ? f.rootLen : pdNum(v);
@@ -272,9 +312,23 @@ export default function Perio3D({ data, mode, jaw, cursor, hover, follow, onPick
               // 탐침처럼 장축과 나란히(눈금과 같은 선)
               const a = v3(probePoint3D(f, s, p, rec(p), 0.75));
               const b = v3(probePoint3D(f, s, p, rec(p) + n, 0.75));
-              layer.add(bar(a, b, 0.42, pdColor(pdNum(v))));
+              const m = bar(a, b, 0.42, pdColor(pdNum(v)));
+              lift(m, 12);
+              fg.add(m);
+            }
+            // 잰 값 숫자 — 막대 끝(깊은 쪽) 바로 너머
+            if (v !== undefined && v !== null) {
+              const sp = valueSprite(String(v), pdColor(pdNum(v)));
+              sp.position.copy(v3(probePoint3D(f, s, p, rec(p) + (n ?? 0) + 1.3, 1.2)));
+              lift(sp, 13);
+              sp.userData.site = `${t}${s}${p}`;
+              fg.add(sp);
             }
             if (siteVal(ix, "bop", t, s, p) === true) layer.add(dot(v3(sitePoint3D(f, s, p, rec(p) - 0.4, 1.1)), 0.6, "#dc2626"));
+          }
+          if (fg.children.length) {
+            layer.add(fg);
+            faces.push({ g: fg, at: v3(f.cej), n: v3(f.lingual).multiplyScalar(s === "B" ? -1 : 1) });
           }
         }
         // 치태 — M·D는 협측 모서리, B·L은 각 면 가운데(치관 중간 높이)
@@ -591,6 +645,15 @@ export default function Perio3D({ data, mode, jaw, cursor, hover, follow, onPick
       }
       lastT = now;
       controls.update();
+      if (faces.length) {
+        // 지금 재고 있는 부위의 숫자는 눈금·풍선과 겹치지 않게 잠시 숨김
+        const hp = live.current.hover?.pick;
+        const hk = hp ? `${hp.t}${hp.s}${hp.p}` : "";
+        for (const fc of faces) {
+          fc.g.visible = camera.position.clone().sub(fc.at).normalize().dot(fc.n) > 0.08;
+          if (fc.g.visible) for (const o of fc.g.children) if (o.userData.site) o.visible = o.userData.site !== hk;
+        }
+      }
       if (letters) {
         const front = camera.position.clone().sub(letters.at).dot(letters.n) > 0;
         for (const sp of letters.sprites) sp.visible = front;
