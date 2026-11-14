@@ -41,6 +41,9 @@ function Tooth({
       style={onClick ? { cursor: "pointer" } : undefined}
     >
       <g transform={`matrix(${tooth.matrix.map(r2).join(" ")})`}>
+        {shape.rootBack && (
+          <path d={shape.rootBack} fill={style.rootFill} fillOpacity={0.45} stroke={style.stroke} strokeOpacity={0.45} strokeWidth={style.strokeWidth} vectorEffect="non-scaling-stroke" />
+        )}
         {shape.root && (
           <path d={shape.root} fill={style.rootFill} stroke={style.stroke} strokeWidth={style.strokeWidth} vectorEffect="non-scaling-stroke" />
         )}

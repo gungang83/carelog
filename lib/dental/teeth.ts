@@ -14,7 +14,8 @@
 //  · 배치할 때 행렬로 회전·반전한다(좌우 사분면은 거울상 — 행렬의 반전으로 처리).
 //  · 화면 기준: 환자를 마주 본 시점. 화면 왼쪽 = 환자 우측(1·4 사분면), 오른쪽 = 환자 좌측(2·3 사분면).
 
-export type ToothView = "occlusal" | "facial";
+/** occlusal = 교합면 · facial = 바깥(순·협측)에서 · lingual = 안쪽(구개·설측)에서 */
+export type ToothView = "occlusal" | "facial" | "lingual";
 export type Fdi = string; // "11" ~ "48"
 
 type Dims = { md: number; bl: number; crown: number; root: number };
@@ -122,6 +123,8 @@ export type ToothShape = {
   crown: string;
   /** 치근 윤곽(정면만) */
   root?: string;
+  /** 뒤에 겹쳐 보이는 치근(앞 치근에 가려진 쪽 — 옅게) */
+  rootBack?: string;
   /** 교두·구(groove)·융선 등 세부 선 */
   details: string[];
   /** 교합면 테이블(변연융선 안쪽) 윤곽 — 살짝 음영 */
@@ -401,54 +404,107 @@ function occlusalShape(fdi: Fdi): ToothShape {
   return { crown: smoothPath(outline), details, table, grooves, ridges, pits, box: { x: -w / 2, y: -d / 2, w, h: d } };
 }
 
-/** 정면(순·협측에서 본) 모양. y=0 치경선, +y 치관, -y 치근. -x = 근심. */
-function facialShape(fdi: Fdi): ToothShape {
+type Pt = [number, number];
+
+/** 치근 1개(원뿔형) — 근첨 쪽으로 가늘어진다 */
+const singleRoot = (neck: number, half = 0.27, tip = 0.08): Pt[] => [[-neck * 0.95, 0], [-half, -0.5], [-tip, -0.96], [0, -1], [tip, -0.96], [half, -0.5], [neck * 0.95, 0]];
+
+/** 치근 2갈래(대구치 근·원심근 / 협측 2근) — split = 분지부 높이(0 = CEJ, 1 = 근첨) */
+const twinRoot = (neck: number, spread: number, split: number, apexIn = 0.18): Pt[] => [
+  [-neck * 0.98, 0], [-0.44 * spread, -0.55], [-0.32 * spread, -1], [-apexIn, -0.94],
+  [-0.12, -split - 0.2], [0, -split], [0.12, -split - 0.2], [apexIn, -0.92], [0.3 * spread, -0.95],
+  [0.42 * spread, -0.5], [neck * 0.98, 0],
+];
+
+/** 근첨 1/3에서 갈라지는 치근(상악 제1소구치 협·구개근 겹침 / 융합된 제3대구치) */
+const forkedApex = (neck: number, fork = 0.68): Pt[] => [
+  [-neck * 0.95, 0], [-0.27, -0.45], [-0.21, -0.86], [-0.11, -1], [-0.03, -fork - 0.08], [0, -fork],
+  [0.03, -fork - 0.08], [0.11, -0.98], [0.21, -0.86], [0.27, -0.45], [neck * 0.95, 0],
+];
+
+/**
+ * 정면 모양 — 바깥(순·협측) 또는 안쪽(구개·설측)에서 본 모습. y=0 치경선(CEJ), +y 치관, -y 치근. -x = 근심.
+ * ★치근 개수(교과서 기준): 상악 대구치 3(협측 2 + 구개 1) · 하악 대구치 2(근·원심) · 상악 제1소구치 2(협·구개) · 그 밖 1.
+ *   바깥에서 보면 상악 대구치는 협측 2근이 앞, 구개근은 뒤(옅게) / 안쪽에서 보면 구개근 1개가 앞, 협측 2근이 뒤.
+ * ★교두(바깥 윤곽): 하악 제1대구치 협측 3(근심협·원심협·원심) · 그 밖 대구치 협측 2 · 안쪽 2. 소구치 협 1 · 안쪽은 낮다.
+ */
+function profileShape(fdi: Fdi, lingual: boolean): ToothShape {
   const { md: w, crown: h, root: r } = dims(fdi);
   const pos = toothPos(fdi);
   const up = isUpper(fdi);
-  let crown: [number, number][];
-  let root: [number, number][];
-  let details: string[] = [];
+  let crown: Pt[];
+  let root: Pt[];
+  let back: Pt[] | null = null;
+  const details: string[] = [];
+  const line = (pts: Pt[], sy = h) => smoothPath(scalePts(pts, w, sy), false);
   const neck = pos >= 6 ? 0.4 : 0.34; // 치경부 반폭(치관 폭 대비)
 
   if (pos <= 2) {
-    crown = [
-      [-neck, 0], [-0.5, 0.55], [-0.48, 0.94], [-0.3, 1], [0, 1], [0.3, 0.99],
-      [0.47, 0.92], [0.5, 0.52], [neck, 0],
-    ];
-    root = [[-neck * 0.95, 0], [-0.26, -0.5], [-0.09, -0.95], [0, -1], [0.09, -0.95], [0.26, -0.5], [neck * 0.95, 0]];
-    details = [smoothPath(scalePts([[-0.28, 0.88], [0, 0.92], [0.28, 0.88]], w, h), false)];
+    crown = [[-neck, 0], [-0.5, 0.55], [-0.48, 0.94], [-0.3, 1], [0, 1], [0.3, 0.99], [0.47, 0.92], [0.5, 0.52], [neck, 0]];
+    root = singleRoot(neck, 0.26, 0.09);
+    if (lingual) {
+      // 설면: 기저결절(치경 1/3 볼록) + 근·원심 변연융선(삽 모양)
+      details.push(line([[-0.2, 0.2], [0, up ? 0.32 : 0.26], [0.2, 0.2]]));
+      details.push(line([[-0.36, 0.86], [-0.33, 0.5], [-0.18, 0.26]]));
+      details.push(line([[0.36, 0.86], [0.33, 0.5], [0.18, 0.26]]));
+    } else details.push(line([[-0.28, 0.88], [0, 0.92], [0.28, 0.88]]));
   } else if (pos === 3) {
-    crown = [
-      [-neck, 0], [-0.5, 0.48], [-0.44, 0.78], [-0.14, 0.95], [0, 1], [0.16, 0.92],
-      [0.48, 0.72], [0.5, 0.44], [neck, 0],
-    ];
-    root = [[-neck * 0.95, 0], [-0.28, -0.5], [-0.08, -0.96], [0, -1], [0.08, -0.96], [0.28, -0.5], [neck * 0.95, 0]];
-    details = [smoothPath(scalePts([[0, 0.92], [0, 0.4]], w, h), false)];
+    crown = [[-neck, 0], [-0.5, 0.48], [-0.44, 0.78], [-0.14, 0.95], [0, 1], [0.16, 0.92], [0.48, 0.72], [0.5, 0.44], [neck, 0]];
+    root = singleRoot(neck, 0.28, 0.08);
+    if (lingual) {
+      details.push(line([[-0.18, 0.22], [0, 0.34], [0.18, 0.22]])); // 기저결절
+      details.push(line([[0, 0.34], [0, 0.92]])); // 설측 융선
+    } else details.push(line([[0, 0.92], [0, 0.4]]));
   } else if (pos <= 5) {
-    crown = [
-      [-neck, 0], [-0.5, 0.5], [-0.44, 0.76], [-0.16, 0.94], [0, 1], [0.16, 0.94],
-      [0.44, 0.76], [0.5, 0.5], [neck, 0],
-    ];
-    root = [[-neck * 0.95, 0], [-0.26, -0.5], [-0.08, -0.96], [0, -1], [0.08, -0.96], [0.26, -0.5], [neck * 0.95, 0]];
-    details = [smoothPath(scalePts([[0, 0.94], [0, 0.42]], w, h), false)];
-    // 상악 제1소구치 — 협·설 2근관(정면에서 분지 홈)
-    if (up && pos === 4) {
-      details.push(smoothPath(scalePts([[0, -0.15], [0, -0.75]], w, r), false));
+    if (!lingual) {
+      crown = [[-neck, 0], [-0.5, 0.5], [-0.44, 0.76], [-0.16, 0.94], [0, 1], [0.16, 0.94], [0.44, 0.76], [0.5, 0.5], [neck, 0]];
+      details.push(line([[0, 0.94], [0, 0.42]]));
+    } else if (up) {
+      // 상악 소구치 구개 교두 — 협측 교두보다 낮다(제1소구치에서 더). 뒤로 협측 교두 끝이 보인다
+      const lh = pos === 4 ? 0.84 : 0.94;
+      crown = [[-neck, 0], [-0.5, 0.48], [-0.42, 0.72 * lh], [-0.14, 0.94 * lh], [0, lh], [0.14, 0.94 * lh], [0.42, 0.72 * lh], [0.5, 0.48], [neck, 0]];
+      if (pos === 4) details.push(line([[-0.16, 0.94], [0, 1], [0.16, 0.94]]));
+    } else if (pos === 4) {
+      // 하악 제1소구치 설측 교두 — 작고 낮다(치관 높이의 2/3). 뒤로 큰 협측 교두
+      crown = [[-neck, 0], [-0.48, 0.42], [-0.36, 0.6], [-0.1, 0.7], [0, 0.72], [0.1, 0.7], [0.36, 0.6], [0.48, 0.42], [neck, 0]];
+      details.push(line([[-0.4, 0.66], [-0.16, 0.94], [0, 1], [0.16, 0.94], [0.4, 0.66]]));
+    } else {
+      // 하악 제2소구치(3교두형) 설측 2교두 — 근심설측이 크다
+      crown = [[-neck, 0], [-0.5, 0.46], [-0.44, 0.74], [-0.24, 0.88], [-0.06, 0.78], [0.12, 0.84], [0.4, 0.72], [0.5, 0.46], [neck, 0]];
+      details.push(line([[-0.06, 0.78], [-0.04, 0.5]]));
     }
+    root = up && pos === 4 ? forkedApex(neck, 0.66) : singleRoot(neck, 0.26, 0.08);
   } else {
-    // 대구치 — 협측 교두 2개, 치근 2갈래(정면에서 근심·원심근 또는 근·원심협측근)
-    crown = [
-      [-neck, 0], [-0.5, 0.45], [-0.46, 0.84], [-0.26, 1], [-0.02, 0.86], [0.24, 1],
-      [0.46, 0.84], [0.5, 0.45], [neck, 0],
-    ];
-    const spread = up ? 1.08 : 1; // 상악 대구치 치근이 더 벌어짐
-    root = [
-      [-neck * 0.98, 0], [-0.44 * spread, -0.55], [-0.32 * spread, -1], [-0.18, -0.94],
-      [-0.12, -0.45], [0, -0.22], [0.12, -0.45], [0.18, -0.92], [0.3 * spread, -0.95],
-      [0.42 * spread, -0.5], [neck * 0.98, 0],
-    ];
-    details = [smoothPath(scalePts([[-0.02, 0.86], [-0.02, 0.45]], w, h), false)];
+    const spread = pos === 8 ? 0.82 : up ? 1.08 : 1; // 상악 대구치 치근이 더 벌어짐, 제3대구치는 모인다
+    if (!lingual) {
+      if (!up && pos === 6) {
+        // 하악 제1대구치 — 협측 3교두(근심협측 · 원심협측 · 원심, 원심이 가장 작다)
+        crown = [[-neck, 0], [-0.5, 0.45], [-0.47, 0.84], [-0.32, 0.99], [-0.15, 0.86], [0.03, 0.97], [0.18, 0.84], [0.33, 0.9], [0.47, 0.76], [0.5, 0.42], [neck, 0]];
+        details.push(line([[-0.15, 0.86], [-0.15, 0.5]]), line([[0.18, 0.84], [0.2, 0.55]]));
+      } else {
+        crown = [[-neck, 0], [-0.5, 0.45], [-0.46, 0.84], [-0.26, 1], [-0.02, 0.86], [0.24, 1], [0.46, 0.84], [0.5, 0.45], [neck, 0]];
+        details.push(line([[-0.02, 0.86], [-0.02, 0.45]]));
+      }
+      if (up) {
+        // 앞: 근심협측·원심협측근 / 뒤: 구개근(가장 길고 굵다)
+        root = pos === 8 ? forkedApex(neck, 0.55) : twinRoot(neck, spread, 0.22);
+        back = pos === 8 ? null : [[-0.3, 0], [-0.24, -0.6], [-0.1, -1.04], [0.02, -1.07], [0.14, -1.03], [0.26, -0.6], [0.3, 0]];
+      } else root = pos === 8 ? forkedApex(neck, 0.5) : twinRoot(neck, spread, 0.2);
+    } else if (up) {
+      // 상악 대구치 구개측 — 근심설측 교두(가장 크다) + 원심설측(작다), 제1대구치는 카라벨리 결절
+      const dl = pos === 6 ? 0.82 : 0.7;
+      crown = [[-neck, 0], [-0.5, 0.46], [-0.46, 0.86], [-0.2, 1], [0.06, 0.84], [0.28, dl], [0.47, 0.7], [0.5, 0.44], [neck, 0]];
+      details.push(line([[0.06, 0.84], [0.04, 0.5]]));
+      if (pos === 6) details.push(line([[-0.42, 0.42], [-0.34, 0.56], [-0.24, 0.5]])); // 카라벨리
+      // 앞: 구개근 1개(굵고 길다) / 뒤: 협측 2근
+      root = pos === 8 ? forkedApex(neck, 0.55) : [[-neck * 0.92, 0], [-0.29, -0.55], [-0.12, -1.02], [0, -1.06], [0.12, -1.02], [0.29, -0.55], [neck * 0.92, 0]];
+      back = pos === 8 ? null : twinRoot(neck, spread * 0.92, 0.22).map(([x, y]) => [x, y * 0.9] as Pt);
+    } else {
+      // 하악 대구치 설측 — 2교두(근심설측·원심설측), 협측보다 뾰족하고 높다. 치근은 같은 근·원심 2개
+      crown = [[-neck, 0], [-0.5, 0.46], [-0.46, 0.88], [-0.25, 1.02], [-0.02, 0.86], [0.23, 1.0], [0.46, 0.86], [0.5, 0.46], [neck, 0]];
+      details.push(line([[-0.02, 0.86], [-0.02, 0.5]]));
+      root = pos === 8 ? forkedApex(neck, 0.5) : twinRoot(neck, spread, 0.2);
+    }
   }
   const crownPts = crown.map(([x, y]) => [x * w, y * h] as P);
   const rootPts = root.map(([x, y]) => [x * w, y * r] as P);
@@ -456,13 +512,14 @@ function facialShape(fdi: Fdi): ToothShape {
     // 치관·치근 모두 치경선(y=0)에서 직선으로 닫는다 — 서로 맞물리게
     crown: `${smoothPath(crownPts, false)} Z`,
     root: `${smoothPath(rootPts, false)} Z`,
+    ...(back ? { rootBack: `${smoothPath(back.map(([x, y]) => [x * w, y * r] as P), false)} Z` } : {}),
     details,
-    box: { x: -w / 2, y: -r, w, h: h + r },
+    box: { x: -w / 2, y: -r * 1.07, w, h: h + r * 1.07 },
   };
 }
 
 export function toothShape(fdi: Fdi, view: ToothView): ToothShape {
-  return view === "occlusal" ? occlusalShape(fdi) : facialShape(fdi);
+  return view === "occlusal" ? occlusalShape(fdi) : profileShape(fdi, view === "lingual");
 }
 
 // ── 배치(조합) ───────────────────────────────────────────────────────
@@ -652,7 +709,7 @@ export function facialLayout(opts: ArchOpts = {}): Layout {
       const py = row.upper ? cejU : cejL;
       teeth.push({
         fdi,
-        shape: facialShape(fdi),
+        shape: profileShape(fdi, false),
         matrix: [sx, 0, 0, sy, px, py],
         cx: px,
         cy: row.upper ? py + (crown * k) / 2 : py - (crown * k) / 2,
@@ -703,6 +760,9 @@ function toothGroupSvg(t: PlacedTooth, style: ToothStyle, label: boolean, fill?:
   // 선 두께는 화면 px 기준을 유지(vector-effect)
   const ve = 'vector-effect="non-scaling-stroke"';
   const parts = [
+    (t.shape.rootBack
+      ? `<path d="${t.shape.rootBack}" fill="${style.rootFill}" fill-opacity="0.45" stroke="${style.stroke}" stroke-opacity="0.45" stroke-width="${style.strokeWidth}" ${ve}/>`
+      : ""),
     t.shape.root
       ? `<path d="${t.shape.root}" fill="${style.rootFill}" stroke="${style.stroke}" stroke-width="${style.strokeWidth}" ${ve}/>`
       : "",
@@ -742,7 +802,7 @@ export function singleToothSvg(fdi: Fdi, view: ToothView, opts: { style?: ToothS
   const padMm = 1.5;
   const { x, y, w, h } = shape.box;
   const flipX = isPatientRight(fdi) ? -1 : 1;
-  const flipY = view === "facial" && !isUpper(fdi) ? -1 : 1;
+  const flipY = view !== "occlusal" && !isUpper(fdi) ? -1 : 1;
   const W = (w + padMm * 2) * k;
   const H = (h + padMm * 2) * k;
   // 경계 상자 중심을 캔버스 중심으로
@@ -753,7 +813,7 @@ export function singleToothSvg(fdi: Fdi, view: ToothView, opts: { style?: ToothS
   const e = W / 2 - bx * sx;
   const fy = H / 2 - by * sy;
   const t: PlacedTooth = { fdi, shape, matrix: [sx, 0, 0, sy, e, fy], cx: W / 2, cy: H / 2, size: 0 };
-  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${f(W)} ${f(H)}" width="${f(W)}" height="${f(H)}"><title>${toothLabel(fdi)} · ${view === "occlusal" ? "교합면" : "정면"}</title>\n  ${toothGroupSvg(t, style, false)}\n</svg>\n`;
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${f(W)} ${f(H)}" width="${f(W)}" height="${f(H)}"><title>${toothLabel(fdi)} · ${view === "occlusal" ? "교합면" : view === "lingual" ? "안쪽(구개·설측)" : "바깥(순·협측)"}</title>\n  ${toothGroupSvg(t, style, false)}\n</svg>\n`;
 }
 
 export const ALL_TEETH: Fdi[] = [

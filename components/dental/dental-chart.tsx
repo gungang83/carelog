@@ -93,10 +93,14 @@ export const DentalChart = forwardRef<SVGSVGElement, Props>(function DentalChart
             <g clipPath={`url(#${clip})`}>
               {under?.(row)}
               {row.teeth.map((t) => {
-                const s = toothShape(t, "facial");
+                // 안쪽 줄은 안쪽(구개·설측)에서 본 모양 — 상악 대구치는 구개근이 앞에 온다
+                const s = toothShape(t, row.spec.side === "L" ? "lingual" : "facial");
                 const l = look?.(t) ?? {};
                 return (
                   <g key={t} transform={`matrix(${toothMatrix(geo, row, t).join(" ")})`} opacity={l.missing ? 0.14 : l.dim ? 0.45 : 1}>
+                    {s.rootBack && (
+                      <path d={s.rootBack} fill={l.rootFill ?? "#f1e3c8"} fillOpacity={0.5} stroke="#94a3b8" strokeOpacity={0.5} strokeWidth={0.15} />
+                    )}
                     {s.root && (
                       <path
                         d={s.root}
@@ -107,6 +111,9 @@ export const DentalChart = forwardRef<SVGSVGElement, Props>(function DentalChart
                       />
                     )}
                     <path d={s.crown} fill={l.crownFill ?? (l.implant ? "#e2e8f0" : "#fffdf7")} stroke="#94a3b8" strokeWidth={0.18} />
+                    {s.details.map((d, i) => (
+                      <path key={i} d={d} fill="none" stroke="#cbd5e1" strokeWidth={0.14} strokeLinecap="round" />
+                    ))}
                   </g>
                 );
               })}
