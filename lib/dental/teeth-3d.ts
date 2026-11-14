@@ -124,10 +124,10 @@ function rootAnatomy(fdi: Fdi): RootAnatomy | null {
 /** 뿌리 갈래가 시작하는 높이 — 분지부 천장(−0.82·치근간) 바로 위, 몸통 안. 처음부터 제 굵기로(가는 끝이 분지부 입구로 비치지 않게) */
 const rootTop = (trunk: number) => -0.72 * trunk;
 
-/** 뿌리 단면 배율 — 시작부(몸통 안)는 90%에서 분지부 아래로 제 굵기, 근첨으로 가늘어짐 */
+/** 뿌리 단면 배율 — 시작부(몸통 안) 93% → 분지부 높이에서 제 굵기 → 근첨으로 가늘어짐(몸통 벽보다 넓어져 어깨가 튀지 않게) */
 function rootK(t: number, y: number, y0: number, trunk: number) {
-  const a = Math.min(1, Math.max(0, (y0 - y) / (trunk * 0.6)));
-  return (0.9 + 0.1 * a * a * (3 - 2 * a)) * (1 - 0.8 * Math.pow(t, 1.8));
+  const a = Math.min(1, Math.max(0, (y0 - y) / (trunk * 0.28))); // 시작 → 분지부(−치근간)
+  return (0.93 + 0.07 * a * a * (3 - 2 * a)) * (1 - 0.8 * Math.pow(t, 1.8));
 }
 
 /** 뿌리 갈래의 높이 y(mm, 치경선 0·아래 −)에서의 단면 타원(중심·반지름 mm) — addRootTube와 같은 식 */
@@ -283,35 +283,44 @@ function toothLocalPoints(fdi: Fdi, segs = 16) {
     const T = roots.trunk;
     const nk = pos >= 6 ? 0.78 : 0.7;
     // 점마다 "뿌리 방향과 얼마나 가까운가"(1 = 뿌리 바로 위, 0 = 뿌리 사이)
+    // 점마다 "뿌리 단면 위에 있는가" — 분지부 높이의 몸통 단면 점이 어느 뿌리 타원 안(가까이)에 드는지(각도가 아니라 실제 거리로:
+    //  협설로 넓은 하악 대구치 뿌리의 협면을 입구로 잘못 보아 안으로 당기면 뿌리 어깨가 튀어나온다)
     const nearest: number[] = [];
     const near = outline.map(([x, z]) => {
-      const a = Math.atan2(z / bl, x / md);
-      let w = 0;
+      const px = x * nk * 0.95;
+      const pz = z * nk * 0.95 * 0.97;
       let best = 0;
+      let bd = Infinity;
       roots.roots.forEach((r, ri) => {
-        const ra = Math.atan2(r.start[1], r.start[0]);
-        let d = Math.abs(a - ra);
-        d = Math.min(d, Math.PI * 2 - d);
-        const ww = Math.exp(-((d / 0.8) ** 2)); // 넓게 — 입구가 ∩ 아치로 둥글게 올라가도록
-        if (ww > w) {
-          w = ww;
+        const rr = rootRingAt(r, T, md, bl, -T);
+        const d = Math.hypot((px - rr.cx) / rr.ax, (pz - rr.cz) / rr.az);
+        if (d < bd) {
+          bd = d;
           best = ri;
         }
       });
       nearest.push(best);
-      return w;
+      const a = Math.min(1, Math.max(0, (1.75 - bd) / 0.6)); // 1.15 이하 = 뿌리 위, 1.75 이상 = 뿌리 사이
+      return a * a * (3 - 2 * a);
     });
-    const bottomY = near.map((w) => -T - 3 * w); // 입구 = 치근간 길이, 뿌리 쪽은 3mm 더 내려가 뿌리 표면에 붙는다
+    // 뿌리 쪽만 0.8mm 더 내려 뿌리를 감싸는 깃(collar)으로 — 접합선이 벽 아래에 숨는다(깊게 내리면 날개가 생김)
+    const wOf = (n: number) => {
+      const a = Math.min(1, Math.max(0, (n - 0.2) / 0.6));
+      return a * a * (3 - 2 * a);
+    };
+    const bottomY = near.map((n) => -T - 0.8 * wOf(n));
     const roofY = -T * 0.82; // 분지부 천장 꼭대기(입구보다 위)
     // 아래 끝 점: 뿌리 쪽이면 그 높이의 뿌리 단면 위(같은 방향)로 옮겨, 몸통 벽이 뿌리로 끊김 없이 흘러가게
     const bottom = outline.map(([x, z], i) => {
-      const dent = 1 - 0.13 * (1 - near[i]);
+      // 입구 쪽은 크게 안으로(발육 함요가 분지부 천장으로 말려 들어감 — 컵 테두리 같은 턱이 생기지 않게)
+      const dent = 1 - 0.45 * (1 - near[i]);
       const plain: [number, number, number] = [x * nk * 0.95 * dent, bottomY[i], z * nk * 0.95 * dent * 0.97];
       const rr = rootRingAt(roots.roots[nearest[i]], T, md, bl, bottomY[i]);
       // (뿌리 반지름 ax·az는 mm)
       const th = Math.atan2((plain[2] - rr.cz) / (rr.az || 1), (plain[0] - rr.cx) / (rr.ax || 1));
-      const onRoot: [number, number, number] = [rr.cx + Math.cos(th) * rr.ax, bottomY[i], rr.cz + Math.sin(th) * rr.az];
-      const w = Math.pow(near[i], 0.6);
+      // 뿌리 표면보다 1.5% 바깥 — 벽 끝이 뿌리를 살짝 덮어 틈·각이 보이지 않게
+      const onRoot: [number, number, number] = [rr.cx + Math.cos(th) * rr.ax * 1.015, bottomY[i], rr.cz + Math.sin(th) * rr.az * 1.015];
+      const w = wOf(near[i]);
       return [plain[0] + (onRoot[0] - plain[0]) * w, bottomY[i], plain[2] + (onRoot[2] - plain[2]) * w] as [number, number, number];
     });
     const wallAt = (i: number, t: number): [number, number, number] => {

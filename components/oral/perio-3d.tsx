@@ -158,31 +158,8 @@ export default function Perio3D({ data, mode, jaw, cursor, hover, follow, onPick
       return m;
     };
 
-    // 눈금 숫자 — 글자 텍스처는 숫자마다 한 번만 만든다
+    // 글자 텍스처(부위 글자·잰 값·치아 번호)는 글자마다 한 번만 만든다
     const numTex = new Map<string, THREE.CanvasTexture>();
-    const numberSprite = (txt: string) => {
-      let tex = numTex.get(txt);
-      if (!tex) {
-        const cv = document.createElement("canvas");
-        cv.width = 64;
-        cv.height = 64;
-        const g = cv.getContext("2d")!;
-        g.fillStyle = "rgba(255,255,255,0.92)";
-        g.beginPath();
-        g.arc(32, 32, 26, 0, Math.PI * 2);
-        g.fill();
-        g.fillStyle = "#0369a1";
-        g.font = "bold 34px system-ui, sans-serif";
-        g.textAlign = "center";
-        g.textBaseline = "middle";
-        g.fillText(txt, 32, 34);
-        tex = new THREE.CanvasTexture(cv);
-        numTex.set(txt, tex);
-      }
-      const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex }));
-      sp.scale.setScalar(1.7);
-      return sp;
-    };
     // 부위 글자(M·C·D) — 가리킨 부위는 진하게
     const letterSprite = (txt: string, on: boolean) => {
       const k = `${txt}:${on ? 1 : 0}`;
@@ -443,13 +420,7 @@ export default function Perio3D({ data, mode, jaw, cursor, hover, follow, onPick
       for (let n = Math.ceil(from); n <= to; n++) {
         const long = n % 3 === 0;
         onTop(bar(P(n, 1.5), P(n, long ? 3.4 : 2.4), long ? 0.14 : 0.09, "#0284c7"));
-        // 3mm마다 숫자(깊이 모드는 잇몸선에서 센 값, 퇴축 모드는 CEJ 기준)
-        if (long || n === Math.ceil(from)) {
-          const label = live.current.mode === "pd" ? Math.round(n - gm) : n;
-          const sp = numberSprite(String(label));
-          sp.position.copy(P(n, 5.2));
-          onTop(sp);
-        }
+        // 3·6·9 숫자는 두지 않는다 — 가리킨 깊이가 눈금 위에 큰 숫자(값 풍선)로 뜬다(2026-11-14 대표)
       }
       if (typeof h.value === "number" || h.value === "F") {
         if (live.current.mode === "pd") {
@@ -773,8 +744,9 @@ export default function Perio3D({ data, mode, jaw, cursor, hover, follow, onPick
           const r0 = siteVal(ix, "rec", h.pick.t, h.pick.s, h.pick.p);
           const gm = typeof r0 === "number" ? r0 : 0;
           const depth = L.mode === "pd" ? gm + (h.value === "F" ? f.rootLen : Number(h.value)) : Number(h.value);
-          const s = project(v3(probePoint3D(f, h.pick.s, h.pick.p, depth, 3.2)));
-          bub.style.transform = `translate(${s.x + (L.lastPointer === "mouse" ? 18 : -18)}px, ${s.y - (L.lastPointer === "mouse" ? 18 : 64)}px)`;
+          // ★눈금 위, 그 깊이 자리에 크게(손가락은 가리지 않게 같은 눈금 위쪽으로 띄움)
+          const s = project(v3(probePoint3D(f, h.pick.s, h.pick.p, depth, 1.5)));
+          bub.style.transform = `translate(${s.x - 26}px, ${s.y - 26 - (L.lastPointer === "mouse" ? 0 : 70)}px)`;
           bub.style.opacity = "1";
           bub.style.background = L.mode === "pd" ? pdColor(pdNum(h.value)) : "#be185d";
           bub.textContent = String(h.value);
@@ -933,7 +905,7 @@ export default function Perio3D({ data, mode, jaw, cursor, hover, follow, onPick
         <div className="absolute inset-[5px] rounded-full bg-sky-600" />
       </div>
       <div ref={tipRef} className="pointer-events-none absolute left-0 top-0 whitespace-nowrap rounded-full bg-slate-900/80 px-2 py-0.5 text-[11px] font-bold text-white opacity-0 transition-opacity" />
-      <div ref={bubbleRef} className="pointer-events-none absolute left-0 top-0 flex h-9 w-9 items-center justify-center rounded-full text-sm font-extrabold text-white opacity-0 shadow-lg transition-[background-color]" />
+      <div ref={bubbleRef} className="pointer-events-none absolute left-0 top-0 flex h-[52px] w-[52px] items-center justify-center rounded-full text-2xl font-black text-white opacity-0 shadow-xl ring-4 ring-white/90 transition-[background-color]" />
     </div>
   );
 }
