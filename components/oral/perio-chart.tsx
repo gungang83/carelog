@@ -10,6 +10,7 @@ import { dims, isUpper, type Fdi } from "@/lib/dental/teeth";
 import { mmToY, siteX, sitesLeftToRight, type ChartGeo, type ChartHit, type ChartRow } from "@/lib/dental/chart";
 import {
   MOB_LABEL,
+  PERC_LABEL,
   entryKey,
   indexOf,
   pdColor,
@@ -25,7 +26,8 @@ import {
   type Surface,
 } from "@/lib/oral/perio";
 
-export type PerioHover = { hit: ChartHit; value: MeasureValue | null } | null;
+/** bop = 부위의 출혈 점을 가리킴(깊이·퇴축 모드에서 누르면 토글) */
+export type PerioHover = { hit: ChartHit; value: MeasureValue | null; bop?: boolean } | null;
 
 type Props = {
   geo: ChartGeo;
@@ -40,6 +42,9 @@ type Props = {
   onPointer?: (e: ChartPointer) => void;
   title?: string;
 };
+
+/** 출혈 점 높이(숫자 띠의 치아 쪽 끝) — 그림·누르기 판정 공용 */
+export const bopDropY = (row: ChartRow) => (row.spec.rootUp ? row.bandBottom - 4 : row.bandTop + 4);
 
 /** 정면 줄의 부위 → 치태 면(D·M은 그대로, 가운데는 그 줄의 면) */
 export const plaqueSurface = (p: Pos, side: "B" | "L"): Surface => (p === "C" ? side : p);
@@ -180,7 +185,9 @@ export const PerioChart = forwardRef<SVGSVGElement, Props>(function PerioChart(
     const bandMid = (row.bandTop + row.bandBottom) / 2;
     const pdY = row.spec.rootUp ? row.bandTop + 13 : row.bandBottom - 7;
     const recY = row.spec.rootUp ? pdY + 11 : pdY - 12;
-    const dropY = row.spec.rootUp ? row.bandBottom - 4 : row.bandTop + 4;
+    const dropY = bopDropY(row);
+    // 깊이·퇴축을 재는 동안엔 부위마다 빈 출혈 점(누르면 빨갛게) — 출혈은 따로 메뉴 없이 여기서
+    const bopSlots = live && (mode === "pd" || mode === "rec");
     const hv = live && hover && hover.hit.row === row ? hover : null;
     return (
       <>
@@ -215,6 +222,7 @@ export const PerioChart = forwardRef<SVGSVGElement, Props>(function PerioChart(
         {row.teeth.map((t) => {
           if (missing(t)) return null;
           const mob = Number(toothVal(ix, "mob", t) ?? 0);
+          const perc = Number(toothVal(ix, "perc", t) ?? 0);
           const implant = toothVal(ix, "state", t) === "implant";
           return (
             <g key={`f-${t}`}>
@@ -239,7 +247,18 @@ export const PerioChart = forwardRef<SVGSVGElement, Props>(function PerioChart(
                         {rec}
                       </text>
                     )}
-                    {bop && <circle key={kBop} className={live && flash === kBop ? "perio-drop" : undefined} cx={x} cy={dropY} r={2.8} fill="#dc2626" />}
+                    {bop && <circle key={kBop} className={live && flash === kBop ? "perio-drop" : undefined} cx={x} cy={dropY} r={hv?.bop && hv.hit.t === t && hv.hit.p === p ? 4.2 : 2.8} fill="#dc2626" />}
+                    {!bop && bopSlots && (
+                      <circle
+                        cx={x}
+                        cy={dropY}
+                        r={hv?.bop && hv.hit.t === t && hv.hit.p === p ? 4.2 : 2.6}
+                        fill={hv?.bop && hv.hit.t === t && hv.hit.p === p ? "#fecaca" : "#ffffff"}
+                        stroke="#f87171"
+                        strokeWidth={1.1}
+                        opacity={0.9}
+                      />
+                    )}
                     {plq && <rect x={x - 3} y={bandMid - 3} width={6} height={6} rx={1.5} fill="#ca8a04" opacity={0.85} />}
                   </g>
                 );
@@ -249,6 +268,14 @@ export const PerioChart = forwardRef<SVGSVGElement, Props>(function PerioChart(
                   <rect x={geo.x[t] - 11} y={row.labelY - 10} width={22} height={12} rx={6} fill="#fee2e2" transform={`translate(${(dims(t).md * k) / 2 - 8} 0)`} />
                   <text x={geo.x[t] + (dims(t).md * k) / 2 - 8} y={row.labelY - 1} textAnchor="middle" fontSize={8} fontWeight={800} fill="#b91c1c">
                     {MOB_LABEL[mob]}
+                  </text>
+                </g>
+              )}
+              {perc > 0 && (
+                <g key={`perc-${t}-${perc}`} className={live && flash === entryKey({ m: "perc", t }) ? "perio-pop" : undefined}>
+                  <rect x={geo.x[t] - (dims(t).md * k) / 2 - 3} y={row.labelY - 10} width={26} height={12} rx={6} fill="#ede9fe" />
+                  <text x={geo.x[t] - (dims(t).md * k) / 2 + 10} y={row.labelY - 1} textAnchor="middle" fontSize={8} fontWeight={800} fill="#6d28d9">
+                    타{PERC_LABEL[perc]}
                   </text>
                 </g>
               )}
@@ -270,12 +297,20 @@ export const PerioChart = forwardRef<SVGSVGElement, Props>(function PerioChart(
         )}
 
         {/* 치아 단위 모드(동요·결손·출혈·치태) — 올린 곳에 다음 값 미리보기 */}
+        {hv && hv.bop && (
+          <g pointerEvents="none" transform={`translate(${siteX(geo, hv.hit.t, hv.hit.p)} ${row.spec.rootUp ? dropY + 14 : dropY - 14})`}>
+            <rect x={-20} y={-9} width={40} height={18} rx={9} fill="#0f172a" opacity={0.82} />
+            <text y={4} textAnchor="middle" fontSize={10} fontWeight={800} fill="#fca5a5">
+              {siteVal(ix, "bop", hv.hit.t, side, hv.hit.p) === true ? "출혈 −" : "출혈 ●"}
+            </text>
+          </g>
+        )}
         {hv && mode !== "pd" && mode !== "rec" && (() => {
           const { t, p } = hv.hit;
           const x = mode === "mob" || mode === "state" ? geo.x[t] : siteX(geo, t, p);
           const label =
             mode === "mob"
-              ? MOB_LABEL[(Number(toothVal(ix, "mob", t) ?? 0) + 1) % 4]
+              ? t
               : mode === "state"
                 ? (({ undefined: "결손", missing: "임플란트", implant: "있음" }) as Record<string, string>)[String(toothVal(ix, "state", t))]
                 : mode === "bop"

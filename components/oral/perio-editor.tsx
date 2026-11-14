@@ -9,7 +9,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import { readViewMode, writeViewMode, type ViewMode } from "@/lib/dental/view-mode";
-import { isUpper } from "@/lib/dental/teeth";
+import { isUpper, type Fdi } from "@/lib/dental/teeth";
 import { PERIO_ROWS, chartLayout, siteX, sitesLeftToRight, type ChartHit } from "@/lib/dental/chart";
 import type { ChartPointer } from "@/components/dental/dental-chart";
 import {
@@ -31,11 +31,15 @@ import {
   type MeasureId,
   type MeasureValue,
   type PerioData,
+  MOB_LABEL,
+  type Pos,
+  type Side,
 } from "@/lib/oral/perio";
-import { PerioChart, plaqueSurface } from "@/components/oral/perio-chart";
+import { PerioChart, bopDropY, plaqueSurface } from "@/components/oral/perio-chart";
 import { pickFromHit, type PerioPick } from "@/lib/oral/perio-pick";
 
-type EditorHover = { pick: PerioPick; value: MeasureValue | null; hit?: ChartHit } | null;
+/** bop = 2D에서 부위의 출혈 점(토글)을 가리킴 */
+type EditorHover = { pick: PerioPick; value: MeasureValue | null; hit?: ChartHit; bop?: boolean } | null;
 
 // three.js는 3D를 고를 때만 불러온다
 const Perio3D = dynamic(() => import("@/components/oral/perio-3d"), {
@@ -52,8 +56,8 @@ type Jaw = "all" | "upper" | "lower";
 const MODES: { id: MeasureId; label: string; glyph: React.ReactNode }[] = [
   { id: "pd", label: "깊이", glyph: <rect x={5} y={2} width={4} height={10} rx={2} fill="currentColor" /> },
   { id: "rec", label: "퇴축", glyph: <path d="M2 4 Q7 11 12 4" fill="none" stroke="currentColor" strokeWidth={2} /> },
-  { id: "bop", label: "출혈", glyph: <path d="M7 2 C4 6 3 8 3 9.5 A4 4 0 0 0 11 9.5 C11 8 10 6 7 2Z" fill="#ef4444" /> },
-  { id: "mob", label: "동요", glyph: <path d="M2 7h10M4 4.5 2 7l2 2.5M10 4.5 12 7l-2 2.5" fill="none" stroke="currentColor" strokeWidth={1.6} /> },
+  // 출혈(BOP)은 따로 메뉴 없이 깊이·퇴축을 재며 부위의 빨간 점으로(§16)
+  { id: "mob", label: "동요·타진", glyph: <path d="M2 7h10M4 4.5 2 7l2 2.5M10 4.5 12 7l-2 2.5" fill="none" stroke="currentColor" strokeWidth={1.6} /> },
   { id: "plq", label: "치태", glyph: <rect x={3} y={3} width={8} height={8} rx={2} fill="#eab308" /> },
   { id: "state", label: "결손", glyph: <path d="M3 3l8 8M11 3l-8 8" stroke="currentColor" strokeWidth={2} /> },
 ];
@@ -63,6 +67,53 @@ const today = () => {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 };
 const nextFrame = () => new Promise<void>((r) => requestAnimationFrame(() => requestAnimationFrame(() => r())));
+
+/** 동요도·타진 반응 카드 — 단계 칩을 누르면 기록, 같은 칩을 다시 누르면 지움 */
+function ToothCard({
+  t,
+  mob,
+  perc,
+  onSet,
+  onClose,
+}: {
+  t: Fdi;
+  mob: number | undefined;
+  perc: number | undefined;
+  onSet: (m: "mob" | "perc", v: number) => void;
+  onClose?: () => void;
+}) {
+  const row = (m: "mob" | "perc", label: string, cur: number | undefined) => (
+    <div className="flex items-center gap-1.5">
+      <span className="w-7 text-[11px] font-bold text-slate-500">{label}</span>
+      {MOB_LABEL.map((l, v) => (
+        <button
+          key={v}
+          type="button"
+          onClick={() => onSet(m, v)}
+          className={`h-7 min-w-9 rounded-lg px-1.5 text-xs font-extrabold transition active:scale-90 ${
+            cur === v ? (v === 0 ? "bg-slate-700 text-white" : "bg-rose-600 text-white shadow-sm") : "bg-slate-100 text-slate-500 hover:bg-slate-200"
+          }`}
+        >
+          {l}
+        </button>
+      ))}
+    </div>
+  );
+  return (
+    <div className="absolute right-4 top-4 z-10 flex items-center gap-3 rounded-2xl border border-slate-200 bg-white/95 px-3 py-2 shadow-lg backdrop-blur sm:right-5 sm:top-5">
+      <div key={t} className="perio-pop flex h-10 w-10 items-center justify-center rounded-xl bg-slate-900 text-base font-black text-white">{t}</div>
+      <div className="flex flex-col gap-1">
+        {row("mob", "동요", mob)}
+        {row("perc", "타진", perc)}
+      </div>
+      {onClose && (
+        <button type="button" onClick={onClose} className="self-start text-slate-400 hover:text-slate-600" aria-label="닫기">
+          ✕
+        </button>
+      )}
+    </div>
+  );
+}
 
 function ArchGlyph({ jaw }: { jaw: Jaw }) {
   return (
@@ -108,8 +159,11 @@ export function PerioEditor({ patient, examId, initialData, consultationId, onCl
     setViewState(v);
     writeViewMode(VIEW_KEY, v);
     setHover(null);
+    setCardTooth(null);
   };
   const [follow, setFollow] = useState(true);
+  /** 동요·타진 카드의 치아 — 3D는 고른 치아, 2D는 동요·타진 모드에서 누른 치아 */
+  const [cardTooth, setCardTooth] = useState<Fdi | null>(null);
   const history = useRef<PerioData[]>([]);
   const lastSite = useRef<Cursor | null>(null);
   const scrub = useRef(false);
@@ -196,13 +250,17 @@ export function PerioEditor({ patient, examId, initialData, consultationId, onCl
       const f = plaqueSurface(p, s);
       setEntry({ m: "plq", t, f }, surfaceVal(ix, t, f) === true ? undefined : true);
     } else if (mode === "mob") {
-      const n = (Number(toothVal(ix, "mob", t) ?? 0) + 1) % 4;
-      setEntry({ m: "mob", t }, n === 0 ? undefined : n);
+      setCardTooth(t); // 동요·타진 카드에서 고른다
     } else if (mode === "state") {
       const cur = toothVal(ix, "state", t);
       setEntry({ m: "state", t }, cur === undefined ? "missing" : cur === "missing" ? "implant" : undefined);
     }
   };
+
+  /** 출혈 점 토글 — 2D 점·3D 점·키보드 B 공용 */
+  const toggleBop = (t: Fdi, s: Side, p: Pos) => setEntry({ m: "bop", t, s, p }, siteVal(ix, "bop", t, s, p) === true ? undefined : true);
+  /** 동요·타진 — 같은 값을 다시 누르면 지움(− 음성도 기록으로 남는다) */
+  const setTooth = (m: "mob" | "perc", t: Fdi, v: number) => setEntry({ m, t }, toothVal(ix, m, t) === v ? undefined : v);
 
   /** 포인터 공용 처리 — 마우스: 올리면 미리보기·누르면 기록 / 손가락·펜: 짚고 끌어 떼면 기록 */
   const handlePick = (type: "move" | "down" | "up" | "leave", pointerType: string, pk: PerioPick | null, hit?: ChartHit | null) => {
@@ -210,10 +268,13 @@ export function PerioEditor({ patient, examId, initialData, consultationId, onCl
       if (!scrub.current) setHover(null);
       return;
     }
-    const h: EditorHover = pk ? { pick: pk, value: valueFor(pk), hit: hit ?? undefined } : null;
+    // 2D: 깊이·퇴축을 재다가 부위의 출혈 점을 가리키면 그 점을 토글(따로 출혈 메뉴 없음)
+    const onBop = !!pk && !!hit && (mode === "pd" || mode === "rec") && hit.zone === "band" && Math.abs(hit.y - bopDropY(hit.row)) <= 7;
+    const h: EditorHover = pk ? { pick: pk, value: onBop ? null : valueFor(pk), hit: hit ?? undefined, bop: onBop } : null;
+    const commit = (x: NonNullable<EditorHover>) => (x.bop ? toggleBop(x.pick.t, x.pick.s, x.pick.p) : act(x.pick, x.value));
     if (pointerType === "mouse") {
       if (type === "move") setHover(h);
-      if (type === "down" && h) act(h.pick, h.value);
+      if (type === "down" && h) commit(h);
       return;
     }
     if (type === "down") {
@@ -222,7 +283,7 @@ export function PerioEditor({ patient, examId, initialData, consultationId, onCl
     } else if (type === "move" && scrub.current) setHover(h);
     else if (type === "up" && scrub.current) {
       scrub.current = false;
-      if (h) act(h.pick, h.value);
+      if (h) commit(h);
       setHover(null);
     }
   };
@@ -261,7 +322,7 @@ export function PerioEditor({ patient, examId, initialData, consultationId, onCl
       }
       if (key === "b") {
         const b = lastSite.current ?? cursor;
-        return setEntry({ m: "bop", t: b.t, s: b.s, p: b.p }, siteVal(ix, "bop", b.t, b.s, b.p) === true ? undefined : true);
+        return toggleBop(b.t, b.s, b.p);
       }
       if (e.key === "ArrowRight" || e.key === "ArrowLeft") {
         e.preventDefault();
@@ -402,7 +463,7 @@ export function PerioEditor({ patient, examId, initialData, consultationId, onCl
           {onInsert && (
             <button
               type="button"
-              disabled={busy || summary.sites + summary.mobile.length + summary.missing.length === 0}
+              disabled={busy || summary.sites + summary.mobile.length + summary.percussion.length + summary.missing.length === 0}
               onClick={() => void insert()}
               className="h-9 rounded-xl bg-sky-600 px-4 text-sm font-semibold text-white transition hover:bg-sky-700 active:scale-95 disabled:opacity-40"
             >
@@ -427,6 +488,17 @@ export function PerioEditor({ patient, examId, initialData, consultationId, onCl
         </div>
       )}
 
+      <div className="relative flex min-h-0 flex-1 flex-col">
+      {/* 동요·타진 카드 — 3D는 고른 치아를 따라 바뀌고(치아를 옮겨 다니며 바로 기록), 2D는 동요·타진 모드에서 누른 치아 */}
+      {cardTooth && !exporting && (view === "3d" || mode === "mob") && (
+        <ToothCard
+          t={cardTooth}
+          mob={toothVal(ix, "mob", cardTooth) as number | undefined}
+          perc={toothVal(ix, "perc", cardTooth) as number | undefined}
+          onSet={(m, v) => setTooth(m, cardTooth, v)}
+          onClose={view === "2d" ? () => setCardTooth(null) : undefined}
+        />
+      )}
       {view === "3d" && !exporting ? (
         <div className="relative min-h-0 flex-1 p-2 sm:p-3">
           <Perio3D
@@ -438,6 +510,8 @@ export function PerioEditor({ patient, examId, initialData, consultationId, onCl
             follow={follow}
             onPick={(type, pointerType, pk) => handlePick(type, pointerType, pk)}
             onTap={(pk) => act(pk, valueFor(pk))}
+            onFocus={setCardTooth}
+            onBop={toggleBop}
             className="h-full w-full"
           />
         </div>
@@ -450,7 +524,7 @@ export function PerioEditor({ patient, examId, initialData, consultationId, onCl
             data={data}
             mode={mode}
             cursor={cursor}
-            hover={hover?.hit ? { hit: hover.hit, value: hover.value } : null}
+            hover={hover?.hit ? { hit: hover.hit, value: hover.value, bop: hover.bop } : null}
             flash={flash}
             touch={touchUi}
             exporting={exporting}
@@ -460,6 +534,7 @@ export function PerioEditor({ patient, examId, initialData, consultationId, onCl
         </div>
       </div>
       )}
+      </div>
 
       {/* 아래 막대 — 보기 도구 + 요약(숫자만) */}
       <div className="flex flex-wrap items-center gap-2 border-t border-slate-200/70 bg-white px-3 py-2 text-xs">

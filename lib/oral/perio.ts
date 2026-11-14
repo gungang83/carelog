@@ -11,7 +11,7 @@ export type Pos = SitePos; // 원심 · 중앙 · 근심
 export type Surface = "M" | "D" | "B" | "L"; // 치태(O'Leary) 4면
 export type Level = "site" | "tooth" | "surface";
 
-export type MeasureId = "pd" | "rec" | "bop" | "mob" | "plq" | "state";
+export type MeasureId = "pd" | "rec" | "bop" | "mob" | "perc" | "plq" | "state";
 export type MeasureValue = number | string | boolean;
 
 export type MeasureDef = {
@@ -28,7 +28,9 @@ export type MeasureDef = {
 
 export const PD_OPTIONS: MeasureValue[] = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, "F"];
 export const REC_OPTIONS: MeasureValue[] = [-3, -2, -1, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
-export const MOB_LABEL = ["0", "+", "++", "+++"];
+/** 동요도·타진 반응 공용 단계(0 = 음성 "−"도 기록으로 남길 수 있다) */
+export const MOB_LABEL = ["−", "+", "++", "+++"];
+export const PERC_LABEL = MOB_LABEL;
 
 export const MEASURES: Record<MeasureId, MeasureDef> = {
   pd: { id: "pd", label: "Probing depth", short: "PD", plain: "잇몸 주머니 깊이", level: "site", options: PD_OPTIONS, format: (v) => String(v) },
@@ -43,6 +45,7 @@ export const MEASURES: Record<MeasureId, MeasureDef> = {
   },
   bop: { id: "bop", label: "출혈(BOP)", short: "BOP", plain: "잴 때 피가 난 곳", level: "site", options: [true, false], format: (v) => (v ? "●" : "") },
   mob: { id: "mob", label: "동요도", short: "MOB", plain: "치아 흔들림", level: "tooth", options: [0, 1, 2, 3], format: (v) => MOB_LABEL[Number(v)] ?? String(v) },
+  perc: { id: "perc", label: "타진 반응", short: "PERC", plain: "두드렸을 때 아픈 정도", level: "tooth", options: [0, 1, 2, 3], format: (v) => PERC_LABEL[Number(v)] ?? String(v) },
   plq: { id: "plq", label: "치태(O'Leary)", short: "PLQ", plain: "치태가 묻은 면", level: "surface", options: [true, false], format: (v) => (v ? "■" : "") },
   state: {
     id: "state",
@@ -170,6 +173,8 @@ export type PerioSummary = {
   pcr: number | null;
   meanCal: number | null;
   mobile: { t: Fdi; v: number }[];
+  /** 타진 반응 양성(+ 이상) */
+  percussion: { t: Fdi; v: number }[];
   missing: Fdi[];
   implants: Fdi[];
   /** 깊은 부위(≥4) 상위 */
@@ -214,6 +219,9 @@ export function summarize(d: PerioData): PerioSummary {
     mobile: present
       .map((t) => ({ t, v: Number(toothVal(ix, "mob", t) ?? 0) }))
       .filter((x) => x.v > 0),
+    percussion: present
+      .map((t) => ({ t, v: Number(toothVal(ix, "perc", t) ?? 0) }))
+      .filter((x) => x.v > 0),
     missing,
     implants,
     deep: pds.filter((x) => x.v >= 4).sort((a, b) => b.v - a.v).slice(0, 12),
@@ -237,6 +245,7 @@ export function summaryText(d: PerioData, date: string): string {
   if (idx.length) lines.push(idx.join(" · "));
   const teeth: string[] = [];
   if (s.mobile.length) teeth.push(`동요: ${s.mobile.map((m) => `${m.t}(${MOB_LABEL[m.v]})`).join(", ")}`);
+  if (s.percussion.length) teeth.push(`타진: ${s.percussion.map((m) => `${m.t}(${PERC_LABEL[m.v]})`).join(", ")}`);
   if (s.missing.length) teeth.push(`결손: ${s.missing.join(", ")}`);
   if (s.implants.length) teeth.push(`임플란트: ${s.implants.join(", ")}`);
   if (teeth.length) lines.push(teeth.join(" · "));

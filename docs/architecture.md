@@ -818,7 +818,7 @@ lib/ai/index.ts     askAI(task, {prompt, system, maxTokens}) — 순서대로 �
 ## 구강 지표 기록 (spec 040)
 
 ```
-lib/oral/perio.ts            지표 등록부 MEASURES(pd·rec·bop·mob·plq·state) · 기록 모델(entries) · 진행(stepCursor — 순서 고정 없음, 진행 방향 이어 감) · summarize/summaryText(측정값만)
+lib/oral/perio.ts            지표 등록부 MEASURES(pd·rec·bop·mob·perc·plq·state) · 기록 모델(entries) · 진행(stepCursor — 순서 고정 없음, 진행 방향 이어 감) · summarize/summaryText(측정값만)
 lib/dental/chart.ts          ★치아 엔진(범용) — 정면 치열 차트 배치·mm↔화면·chartHit(점 → 치아·부위·영역·CEJ 기준 mm) · PERIO_ROWS
 components/dental/dental-chart.tsx  ★치아 엔진 화면 — 치아를 그리고 under/over/free/top 층 + onPointer만 넘김(기능은 층만 얹는다)
 components/oral/perio-chart.tsx   잇몸 기록 층 — 잇몸(반투명 분홍)·잇몸선·주머니 막대(깊이 색, 자라나는 움직임)·mm 눈금·값 풍선·숫자·출혈·동요·치태
@@ -826,7 +826,7 @@ components/oral/perio-editor.tsx  입력 화면 — 차트 위에서 바로: 마
 app/actions/oral-exams.ts    list/get/save/delete(oral_exams)
 진입                         상담보드 [🩺 잇몸 기록] (환자 연결 상담이면 회차 저장) · 환자 페이지 "잇몸 기록" 섹션(상담 없이도)
 lib/dental/teeth-3d.ts       ★치아 엔진 3D — toothFrames3D(치아별 기준틀) · sitePoint3D / pointToSite3D(면·부위·mm ↔ 3D 점) · probePoint3D(장축 평행 탐침 선)
-components/oral/perio-3d.tsx 잇몸 기록 3D 층 — 잇몸 띠·잇몸선·주머니·눈금·M/C/D 글자 + 누르면 그 치아·면 정면(돌리기 중심), 치관 재클릭 = 바깥⇄안쪽
+components/oral/perio-3d.tsx 잇몸 기록 3D 층 — 잇몸 띠·잇몸선·주머니·눈금·M/C/D 글자·치아 번호·출혈 점 버튼 + 누르면 그 치아·면 정면(돌리기 중심), 치관 재클릭 = 바깥⇄안쪽, 빈 곳 = 물러나기
 lib/oral/perio-pick.ts       PerioPick — 2D·3D 공용 "가리킨 곳"(같은 입력 규칙)
 lib/svg-to-png.ts            SVG → PNG 공용
 ```

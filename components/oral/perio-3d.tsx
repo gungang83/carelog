@@ -7,7 +7,7 @@
 // 입력은 고른 치아·고른 면에서만: 가리킨 곳을 "치아·면·부위·CEJ 기준 mm"로 바꿔 넘긴다(onPick, 2D와 같은 규칙).
 // 동요·결손(치아 단위)은 누르면 바로 기록(onTap). 치아나 빈 곳을 끌면 돌리기.
 
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { isUpper, type Fdi } from "@/lib/dental/teeth";
@@ -40,8 +40,12 @@ type Props = {
   follow: boolean;
   /** 고른 치아·면 위의 포인터(입력) */
   onPick: (type: "move" | "down" | "up" | "leave", pointerType: string, pick: PerioPick | null) => void;
-  /** 치아 단위 모드(동요·결손)에서 치아를 눌렀을 때 */
+  /** 치아 단위 모드(결손)에서 치아를 눌렀을 때 */
   onTap: (pick: PerioPick) => void;
+  /** 고른 치아가 바뀜(동요·타진 카드) */
+  onFocus?: (t: Fdi | null) => void;
+  /** 고른 면의 출혈 점 토글 */
+  onBop?: (t: Fdi, s: Side, p: Pos) => void;
   className?: string;
 };
 
@@ -55,7 +59,7 @@ const TOOTH = new THREE.Color("#f4ecdc");
 const SITES: Pos[] = ["M", "C", "D"];
 const v3 = (a: V3) => new THREE.Vector3(a[0], a[1], a[2]);
 
-export default function Perio3D({ data, mode, jaw, cursor, hover, follow, onPick, onTap, className }: Props) {
+export default function Perio3D({ data, mode, jaw, cursor, hover, follow, onPick, onTap, onFocus, onBop, className }: Props) {
   const hostRef = useRef<HTMLDivElement>(null);
   const bubbleRef = useRef<HTMLDivElement>(null);
   const ringRef = useRef<HTMLDivElement>(null);
@@ -71,10 +75,17 @@ export default function Perio3D({ data, mode, jaw, cursor, hover, follow, onPick
   /** 지금 고른 치아·면(겹침 버튼 표시용) */
   const [focused, setFocused] = useState<{ t: Fdi; s: Side } | null>(null);
   // 장면 안에서 읽는 최신 값
-  const live = useRef({ data, mode, jaw, cursor, hover, follow, onPick, onTap, lastPointer: "mouse" });
+  const live = useRef({ data, mode, jaw, cursor, hover, follow, onPick, onTap, onFocus, lastPointer: "mouse" });
   useLayoutEffect(() => {
-    live.current = { ...live.current, data, mode, jaw, cursor, hover, follow, onPick, onTap };
+    live.current = { ...live.current, data, mode, jaw, cursor, hover, follow, onPick, onTap, onFocus };
   });
+  /** 고른 면 세 부위의 출혈 점(HTML 버튼 — 위치는 매 프레임 장면에서) */
+  const bopRefs = useRef<(HTMLButtonElement | null)[]>([]);
+  const focusTagRef = useRef<HTMLDivElement>(null);
+  const ix = useMemo(() => indexOf(data), [data]);
+  useEffect(() => {
+    live.current.onFocus?.(focused?.t ?? null);
+  }, [focused]);
 
   useEffect(() => {
     const host = hostRef.current;
@@ -204,6 +215,50 @@ export default function Perio3D({ data, mode, jaw, cursor, hover, follow, onPick
     };
 
     // ── 측정값 층: 잇몸 커튼(반투명 분홍) · 잇몸선(빨강) · 주머니 막대(깊이 색) · 출혈 · 치태 ──
+    // ── 치아 번호 — 치관에 희미하게(보는 면 쪽), 고른 치아는 교합면 너머에 진하게 ──
+    const tagTex = (txt: string, on: boolean) => {
+      const k = `tag:${txt}:${on ? 1 : 0}`;
+      let tex = numTex.get(k);
+      if (!tex) {
+        const cv = document.createElement("canvas");
+        cv.width = 128;
+        cv.height = 64;
+        const g = cv.getContext("2d")!;
+        g.textAlign = "center";
+        g.textBaseline = "middle";
+        g.font = "800 40px system-ui, sans-serif";
+        if (on) {
+          g.fillStyle = "#0f172a";
+          g.beginPath();
+          g.roundRect(8, 4, 112, 56, 28);
+          g.fill();
+          g.fillStyle = "#ffffff";
+        } else {
+          g.lineWidth = 7;
+          g.strokeStyle = "rgba(255,255,255,0.85)";
+          g.strokeText(txt, 64, 35);
+          g.fillStyle = "#334155";
+        }
+        g.fillText(txt, 64, 35);
+        tex = new THREE.CanvasTexture(cv);
+        numTex.set(k, tex);
+      }
+      return tex;
+    };
+    const labelGroup = new THREE.Group();
+    scene.add(labelGroup);
+    const toothLabels: { t: Fdi; sp: THREE.Sprite; at: THREE.Vector3; n: THREE.Vector3 }[] = [];
+    frames.forEach((f, t) => {
+      for (const s of ["B", "L"] as Side[]) {
+        // 깊이 검사 켬 — 치아 뒤(반대편 악궁)의 번호가 비쳐 보이지 않게, 표면에서 1.2mm 띄움
+        const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: tagTex(t, false), opacity: 0.6, transparent: true, depthWrite: false }));
+        sp.position.copy(v3(sitePoint3D(f, s, "C", -f.crown * 0.78, 1.2)));
+        sp.renderOrder = 11;
+        labelGroup.add(sp);
+        toothLabels.push({ t, sp, at: v3(f.cej), n: v3(f.lingual).multiplyScalar(s === "B" ? -1 : 1) });
+      }
+    });
+
     /** 깊이 막대·숫자 면 묶음(면이 화면을 볼 때만 보임) */
     let faces: { g: THREE.Group; at: THREE.Vector3; n: THREE.Vector3 }[] = [];
     /** 치아보다 나중에·깊이 무시로 그리기(가려지지 않게) */
@@ -408,7 +463,8 @@ export default function Perio3D({ data, mode, jaw, cursor, hover, follow, onPick
       }
     };
 
-    const toothMode = () => live.current.mode === "mob" || live.current.mode === "state";
+    // 치아 단위로 바로 기록하는 건 결손뿐 — 동요·타진은 치아를 골라(옮겨 가며) 카드에서
+    const toothMode = () => live.current.mode === "state";
     // ── 표준 시점: 고른 치아·면을 정면으로 ──
     //   면의 바깥 법선(바깥 = −설측 벡터, 안쪽 = +설측 벡터)을 수평으로 따라 보고, 화면 가운데 = CEJ에서 뿌리 쪽 3mm(잴 곳).
     //   옮긴 뒤엔 그 치아가 돌리기 중심 — 끌면 그 치아를 중심으로 악궁이 돈다.
@@ -419,6 +475,7 @@ export default function Perio3D({ data, mode, jaw, cursor, hover, follow, onPick
       if (!f) return;
       focus = { t, s };
       setFocused(focus);
+
       const cej = v3(f.cej);
       const normal = v3(f.lingual).multiplyScalar(s === "B" ? -1 : 1);
       normal.y = 0;
@@ -681,6 +738,30 @@ export default function Perio3D({ data, mode, jaw, cursor, hover, follow, onPick
         const front = camera.position.clone().sub(letters.at).dot(letters.n) > 0;
         for (const sp of letters.sprites) sp.visible = front;
       }
+      // 치아 번호: 보이는(흐려지지 않은) 치아의, 화면 쪽 면에만 — 고른 치아는 진한 번호로 대신
+      // 화면에서 늘 비슷한 크기로 읽히게 거리에 비례(가까이선 작게, 멀리선 크게)
+      const zk = THREE.MathUtils.clamp(camera.position.distanceTo(controls.target) / (radius * 1.6), 0.6, 1.5);
+      for (const lb of toothLabels) {
+        lb.sp.scale.set(3 * zk, 1.5 * zk, 1);
+        const m = teeth.get(lb.t)!;
+        lb.sp.visible =
+          m.visible &&
+          (m.material as THREE.MeshStandardMaterial).opacity === 1 &&
+          lb.t !== focus?.t &&
+          camera.position.clone().sub(lb.at).normalize().dot(lb.n) > 0.15;
+      }
+      // 고른 치아 번호(진하게) — 교합면 너머, 화면 밖으로 나가면 가장자리에 붙여 둔다
+      const fl = focusTagRef.current;
+      if (fl) {
+        const ff = focus ? frames.get(focus.t) : null;
+        if (focus && ff && teeth.get(focus.t)?.visible) {
+          const q = project(v3(sitePoint3D(ff, focus.s, "C", -ff.crown - 2.2, 0)));
+          const x = THREE.MathUtils.clamp(q.x, 30, host.clientWidth - 30);
+          const y = THREE.MathUtils.clamp(q.y, 24, host.clientHeight - 24);
+          fl.style.transform = `translate(${x - 26}px, ${y - 17}px)`;
+          fl.style.opacity = "1";
+        } else fl.style.opacity = "0";
+      }
       renderer.render(scene, camera);
       // HTML 겹침: 값 풍선 · 다음 칸 링 · 치아 번호
       const L = live.current;
@@ -701,12 +782,14 @@ export default function Perio3D({ data, mode, jaw, cursor, hover, follow, onPick
           bub.textContent = String(h.value);
         } else bub.style.opacity = "0";
         const hf = hint ? frames.get(hint.t) : null;
-        if (hint && hf) {
+        // 고른 치아를 잴 때는 진한 번호·M·C·D 글자가 있으니 말풍선은 숨김(겹침 방지)
+        if (hint && hf && !(hint.kind === "input" && hint.t === focus?.t)) {
           const s = project(v3(sitePoint3D(hf, hint.s, "C", -hf.crown - 1.5, 0)));
           tip.style.transform = `translate(${s.x - 30}px, ${s.y - 12}px)`;
           tip.style.opacity = "1";
-          const mob = Number(toothVal(indexOf(L.data), "mob", hint.t) ?? 0);
-          const mobTxt = mob ? ` · ${MOB_LABEL[mob]}` : "";
+          const mob = toothVal(indexOf(L.data), "mob", hint.t);
+          const perc = toothVal(indexOf(L.data), "perc", hint.t);
+          const mobTxt = (mob !== undefined ? ` · 동요${MOB_LABEL[Number(mob)]}` : "") + (perc !== undefined ? ` · 타진${MOB_LABEL[Number(perc)]}` : "");
           tip.textContent =
             hint.kind === "input"
               ? `${hint.t} ${SIDE_LABEL[hint.s]} ${hint.p}${mobTxt}`
@@ -716,6 +799,27 @@ export default function Perio3D({ data, mode, jaw, cursor, hover, follow, onPick
                   ? `${hint.t} ${SIDE_LABEL[hint.s]} 보기`
                   : `${hint.t}${mobTxt}`;
         } else tip.style.opacity = "0";
+      }
+      // 출혈 점 — 고른 면의 M·C·D 글자보다 치관 쪽(깊이·퇴축 모드)
+      {
+        const fc = focus ? frames.get(focus.t) : null;
+        const ruler = L.mode === "pd" || L.mode === "rec";
+        const front = !!fc && camera.position.clone().sub(v3(fc.cej)).normalize().dot(v3(fc.lingual).multiplyScalar(focus!.s === "B" ? -1 : 1)) > 0.15;
+        SITES.forEach((p, i) => {
+          const el = bopRefs.current[i];
+          if (!el) return;
+          if (!fc || !focus || !ruler || !front || !jawVisible(fc.upper)) {
+            el.style.opacity = "0";
+            el.style.pointerEvents = "none";
+            return;
+          }
+          const r0 = siteVal(indexOf(L.data), "rec", focus.t, focus.s, p);
+          const top = L.mode === "pd" ? Math.min(typeof r0 === "number" ? r0 : 0, 0) : -3;
+          const q = project(v3(probePoint3D(fc, focus.s, p, top - 5.4, 1.5)));
+          el.style.transform = `translate(${q.x - 12}px, ${q.y - 12}px)`;
+          el.style.opacity = "1";
+          el.style.pointerEvents = "auto";
+        });
       }
       const ring = ringRef.current;
       if (ring) {
@@ -747,6 +851,7 @@ export default function Perio3D({ data, mode, jaw, cursor, hover, follow, onPick
       renderer.domElement.removeEventListener("pointerleave", onLeave);
       disposeGroup(layer);
       disposeGroup(hoverLayer);
+      disposeGroup(labelGroup);
       numTex.forEach((t) => t.dispose());
       teeth.forEach((m) => {
         m.geometry.dispose();
@@ -795,6 +900,35 @@ export default function Perio3D({ data, mode, jaw, cursor, hover, follow, onPick
             {focused.t} {SIDE_LABEL[focused.s]} ⇄ {SIDE_LABEL[other(focused.s)]}
           </button>
         )}
+      </div>
+      {focused &&
+        SITES.map((p, i) => {
+          const on = siteVal(ix, "bop", focused.t, focused.s, p) === true;
+          return (
+            <button
+              key={p}
+              ref={(el) => {
+                bopRefs.current[i] = el;
+              }}
+              type="button"
+              title={`${focused.t} ${SIDE_LABEL[focused.s]} ${p} 출혈`}
+              aria-pressed={on}
+              onClick={() => onBop?.(focused.t, focused.s, p)}
+              className="group pointer-events-none absolute left-0 top-0 flex h-6 w-6 items-center justify-center opacity-0"
+            >
+              <svg viewBox="0 0 14 14" className={`h-5 w-5 transition-transform group-hover:scale-125 group-active:scale-90 ${on ? "drop-shadow" : ""}`} aria-hidden>
+                <path
+                  d="M7 1.5 C4 5.5 3 7.6 3 9.2 A4 4 0 0 0 11 9.2 C11 7.6 10 5.5 7 1.5Z"
+                  fill={on ? "#dc2626" : "rgba(255,255,255,0.92)"}
+                  stroke={on ? "#ffffff" : "#f87171"}
+                  strokeWidth={1.2}
+                />
+              </svg>
+            </button>
+          );
+        })}
+      <div ref={focusTagRef} className="pointer-events-none absolute left-0 top-0 flex h-[34px] w-[52px] items-center justify-center rounded-full bg-slate-900 text-base font-black text-white opacity-0 shadow-lg ring-2 ring-white">
+        {focused?.t}
       </div>
       <div ref={ringRef} className="pointer-events-none absolute left-0 top-0 h-[18px] w-[18px] opacity-0">
         <div className="absolute inset-0 rounded-full border-2 border-sky-600" style={{ animation: "perio-pulse 1.4s ease-out infinite" }} />
