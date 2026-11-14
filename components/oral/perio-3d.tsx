@@ -102,7 +102,7 @@ export default function Perio3D({ data, mode, jaw, cursor, hover, follow, onPick
     const center = box.getCenter(new THREE.Vector3());
     const radius = box.getSize(new THREE.Vector3()).length() / 2;
     controls.target.copy(center);
-    controls.minDistance = radius * 0.9;
+    controls.minDistance = radius * 0.5;
     controls.maxDistance = radius * 6;
     camera.position.copy(center).add(new THREE.Vector3(0, 0, radius * 2.6));
     camera.lookAt(center);
@@ -113,7 +113,8 @@ export default function Perio3D({ data, mode, jaw, cursor, hover, follow, onPick
     const disposeGroup = (g: THREE.Group) => {
       g.traverse((o) => {
         const m = o as THREE.Mesh;
-        if (m.geometry) m.geometry.dispose();
+        // 스프라이트는 공용 지오메트리 — 재질만 정리
+        if (m.geometry && !(o as THREE.Sprite).isSprite) m.geometry.dispose();
         if (m.material) (Array.isArray(m.material) ? m.material : [m.material]).forEach((x) => x.dispose());
       });
       g.clear();
@@ -131,6 +132,32 @@ export default function Perio3D({ data, mode, jaw, cursor, hover, follow, onPick
       const m = new THREE.Mesh(new THREE.SphereGeometry(r, 14, 10), new THREE.MeshStandardMaterial({ color, roughness: 0.35 }));
       m.position.copy(p);
       return m;
+    };
+
+    // 눈금 숫자 — 글자 텍스처는 숫자마다 한 번만 만든다
+    const numTex = new Map<string, THREE.CanvasTexture>();
+    const numberSprite = (txt: string) => {
+      let tex = numTex.get(txt);
+      if (!tex) {
+        const cv = document.createElement("canvas");
+        cv.width = 64;
+        cv.height = 64;
+        const g = cv.getContext("2d")!;
+        g.fillStyle = "rgba(255,255,255,0.92)";
+        g.beginPath();
+        g.arc(32, 32, 26, 0, Math.PI * 2);
+        g.fill();
+        g.fillStyle = "#0369a1";
+        g.font = "bold 34px system-ui, sans-serif";
+        g.textAlign = "center";
+        g.textBaseline = "middle";
+        g.fillText(txt, 32, 34);
+        tex = new THREE.CanvasTexture(cv);
+        numTex.set(txt, tex);
+      }
+      const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex }));
+      sp.scale.setScalar(1.7);
+      return sp;
     };
 
     // ── 측정값 층: 잇몸 커튼(반투명 분홍) · 잇몸선(빨강) · 주머니 막대(깊이 색) · 출혈 · 치태 ──
@@ -233,15 +260,25 @@ export default function Perio3D({ data, mode, jaw, cursor, hover, follow, onPick
       // mm 눈금 — 치아 축을 따라(3mm마다 길게), 치아에 가려지지 않게 맨 위에
       const from = live.current.mode === "pd" ? gm : -3;
       const to = live.current.mode === "pd" ? gm + 15 : 10;
-      const onTop = (m: THREE.Mesh) => {
-        (m.material as THREE.MeshStandardMaterial).depthTest = false;
-        m.renderOrder = 5;
+      // ★치아(반투명 단계에서 그려짐)보다 나중에 그리도록 같은 단계(transparent) + 높은 renderOrder + 깊이 무시
+      const onTop = (m: THREE.Mesh | THREE.Sprite) => {
+        const mat = m.material as THREE.Material;
+        mat.depthTest = false;
+        mat.transparent = true;
+        m.renderOrder = 20;
         hoverLayer.add(m);
       };
       onTop(bar(v3(sitePoint3D(f, h.pick.s, h.pick.p, from, 1.5)), v3(sitePoint3D(f, h.pick.s, h.pick.p, to, 1.5)), 0.12, "#0284c7"));
       for (let n = Math.ceil(from); n <= to; n++) {
         const long = n % 3 === 0;
         onTop(bar(v3(sitePoint3D(f, h.pick.s, h.pick.p, n, 1.5)), v3(sitePoint3D(f, h.pick.s, h.pick.p, n, long ? 3.4 : 2.4)), long ? 0.14 : 0.09, "#0284c7"));
+        // 3mm마다 숫자(깊이 모드는 잇몸선에서 센 값, 퇴축 모드는 CEJ 기준)
+        if (long || n === Math.ceil(from)) {
+          const label = live.current.mode === "pd" ? Math.round(n - gm) : n;
+          const sp = numberSprite(String(label));
+          sp.position.copy(v3(sitePoint3D(f, h.pick.s, h.pick.p, n, 5.2)));
+          onTop(sp);
+        }
       }
       if (typeof h.value === "number" || h.value === "F") {
         if (live.current.mode === "pd") {
@@ -259,18 +296,6 @@ export default function Perio3D({ data, mode, jaw, cursor, hover, follow, onPick
     // ── 따라 보기: 치아·면마다 "표준 시점"으로 부드럽게 옮겨 간다 ──
     // (예전: 지금 화면에서 상대적으로 돌림 → 여러 번 쌓이면 각도·거리가 어긋나 엉뚱한 곳에서 보게 됨. 이제 늘 같은 자리에서 본다)
     //   바깥(B) = 그 치아 바깥에서 수평으로(교합면 쪽 살짝) · 안쪽(P/L) = 교합면 너머 위(아래)에서 내려다보며 안쪽 면을
-    const jawCenter = (upper: boolean) => {
-      const c = new THREE.Vector3();
-      let n = 0;
-      frames.forEach((f) => {
-        if (f.upper === upper) {
-          c.add(v3(f.cej));
-          n++;
-        }
-      });
-      return c.multiplyScalar(1 / Math.max(1, n));
-    };
-    const jc = { upper: jawCenter(true), lower: jawCenter(false) };
     const overview = { target: center.clone(), dir: new THREE.Vector3(0, 0, 1), dist: radius * 2.6 };
     let goal: { target: THREE.Vector3; dir: THREE.Vector3; dist: number } | null = null;
     let followed = "";
@@ -283,19 +308,24 @@ export default function Perio3D({ data, mode, jaw, cursor, hover, follow, onPick
     const followTo = (t: Fdi, s: Side) => {
       const f = frames.get(t);
       if (!f) return;
-      const c = f.upper ? jc.upper : jc.lower;
       const cej = v3(f.cej);
-      const outH = new THREE.Vector3(cej.x - c.x, 0, cej.z - c.z).normalize(); // 턱 중심 → 치아(바깥 방향)
-      const occl = new THREE.Vector3(0, f.upper ? -1 : 1, 0);
-      const dir =
-        s === "B"
-          ? outH.clone().add(occl.clone().multiplyScalar(0.2)).add(new THREE.Vector3(0, 0, 0.12)).normalize()
-          : occl.clone().multiplyScalar(0.95).add(outH.clone().multiplyScalar(-0.6)).normalize();
-      // 치아(CEJ)를 화면 가운데 — 뿌리 쪽 4mm(잴 곳)를 살짝 더 보이게
-      const target = cej.clone().add(v3(f.root).multiplyScalar(2));
-      goal = { target, dir, dist: radius * (s === "B" ? 1.25 : 1.4) };
-      // 안쪽을 볼 때 맞은편 턱은 비켜 준다(전체 보기일 때)
-      dimJaw(s === "L" && live.current.jaw === "all" ? !f.upper : null);
+      // ★고른 면을 정면으로 — 면의 바깥 법선(바깥 = −설측 벡터, 안쪽 = +설측 벡터) 그대로, 기울이지 않는다
+      const normal = v3(f.lingual).multiplyScalar(s === "B" ? -1 : 1);
+      normal.y = 0;
+      normal.normalize();
+      // 치아 축이 화면에서 세로로 서도록 수평으로 보고, 화면 가운데 = CEJ에서 뿌리 쪽 3mm(잴 곳)
+      const target = cej.clone().add(v3(f.root).multiplyScalar(3));
+      const dist = s === "B" ? radius * 1.0 : radius * 0.9;
+      goal = { target, dir: normal, dist };
+      // 사이를 가리는 치아는 비킨다: 맞은편 턱 + (안쪽을 볼 때) 카메라 쪽에 있는 같은 턱 치아
+      teeth.forEach((m, tt) => {
+        const ft = frames.get(tt)!;
+        const mat = m.material as THREE.MeshStandardMaterial;
+        const otherJaw = ft.upper !== f.upper;
+        const between = tt !== t && v3(ft.cej).sub(target).dot(normal) > 4;
+        mat.opacity = (otherJaw && live.current.jaw === "all" && s === "L") || between ? 0.08 : 1;
+        mat.depthWrite = mat.opacity === 1;
+      });
     };
     const resetView = () => {
       goal = { ...overview, target: overview.target.clone(), dir: overview.dir.clone() };
@@ -465,6 +495,8 @@ export default function Perio3D({ data, mode, jaw, cursor, hover, follow, onPick
     loop();
 
     api.current = { rebuild, redrawHover, followTo, resetView };
+    // 개발 중 자동 점검용(배포 빌드에선 빠짐)
+    if (process.env.NODE_ENV !== "production") (window as unknown as { __perio3d?: unknown }).__perio3d = { followTo };
     rebuild();
 
     return () => {
@@ -477,6 +509,7 @@ export default function Perio3D({ data, mode, jaw, cursor, hover, follow, onPick
       renderer.domElement.removeEventListener("pointerleave", onLeave);
       disposeGroup(layer);
       disposeGroup(hoverLayer);
+      numTex.forEach((t) => t.dispose());
       teeth.forEach((m) => {
         m.geometry.dispose();
         (m.material as THREE.Material).dispose();
