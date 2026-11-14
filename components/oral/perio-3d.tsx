@@ -354,6 +354,7 @@ export default function Perio3D({ data, mode, jaw, cursor, hover, follow, onPick
       }
     };
 
+    const toothMode = () => live.current.mode === "mob" || live.current.mode === "state";
     // ── 표준 시점: 고른 치아·면을 정면으로 ──
     //   면의 바깥 법선(바깥 = −설측 벡터, 안쪽 = +설측 벡터)을 수평으로 따라 보고, 화면 가운데 = CEJ에서 뿌리 쪽 3mm(잴 곳).
     //   옮긴 뒤엔 그 치아가 돌리기 중심 — 끌면 그 치아를 중심으로 악궁이 돈다.
@@ -414,18 +415,57 @@ export default function Perio3D({ data, mode, jaw, cursor, hover, follow, onPick
 
     // ── 포인터 ──
     const ray = new THREE.Raycaster();
-    const pick = (ev: PointerEvent): { pick: PerioPick; point: THREE.Vector3 } | null => {
+    /** 고른 치아의 치관 중 "뒤집기" 영역 시작(CEJ에서 치관 쪽 mm) — 그 아래가 잴 곳 */
+    const flipFrom = (f: ToothFrame3D) => Math.max(4, f.crown * 0.5);
+    /**
+     * 고른 면의 잴 곳 — 치아 표면이 아니라 세 탐침 선(M·C·D, 장축 평행)에 포인터 광선이 가장 가까운 곳으로 읽는다.
+     * ★그래서 뿌리 사이(분지부)·뿌리 끝 너머처럼 치아가 없는 곳에서도 얼마든지 깊은 주머니를 잴 수 있다.
+     */
+    const probePick = (): { pick: PerioPick } | null => {
+      if (!focus || toothMode()) return null;
+      const f = frames.get(focus.t);
+      if (!f || !jawVisible(f.upper)) return null;
+      const s = focus.s;
+      const n = v3(f.lingual).multiplyScalar(s === "B" ? -1 : 1);
+      if (camera.position.clone().sub(v3(f.cej)).normalize().dot(n) < 0.2) return null; // 그 면이 화면을 보고 있을 때만
+      const o = ray.ray.origin;
+      const d = ray.ray.direction;
+      const u = v3(f.root);
+      let best: { p: Pos; dist: number; t: number } | null = null;
+      for (const p of SITES) {
+        const a = v3(probePoint3D(f, s, p, 0, 1.5));
+        const w0 = o.clone().sub(a);
+        const b = d.dot(u);
+        const dd = d.dot(w0);
+        const e = u.dot(w0);
+        const den = 1 - b * b;
+        if (den < 1e-6) continue;
+        const sr = (b * e - dd) / den;
+        const tl = (e - b * dd) / den;
+        if (sr <= 0) continue;
+        const dist = o.clone().addScaledVector(d, sr).distanceTo(a.clone().addScaledVector(u, tl));
+        if (!best || dist < best.dist) best = { p, dist, t: tl };
+      }
+      if (!best || best.dist > f.halfMd * 0.45) return null;
+      const r0 = siteVal(indexOf(live.current.data), "rec", focus.t, s, best.p);
+      const gm = typeof r0 === "number" ? r0 : 0;
+      // 치관 쪽은 뒤집기 영역 전까지, 뿌리 쪽은 잇몸선 + 18mm(15 넘으면 F)까지
+      if (best.t < -flipFrom(f) || best.t > gm + 18) return null;
+      return { pick: { t: focus.t, s, p: best.p, mm: -best.t, zone: best.t <= 0 ? "crown" : "root" } };
+    };
+    const pick = (ev: PointerEvent): { pick: PerioPick } | null => {
       const r = renderer.domElement.getBoundingClientRect();
       ray.setFromCamera(new THREE.Vector2(((ev.clientX - r.left) / r.width) * 2 - 1, -((ev.clientY - r.top) / r.height) * 2 + 1), camera);
+      const probe = probePick();
+      if (probe) return probe;
       const targets = [...teeth.values()].filter((m) => m.visible && (m.material as THREE.MeshStandardMaterial).opacity > 0.5);
       const hit = ray.intersectObjects(targets, false)[0];
       if (!hit) return null;
       const t = hit.object.userData.fdi as Fdi;
       const f = frames.get(t)!;
       const s3 = pointToSite3D(f, [hit.point.x, hit.point.y, hit.point.z]);
-      return { pick: { t, s: s3.side, p: s3.pos, mm: s3.mm, zone: s3.mm >= 0 ? "crown" : "root" }, point: hit.point.clone() };
+      return { pick: { t, s: s3.side, p: s3.pos, mm: s3.mm, zone: s3.mm >= 0 ? "crown" : "root" } };
     };
-    const toothMode = () => live.current.mode === "mob" || live.current.mode === "state";
     /** 포인터 아래 분류 — 고른 치아·면의 잴 곳만 입력, 치관 교합 쪽 절반·반대 면은 뒤집기, 다른 치아는 이동 */
     const classify = (p: { pick: PerioPick } | null): Hint => {
       if (!p) return null;
@@ -433,7 +473,7 @@ export default function Perio3D({ data, mode, jaw, cursor, hover, follow, onPick
       if (toothMode()) return { t, s, p: pos, kind: "tooth" };
       if (!focus || focus.t !== t) return { t, s, p: pos, kind: "focus" };
       const f = frames.get(t)!;
-      if (s !== focus.s || mm > Math.max(4, f.crown * 0.5)) return { t, s, p: pos, kind: "flip" };
+      if (s !== focus.s || mm > flipFrom(f)) return { t, s, p: pos, kind: "flip" };
       return { t, s, p: pos, kind: "input" };
     };
     let hint: Hint = null;
