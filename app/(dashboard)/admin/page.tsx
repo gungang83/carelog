@@ -66,6 +66,12 @@ export default async function AdminPage() {
           >
             치아 도식 라이브러리 →
           </Link>
+          <Link
+            href="/admin/ai"
+            className="rounded-xl border border-violet-200 bg-violet-50 px-3 py-2 text-sm font-medium text-violet-700 transition hover:bg-violet-100"
+          >
+            AI 엔진 →
+          </Link>
         </div>
       </div>
 

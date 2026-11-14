@@ -3,6 +3,7 @@ import { getPatientById } from "@/app/actions/patients";
 import { getConsultationsByPatientId, searchConsultations } from "@/app/actions/consultations";
 import { getPatientPortalStatus } from "@/app/actions/patient-status";
 import { PatientConsultations } from "@/components/patients/patient-consultations";
+import { PatientOralExams } from "@/components/patients/patient-oral-exams";
 import { PatientEditForm } from "@/components/patient-edit-form";
 import { PatientPortalStatus } from "@/components/patient/patient-portal-status";
 import { formatPhoneForList } from "@/lib/patient-search";
@@ -114,6 +115,11 @@ export default async function PatientConsultationPage({
           legacy={consultations}
           hasMore={cardRes.ok ? cardRes.hasMore : false}
         />
+      </section>
+
+      {/* spec 040 — 잇몸 기록(치주 차트) 회차 — 상담 없이도 시작 가능 */}
+      <section className="rounded-2xl border border-rose-100 bg-white p-6 shadow-sm shadow-rose-100/60">
+        <PatientOralExams patientId={String(patient.id)} patientName={patient.name} />
       </section>
 
       <section className="rounded-2xl border border-sky-100 bg-white p-6 shadow-sm shadow-sky-100/60">

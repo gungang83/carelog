@@ -1,6 +1,6 @@
 "use server";
 
-import Anthropic from "@anthropic-ai/sdk";
+import { askAI } from "@/lib/ai";
 import { getMyInstitutionLab, getMyInstitutionId, getSessionUser } from "@/lib/auth/institution";
 import { deductCredit } from "@/lib/credits";
 
@@ -35,24 +35,16 @@ export async function translateUtterance(text: string): Promise<UtteranceTransla
   const ko = isMostlyKorean(trimmed);
   const target = ko ? "영어" : "한국어";
   try {
-    const anthropic = new Anthropic({ apiKey: key });
-    const message = await anthropic.messages.create({
-      // 실시간 자막 — 문장당 수백 ms 응답이 목표라 Haiku 사용(요약 품질 불필요, 직역 충실).
-      model: "claude-haiku-4-5-20251001",
-      max_tokens: 512,
-      messages: [
-        {
-          role: "user",
-          content: `치과 상담 중 발화 한 문장입니다. ${target}로 자연스럽게 번역하세요.
+    // 실시간 자막 — 문장당 수백 ms 응답이 목표라 빠른 모델 우선(spec 041 작업 'translate' 순서).
+    const message = await askAI("translate", {
+      maxTokens: 512,
+      prompt: `치과 상담 중 발화 한 문장입니다. ${target}로 자연스럽게 번역하세요.
 한국어·영어가 섞여 있어도 전체 의미를 ${target} 한 문장으로 옮기세요.
 치과 용어(임플란트·크라운·신경치료·bone graft 등)는 정확하게. 번역문만 출력하고 다른 말은 하지 마세요.
 
 ${trimmed}`,
-        },
-      ],
     });
-    const block = message.content[0];
-    const translated = block.type === "text" ? block.text.trim() : "";
+    const translated = message.text.trim();
     if (!translated) return { ok: false, message: "번역 결과가 비었습니다." };
     return { ok: true, translated, direction: ko ? "ko2en" : "any2ko" };
   } catch (e) {

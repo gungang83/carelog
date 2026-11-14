@@ -401,6 +401,53 @@ alter table public.patient_invitations add column if not exists share_id uuid
 -- migration: 20261025000002_institution_sms_sender.sql — 병원별 문자 발신번호(솔라피 등록 번호)
 alter table public.institutions add column if not exists sms_sender_phone text;
 
+-- spec 041 (migration: 20261114000001_ai_routing.sql) — AI 작업별 모델 순서 + 호출별 사용량
+create table if not exists public.ai_settings (
+  key         text primary key,                 -- 'routes' = 작업별 모델 순서
+  value       jsonb not null default '{}'::jsonb,
+  updated_by  text,
+  updated_at  timestamptz not null default now()
+);
+alter table public.ai_settings enable row level security;
+
+create table if not exists public.ai_usage (
+  id              bigserial primary key,
+  at              timestamptz not null default now(),
+  task            text not null,                -- summary | translate | patient_draft | consult_eval | chart_parse
+  provider        text not null,                -- anthropic | openai
+  model           text not null,                -- 응답 기준 실제 모델명
+  ok              boolean not null default true,
+  error           text not null default '',
+  tokens_in       integer not null default 0,
+  tokens_out      integer not null default 0,
+  cost_usd        numeric(12,6) not null default 0,  -- 토큰 × 단가(lib/ai/catalog) 추정
+  latency_ms      integer not null default 0,
+  institution_id  uuid references public.institutions(id) on delete set null,
+  user_email      text
+);
+create index if not exists idx_ai_usage_at on public.ai_usage (at desc);
+create index if not exists idx_ai_usage_inst on public.ai_usage (institution_id, at desc);
+alter table public.ai_usage enable row level security;
+
+-- spec 040 (migration: 20261114000002_oral_exams.sql) — 구강 지표 기록(잇몸 기록·치주 차트) 회차
+create table if not exists public.oral_exams (
+  id               uuid primary key default gen_random_uuid(),
+  institution_id   uuid not null references public.institutions(id) on delete cascade,
+  patient_id       bigint not null references public.patient(id) on delete cascade,
+  consultation_id  bigint references public.consultation(id) on delete set null,
+  kind             text not null default 'perio',              -- 이후 'brush'(치간칫솔) 등
+  status           text not null default 'draft' check (status in ('draft', 'done')),
+  data             jsonb not null default '{}'::jsonb,
+  summary          jsonb not null default '{}'::jsonb,
+  recorded_by      text,
+  recorded_at      timestamptz not null default now(),
+  created_at       timestamptz not null default now(),
+  updated_at       timestamptz not null default now()
+);
+create index if not exists idx_oral_exams_patient on public.oral_exams (patient_id, recorded_at desc);
+create index if not exists idx_oral_exams_inst on public.oral_exams (institution_id, recorded_at desc);
+alter table public.oral_exams enable row level security;
+
 -- Push Subscriptions (Web Push / VAPID)
 create table if not exists public.push_subscriptions (
   id             uuid primary key default gen_random_uuid(),

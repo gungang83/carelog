@@ -5,6 +5,8 @@ import Anthropic from "@anthropic-ai/sdk";
 import { getMyInstitutionLab, getMyInstitutionId, getSessionUser } from "@/lib/auth/institution";
 import { deductCredit, getCreditBalance, type CreditFeature } from "@/lib/credits";
 import { isPremiumMode } from "@/lib/transcribe/engines";
+import { askAI } from "@/lib/ai";
+import type { AiTask } from "@/lib/ai/catalog";
 import type {
   EngineId,
   EngineMode,
@@ -29,6 +31,33 @@ async function recordUsage(
   } catch {
     /* 사용량 기록 실패는 무시 */
   }
+}
+
+// spec 041 — 요약·번역 호출은 askAI(작업별 모델 순서 + 예비 넘김 + 호출별 사용량)로.
+//   기존 코드가 Anthropic 응답 모양(content[0].text·usage)을 읽으므로 같은 모양으로 돌려준다.
+async function aiMessage(
+  task: AiTask,
+  req: { max_tokens: number; messages: { role: "user"; content: string }[] },
+) {
+  let institutionId: string | null = null;
+  let userEmail: string | null = null;
+  try {
+    const [inst, user] = await Promise.all([getMyInstitutionId(), getSessionUser()]);
+    institutionId = inst ?? null;
+    userEmail = user?.email ?? null;
+  } catch {
+    /* 세션 없는 경로(크론 등) */
+  }
+  const r = await askAI(task, {
+    prompt: req.messages.map((m) => m.content).join("\n\n"),
+    maxTokens: req.max_tokens,
+    institutionId,
+    userEmail,
+  });
+  return {
+    content: [{ type: "text" as const, text: r.text }],
+    usage: { input_tokens: r.tokensIn, output_tokens: r.tokensOut },
+  };
 }
 
 // EngineId(또는 comparison) → 크레딧 기능 키
@@ -194,8 +223,7 @@ async function runBasic(
   let tokensIn = 0;
   let tokensOut = 0;
   try {
-    const message = await anthropic.messages.create({
-      model: "claude-sonnet-4-6",
+    const message = await aiMessage("summary", {
       max_tokens: 1024,
       messages: [{ role: "user", content: SUMMARY_PROMPT(transcription) }],
     });
@@ -252,8 +280,7 @@ async function runDetailed(
   let tokensIn = 0;
   let tokensOut = 0;
   try {
-    const message = await anthropic.messages.create({
-      model: "claude-sonnet-4-6",
+    const message = await aiMessage("summary", {
       max_tokens: 1500,
       messages: [{ role: "user", content: DETAILED_SUMMARY_PROMPT(t.text) }],
     });
@@ -290,8 +317,7 @@ async function runDental(
   let tokensIn = 0;
   let tokensOut = 0;
   try {
-    const message = await anthropic.messages.create({
-      model: "claude-sonnet-4-6",
+    const message = await aiMessage("summary", {
       max_tokens: 1500,
       messages: [{ role: "user", content: DENTAL_PROMPT(t.text) }],
     });
@@ -356,8 +382,7 @@ async function runMultilingual(
   let tokensIn = 0;
   let tokensOut = 0;
   try {
-    const message = await anthropic.messages.create({
-      model: "claude-sonnet-4-6",
+    const message = await aiMessage("summary", {
       max_tokens: 2048,
       messages: [
         {
@@ -552,8 +577,7 @@ export async function summarizeChunkTranscript(
   const clients = getClients();
   if (!clients.ok) return { ok: false, message: clients.message };
   try {
-    const message = await clients.anthropic.messages.create({
-      model: "claude-sonnet-4-6",
+    const message = await aiMessage("summary", {
       max_tokens: 1500,
       messages: [{ role: "user", content: SUMMARY_PROMPT(fullText) }],
     });

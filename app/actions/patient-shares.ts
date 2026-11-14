@@ -4,7 +4,7 @@
 //   직원 기록은 그대로 두고, 고른 내용으로 만든 환자용 문서(patient_shares)를 따로 저장해 보낸다.
 //   링크 = 초대(patient_invitations.share_id) — 30일 안에 몇 번이든 열 수 있고, 처음이면 등록 번호 인증번호 한 번.
 
-import Anthropic from "@anthropic-ai/sdk";
+import { askAI } from "@/lib/ai";
 import { revalidatePath } from "next/cache";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { createAdminSupabaseClient } from "@/lib/supabase/admin";
@@ -19,7 +19,6 @@ import { insertInvitation, institutionSmsSender, koreanMonthDay, patientLinkUrl 
 
 type Fail = { ok: false; message: string };
 
-const DRAFT_MODEL = "claude-sonnet-4-6";
 
 function normalizePhone(raw: string): string | null {
   const digits = (raw || "").replace(/\D/g, "");
@@ -124,10 +123,11 @@ export async function draftPatientShare(params: {
   const inst = await getMyInstitution();
 
   try {
-    const anthropic = new Anthropic({ apiKey: key });
-    const message = await anthropic.messages.create({
-      model: DRAFT_MODEL,
-      max_tokens: 1500,
+    // spec 041 — 작업 'patient_draft'의 모델 순서(예비 넘김·호출별 사용량)
+    const message = await askAI("patient_draft", {
+      institutionId: auth.institutionId,
+      userEmail: auth.email,
+      maxTokens: 1500,
       system: `당신은 치과가 환자에게 보내는 '상담 안내'를 쓰는 도우미입니다. 병원 직원이 고른 상담 내용만 바탕으로, 환자가 휴대폰으로 읽기 쉬운 안내문을 씁니다.
 
 규칙:
@@ -137,23 +137,16 @@ export async function draftPatientShare(params: {
 - '진료 기록'이라는 말을 쓰지 않는다(이 글은 '상담 안내').
 - 구성(내용이 있는 것만): 첫 줄 인사("${params.patientName}님, 오늘 상담 내용을 정리해 드려요.") → <strong>오늘 상담 내용</strong> → <strong>확인된 부분</strong> → <strong>오늘 받으신 처치</strong> → <strong>집에서 관리법</strong>(처방 제품 사용법 포함) → <strong>다음 방문</strong> → 마지막 줄 "궁금한 점은 ${inst?.institution.name ?? "병원"}으로 편하게 연락 주세요."
 - 출력은 HTML 조각만: <p>, <ul><li>, <strong>만 사용. 설명·마크다운·코드블록 금지.`,
-      messages: [
-        {
-          role: "user",
-          content: `[고른 상담 내용]\n${text.slice(0, 12000)}\n\n[처방 제품]\n${params.prescriptions.join(", ") || "없음"}`,
-        },
-      ],
+      prompt: `[고른 상담 내용]\n${text.slice(0, 12000)}\n\n[처방 제품]\n${params.prescriptions.join(", ") || "없음"}`,
     });
-    const raw = message.content
-      .map((b) => (b.type === "text" ? b.text : ""))
-      .join("")
+    const raw = message.text
       .replace(/^```(?:html)?\s*/i, "")
       .replace(/```\s*$/i, "")
       .trim();
     await deductCredit(auth.institutionId, "patient_share_draft", auth.email, {
       refId: params.consultationId,
-      tokensIn: message.usage?.input_tokens ?? 0,
-      tokensOut: message.usage?.output_tokens ?? 0,
+      tokensIn: message.tokensIn,
+      tokensOut: message.tokensOut,
     });
     return { ok: true, html: sanitizeRichHtml(raw) };
   } catch (e) {

@@ -5,7 +5,7 @@
 // 상담자 당사자·기획공장 개방을 언제든 할 수 있게 가드를 grants 인지형으로 구현.
 // 한계: 전사 원문 미저장 — 평가는 상담 기록 '요약 본문' 기반(프롬프트에 명시, na 유도).
 
-import Anthropic from "@anthropic-ai/sdk";
+import { askAI } from "@/lib/ai";
 import { revalidatePath } from "next/cache";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { createAdminSupabaseClient } from "@/lib/supabase/admin";
@@ -491,7 +491,6 @@ export async function runEvaluation(
   if (!anthropicKey || anthropicKey === "your_anthropic_api_key_here") {
     return { ok: false, message: "ANTHROPIC_API_KEY가 설정되지 않았습니다." };
   }
-  const anthropic = new Anthropic({ apiKey: anthropicKey });
 
   const checklist = autoItems
     .map((it) => `- id "${it.id}" · ${it.label}: ${it.guide}`)
@@ -501,15 +500,18 @@ export async function runEvaluation(
   let summary = "";
   let tokensIn = 0;
   let tokensOut = 0;
+  let usedModel: string = EVAL_MODEL;
   try {
     const premise =
       basis === "transcript"
         ? `중요한 전제: 아래는 상담 녹음의 '전사 원문 전체'입니다. 음성 인식 특성상 오타·치과 용어 오류·어색한 문장이 있을 수 있으니 의미 중심으로 읽으십시오. 원문 전체이므로 해당 발화가 전혀 없으면 'unmet'(미충족)으로 판정할 수 있습니다. 'na'는 음질·전사 누락 흔적이 뚜렷해 판단이 불가능한 경우에만 쓰십시오.`
         : `중요한 전제: 이 본문은 상담 대화의 AI 요약본이며 전사 원문이 아닙니다. 요약에 남지 않은 발화는 판정할 수 없으므로, 본문에 해당 내용의 흔적이 전혀 없으면 'unmet'이 아니라 'na'(판정 불가)로 두십시오. 'unmet'은 본문상 명백히 누락·회피가 드러날 때만 씁니다.`;
     const sourceLabel = basis === "transcript" ? "상담 전사 원문" : "상담 기록 본문(요약)";
-    const message = await anthropic.messages.create({
-      model: EVAL_MODEL,
-      max_tokens: 3000,
+    // spec 041 — 작업 'consult_eval'의 모델 순서(예비 넘김·호출별 사용량)
+    const message = await askAI("consult_eval", {
+      institutionId: consult.institution_id,
+      userEmail: access.email,
+      maxTokens: 3000,
       system: `당신은 치과 상담 품질 코치입니다. 아래 '${sourceLabel}'을 체크리스트와 대조해 항목별로 판정합니다.
 
 ${premise}
@@ -520,19 +522,12 @@ comment: 한 줄 코칭 코멘트(한국어, 존중하는 톤 — 이 평가는 
 
 반드시 아래 JSON만 출력(설명·마크다운 금지):
 {"items":[{"item_id":"...","verdict":"met","evidence":"...","comment":"..."}],"summary":"전체 총평·개선 제안 2~3문장"}`,
-      messages: [
-        {
-          role: "user",
-          content: `[체크리스트]\n${checklist}\n\n[${sourceLabel}]\n${text.slice(0, 32000)}`,
-        },
-      ],
+      prompt: `[체크리스트]\n${checklist}\n\n[${sourceLabel}]\n${text.slice(0, 32000)}`,
     });
-    tokensIn = message.usage?.input_tokens ?? 0;
-    tokensOut = message.usage?.output_tokens ?? 0;
-    const raw = message.content
-      .filter((b): b is Anthropic.TextBlock => b.type === "text")
-      .map((b) => b.text)
-      .join("");
+    tokensIn = message.tokensIn;
+    tokensOut = message.tokensOut;
+    usedModel = message.model;
+    const raw = message.text;
     const jsonText = raw.slice(raw.indexOf("{"), raw.lastIndexOf("}") + 1);
     const parsed = JSON.parse(jsonText) as { items?: EvalItemResult[]; summary?: string };
     const validIds = new Set(autoItems.map((it) => it.id));
@@ -574,7 +569,7 @@ comment: 한 줄 코칭 코멘트(한국어, 존중하는 톤 — 이 평가는 
       ai_result: aiResult,
       score,
       summary,
-      model: EVAL_MODEL,
+      model: usedModel,
       basis,
       created_by: access.email,
     })

@@ -603,3 +603,15 @@ Supabase auth.users와 patient_accounts를 연결. Google OAuth 가입 시 생�
 - RLS: 2테이블 enable+정책 0(서버 전용). env 스위치 `EO_LAB_GATEWAY=on`(+`CARELOG_GATEWAY_SECRET` 재사용).
 - migration: `20261020000001_lab_orders.sql`
 - v2(`20261020000002`): `lab_orders.set_id`(uuid — 세트 묶음) · `revision`(int) · `edit_log`(jsonb `[{at,by,status_before,portal_status_before}]` — 전송 후 수정 식별). payload에 `order_date`·`set`·`revision` 추가(additive).
+- spec 039: 첨부 meta에 `draw`(편집용 기록 .draw.json 경로, Carelog 내부 — EO 전송 wire 제외). DB 변경 없음.
+
+## AI 엔진 고르기 (spec 041)
+- `ai_settings` — `key`(text pk, 'routes' = 작업별 모델 순서 jsonb `{task:[{provider,model}…]}`) · `value` · `updated_by` · `updated_at`. 비어 있으면 코드 기본값(lib/ai/catalog DEFAULT_ROUTES = 기존 동작 + 예비).
+- `ai_usage` — AI 호출 한 번 = 한 줄. `task` · `provider` · `model`(응답 기준 실제 모델) · `ok`/`error` · `tokens_in`/`tokens_out` · `cost_usd`(토큰 × 단가 추정) · `latency_ms` · `institution_id`(set null) · `user_email`. 인덱스 (at desc)/(institution_id, at desc). ★크레딧 원장(병원에 매기는 값)과 별개 — 실제 비용 근거.
+- RLS: 2테이블 enable + 정책 0(서버 전용).
+- migration: `20261114000001_ai_routing.sql`
+
+## 구강 지표 기록 (spec 040)
+- `oral_exams` — 측정 한 번(회차). `institution_id` · `patient_id`(bigint → patient cascade, 필수) · `consultation_id`(선택, set null) · `kind`('perio' — 이후 'brush' 등) · `status`(draft|done) · `data`(jsonb `{v:1, thirdMolars, entries:[{m,t,s,p,f,v,at,src,review,utt}], utterances?}` — 한 줄 = 한 위치·한 지표, m = lib/oral/perio MEASURES id) · `summary`(jsonb — 저장 시 계산: sites·meanPd·pd4·pd6·maxPd·bopPct·pcr·meanCal·mobile·missing·implants·deep) · `recorded_by` · `recorded_at`. 인덱스 (patient_id, recorded_at desc)/(institution_id, recorded_at desc).
+- RLS: enable + 정책 0 — 서버 액션(app/actions/oral-exams.ts, 기관 멤버십 + 환자 소속 확인)만.
+- migration: `20261114000002_oral_exams.sql`

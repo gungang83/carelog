@@ -802,3 +802,26 @@ lib/draw/consult-store.ts         상담 이미지 버킷: saveConsultDrawing(�
         · 기공지(그림 지시·첨부 고치기·치아 모형 — 원본/기록은 lab-orders 버킷, 첨부 meta.draw, EO 전송 제외)
 원칙: 원본 무수정 · 보기용 PNG는 항상 저장(엔진이 바뀌어도 표시 불변) · 외부 창 /draw(EO)는 3단계
 ```
+
+## AI 엔진 고르기 (spec 041)
+
+```
+lib/ai/catalog.ts   회사(anthropic·openai)·모델(단가·환자 정보 가능 phi)·작업(summary·translate·patient_draft·consult_eval·chart_parse)
+                    · DEFAULT_ROUTES(기존 동작 + 다른 회사 예비) · QUALITY_ROUTES(품질 우선 추천) · normalizeRoutes
+lib/ai/index.ts     askAI(task, {prompt, system, maxTokens}) — 순서대로 시도, 키 없는 회사 건너뜀, 실패 시 다음, 호출마다 ai_usage 기록
+                    · getAiRoutes(ai_settings 'routes', 60초 캐시) · saveAiRoutes
+이전된 호출         transcribe.ts(요약 5곳, aiMessage 래퍼) · patient-shares(patient_draft) · consult-eval(consult_eval) · interpret(translate)
+화면                /admin/ai (슈퍼어드민) — 키 상태 · 작업별 1→2→3순위 · 사용량(작업·모델별 호출·토큰·추정 비용·평균 응답·최근 호출)
+아직                전사(whisper-1·실시간 gpt-4o-transcribe)는 2단계에서 목록화·품질 평가 후 교체
+```
+
+## 구강 지표 기록 (spec 040)
+
+```
+lib/oral/perio.ts            지표 등록부 MEASURES(pd·rec·bop·mob·plq·state) · 기록 모델(entries) · 진행(stepCursor — 순서 고정 없음, 진행 방향 이어 감) · summarize/summaryText(측정값만)
+components/oral/perio-chart.tsx   치주 차트 SVG 4줄 — spec 037 2D 정면 모양(CEJ=0, mm) 위에 잇몸(반투명 분홍)·잇몸선(빨강)·주머니(파랑)·숫자·출혈·동요·치태
+components/oral/perio-editor.tsx  입력 화면 — 교합면에서 치아·면(B/P) 고르기 · 정면 mm 눈금(올려 보고 누르기) · 숫자판 · 키보드 · 기록에 담기(PNG+글)
+app/actions/oral-exams.ts    list/get/save/delete(oral_exams)
+진입                         상담보드 [🩺 잇몸 기록] (환자 연결 상담이면 회차 저장) · 환자 페이지 "잇몸 기록" 섹션(상담 없이도)
+lib/svg-to-png.ts            SVG → PNG 공용
+```
