@@ -409,6 +409,15 @@ export function sitePoint3D(f: ToothFrame3D, side: "B" | "L", pos: "D" | "C" | "
   ];
 }
 
+/**
+ * 탐침 선 위의 점 — 그 부위의 CEJ에서 치아 장축과 나란히 mm만큼(뿌리 쪽 +).
+ * sitePoint3D는 뿌리 표면을 따라 안으로 좁아지지만(대구치 M·D에서 비스듬), 탐침·눈금은 실제처럼 장축과 평행하게 선다.
+ */
+export function probePoint3D(f: ToothFrame3D, side: "B" | "L", pos: "D" | "C" | "M", mmRootward: number, out = 0): V3 {
+  const b = sitePoint3D(f, side, pos, 0, out);
+  return [b[0] + f.root[0] * mmRootward, b[1] + f.root[1] * mmRootward, b[2] + f.root[2] * mmRootward];
+}
+
 /** 3D 점 → 그 치아의 면·부위·CEJ 기준 mm(+ 치관 쪽, 2D 차트와 같은 부호) */
 export function pointToSite3D(f: ToothFrame3D, p: V3): { side: "B" | "L"; pos: "D" | "C" | "M"; mm: number } {
   const v = sub(p, f.cej);

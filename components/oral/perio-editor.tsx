@@ -417,6 +417,7 @@ export function PerioEditor({ patient, examId, initialData, consultationId, onCl
 
       {help && (
         <div className="border-b border-slate-200 bg-slate-900 px-4 py-3 text-xs leading-6 text-slate-100">
+          {view === "3d" && <span className="mr-4 text-sky-300">3D · 치아를 누르면 그 면 정면으로 · 치관을 다시 누르면 바깥⇄안쪽 · 끌면 그 치아 중심으로 돌리기</span>}
           <span className="mr-4">🖱 부위 위에서 위아래로 움직여 깊이 → 누르면 기록</span>
           <span className="mr-4">👆 짚고 끌었다 떼면 기록 · 옆으로 밀면 이동</span>
           <span className="mr-4">⌨ 0–9 · ⇧0/1/2=10–12 · F · B 출혈 · ←→ · ↑↓ 면 · ⌫</span>
@@ -436,6 +437,7 @@ export function PerioEditor({ patient, examId, initialData, consultationId, onCl
             hover={hover ? { pick: hover.pick, value: hover.value } : null}
             follow={follow}
             onPick={(type, pointerType, pk) => handlePick(type, pointerType, pk)}
+            onTap={(pk) => act(pk, valueFor(pk))}
             className="h-full w-full"
           />
         </div>
@@ -477,7 +479,7 @@ export function PerioEditor({ patient, examId, initialData, consultationId, onCl
           <button
             type="button"
             onClick={() => setFollow((f) => !f)}
-            title="가리킨 치아 쪽으로 화면이 살짝 따라 돌기"
+            title="기록해서 다음 칸이 다른 치아로 넘어가면 화면도 그쪽으로"
             className={`h-9 rounded-xl border px-2.5 text-xs font-bold transition ${follow ? "border-sky-600 bg-sky-50 text-sky-700" : "border-slate-200 bg-white text-slate-400"}`}
           >
             ↻ 따라 보기
