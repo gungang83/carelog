@@ -123,6 +123,7 @@ function BoardContent({
   // spec 030 — 실시간 통역 스테이지(실험실 PoC). ⚠️ 훅은 조기 return 위(66f).
   const [showInterpreter, setShowInterpreter] = useState(false);
   const [showInterdental, setShowInterdental] = useState(false); // spec 036 치간칫솔 사이즈 차트
+  const [customOpen, setCustomOpen] = useState(false); // 체어 직접 입력(접어 둠)
   const [showTeeth, setShowTeeth] = useState(false); // spec 037 치아 그림(2D·3D)
   const [showPerio, setShowPerio] = useState(false); // spec 040 잇몸 기록(치주 차트)
   const [recoverable, setRecoverable] = useState<BoardDraft | null>(null);
@@ -970,10 +971,11 @@ function BoardContent({
         role="dialog"
         aria-modal="true"
         aria-label="상담보드"
-        className="fixed inset-0 z-50 flex items-end justify-center p-4 sm:items-center"
+        className="fixed inset-0 z-50 flex items-stretch justify-center sm:items-center sm:p-4"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex max-h-[90vh] w-full max-w-lg flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
+        {/* 상담보드 = 상담의 중심 화면 — 크게(데스크톱 화면 대부분, 폰은 전체 화면). 자료·전사가 모이고 정리되는 곳 */}
+        <div className="flex h-[100dvh] w-full flex-col overflow-hidden bg-white shadow-2xl sm:h-[94vh] sm:max-w-5xl sm:rounded-2xl">
           {/* 녹음 바 (상단, 항상) */}
           <div className="flex items-center gap-3 border-b border-slate-100 px-5 py-3">
             {recording || paused ? (
@@ -1086,22 +1088,22 @@ function BoardContent({
               녹음 중에는 빨간 표시가 긴장될 수 있어 문구를 더 또렷하게 바꾼다.
               문구는 여기서 바로 수정 가능(향후 기관별 커스터마이즈 후보). */}
           <div
-            className={`flex items-center gap-3 border-b px-5 py-3 transition-colors ${
+            className={`flex items-center gap-3 border-b px-5 py-2 transition-colors ${
               recording
                 ? "border-sky-200 bg-gradient-to-r from-sky-100 to-sky-50"
                 : "border-sky-100 bg-gradient-to-r from-sky-50 to-white"
             }`}
           >
-            <div className="flex size-10 shrink-0 items-center justify-center rounded-full bg-sky-100 text-sky-600">
-              <ShieldIcon className="size-6" />
+            <div className="flex size-8 shrink-0 items-center justify-center rounded-full bg-sky-100 text-sky-600">
+              <ShieldIcon className="size-5" />
             </div>
-            <div className="min-w-0">
-              <p className="text-base font-bold text-slate-800 break-keep">
+            <div className="min-w-0 sm:flex sm:items-baseline sm:gap-3">
+              <p className="shrink-0 text-sm font-bold text-slate-800 break-keep">
                 {recording
                   ? "정확한 진료를 위해 상담을 기록하고 있어요"
                   : "안심하세요 — 환자분을 위한 기록이에요"}
               </p>
-              <p className="mt-0.5 text-sm leading-snug text-slate-500 break-keep">
+              <p className="mt-0.5 text-xs leading-snug text-slate-500 break-keep">
                 내용을 빠짐없이 남겨 더 정확히 봐드리려는 거예요. 기록은 안전하게
                 보관되고, 환자분도 받아보실 수 있어요.
               </p>
@@ -1122,7 +1124,7 @@ function BoardContent({
             </div>
           )}
 
-          <div className="flex-1 space-y-4 overflow-y-auto px-5 py-4">
+          <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto px-4 py-3 sm:px-5">
             {micError && (
               <p className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-600">
                 {micError}
@@ -1205,26 +1207,6 @@ function BoardContent({
               </div>
             )}
 
-            <p className="text-xs text-slate-400">
-              녹음하면서 내용을 적거나, 사진에 그림으로 표시할 수 있어요. 보드를 닫아도 녹음은
-              계속됩니다.
-            </p>
-
-            {/* 본문 — 타이핑 + 인라인 이미지/그림 주석 */}
-            {/* spec 027 ⑤ — 저장 위치 안내 (④ 이어서 모드 문구 분기) */}
-            <p className="text-[11px] text-sky-600">
-              💾{" "}
-              {continuationId ? (
-                <span className="font-semibold">기존 상담 기록에 이어서 저장됩니다</span>
-              ) : selectedChair ? (
-                <>
-                  이 내용은 <span className="font-semibold">[{selectedChair.name}]</span> 상담
-                  기록으로 저장됩니다
-                </>
-              ) : (
-                "이 내용은 체어를 선택하면 해당 체어의 상담 기록으로 저장됩니다"
-              )}
-            </p>
             {/* 환자 페이지에서 연 새 상담 — 저장 즉시 이 환자에게 연결 */}
             {targetPatient && !continuationId && (
               <p className="flex items-center gap-2 rounded-lg bg-emerald-50 px-2.5 py-1.5 text-[11px] text-emerald-700">
@@ -1241,42 +1223,68 @@ function BoardContent({
                 </button>
               </p>
             )}
-            <RichTextEditor
-              ref={editorRef}
-              value={editText}
-              onChange={setEditText}
-              placeholder="상담 내용을 입력하거나 녹음을 정리하세요…"
-            />
-            {/* spec 037 — 치아 그림: 쓸 때마다 2D·3D 선택, 치아 표시 → 기록에 담기 */}
-            <div className="grid grid-cols-2 gap-2">
-              <button
-                type="button"
-                onClick={() => setShowTeeth(true)}
-                className="inline-flex min-h-9 w-full items-center justify-center gap-1.5 rounded-xl border border-amber-200 bg-amber-50 px-4 text-sm font-semibold text-amber-800 transition hover:bg-amber-100"
-              >
-                🦷 치아 그림 (2D·3D)
-              </button>
-              {/* spec 040 — 잇몸 기록: 측정하면 잇몸선·주머니가 바로 그림에 → 기록에 담기 */}
-              <button
-                type="button"
-                onClick={() => setShowPerio(true)}
-                className="inline-flex min-h-9 w-full items-center justify-center gap-1.5 rounded-xl border border-rose-200 bg-rose-50 px-4 text-sm font-semibold text-rose-800 transition hover:bg-rose-100"
-              >
-                🩺 잇몸 기록 (치주 차트)
-              </button>
+
+            {/* 상담 도구 — 자료·그림·차트를 앞에 크게(누르면 기록 본문에 담긴다) */}
+            <div className="grid shrink-0 grid-cols-3 gap-2 sm:grid-cols-6">
+              {(
+                [
+                  { k: "image", icon: "🖼️", label: "이미지", sub: "사진·파일", tone: "border-sky-200 bg-sky-50/60 text-sky-800 hover:bg-sky-100", run: () => editorRef.current?.openImage() },
+                  { k: "assets", icon: "📚", label: "자료", sub: "설명 자료", tone: "border-indigo-200 bg-indigo-50/60 text-indigo-800 hover:bg-indigo-100", run: () => editorRef.current?.openAssets() },
+                  { k: "estimate", icon: "₩", label: "견적", sub: "치료비", tone: "border-emerald-200 bg-emerald-50/60 text-emerald-800 hover:bg-emerald-100", run: () => editorRef.current?.openEstimate() },
+                  { k: "teeth", icon: "🦷", label: "치아 그림", sub: "2D·3D", tone: "border-amber-200 bg-amber-50/70 text-amber-800 hover:bg-amber-100", run: () => setShowTeeth(true) },
+                  { k: "perio", icon: "🩺", label: "잇몸 기록", sub: "치주 차트", tone: "border-rose-200 bg-rose-50/70 text-rose-800 hover:bg-rose-100", run: () => setShowPerio(true) },
+                  { k: "idb", icon: "🪥", label: "치간칫솔", sub: "사이즈 차트", tone: "border-pink-200 bg-pink-50/70 text-pink-800 hover:bg-pink-100", run: () => setShowInterdental(true) },
+                ] as const
+              ).map((t) => (
+                <button
+                  key={t.k}
+                  type="button"
+                  onClick={t.run}
+                  className={`flex flex-col items-center justify-center rounded-xl border px-1 py-2 transition active:scale-95 ${t.tone}`}
+                >
+                  <span className="text-xl leading-none" aria-hidden>
+                    {t.icon}
+                  </span>
+                  <span className="mt-1 text-sm font-semibold">{t.label}</span>
+                  <span className="text-[10px] opacity-60">{t.sub}</span>
+                </button>
+              ))}
+            </div>
+
+            {/* 처방 제품 — 도구 바로 아래 한 줄 */}
+            <div className="flex shrink-0 items-center gap-2">
+              <span className="shrink-0 text-xs font-semibold text-slate-500">처방</span>
+              <PrescriptionPicker bare value={prescriptions} onChange={setPrescriptions} />
+            </div>
+
+            {/* 본문 — 전사·자료·그림이 모여 정리되는 곳(남은 높이를 다 쓴다) */}
+            <div className="flex min-h-[46vh] flex-1 flex-col">
+              <RichTextEditor
+                ref={editorRef}
+                value={editText}
+                onChange={setEditText}
+                hideInsertTools
+                fill
+                placeholder="상담 내용을 입력하거나 녹음을 정리하세요… (녹음하면서 적어도 되고, 보드를 닫아도 녹음은 계속돼요)"
+              />
             </div>
             {editText.trim() && (
               <CopyAllButton
                 html={editText}
                 label="전체 복사 (덴트웹 붙여넣기)"
-                className="inline-flex min-h-9 w-full items-center justify-center gap-1.5 rounded-xl border border-slate-300 bg-white px-4 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+                className="inline-flex min-h-9 w-full shrink-0 items-center justify-center gap-1.5 rounded-xl border border-slate-300 bg-white px-4 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
               />
             )}
+          </div>
 
-            {/* 체어 */}
-            <div className="space-y-2">
-              <p className="text-xs font-medium text-slate-500">체어 (저장 시 선택)</p>
-              <div className="flex flex-wrap gap-1.5">
+          {/* 저장 정보(뒤로) — 체어·참여자는 한 줄로 접어 둔다 */}
+          <div className="border-t border-slate-100 bg-slate-50/70 px-4 py-2 sm:px-5">
+            {continuationId && (
+              <p className="mb-1 text-[11px] font-semibold text-sky-600">💾 기존 상담 기록에 이어서 저장됩니다</p>
+            )}
+            <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
+              <div className="flex flex-wrap items-center gap-1">
+                <span className="mr-1 text-xs font-semibold text-slate-500">체어</span>
                 {chairs.map((c) => {
                   const active = selectedChair?.id === c.id;
                   return (
@@ -1284,64 +1292,60 @@ function BoardContent({
                       key={c.id}
                       type="button"
                       onClick={() => setSelectedChair({ id: c.id, name: c.name })}
-                      className={`rounded-lg px-3 py-1.5 text-xs font-medium transition ${
-                        active
-                          ? "bg-sky-600 text-white shadow-sm"
-                          : "border border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
+                      className={`h-7 min-w-7 rounded-lg px-2 text-xs font-semibold transition ${
+                        active ? "bg-sky-600 text-white shadow-sm" : "border border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
                       }`}
                     >
                       {c.name}
                     </button>
                   );
                 })}
+                {selectedChair && !chairs.some((c) => c.id === selectedChair.id) && (
+                  <span className="h-7 rounded-lg bg-sky-600 px-2 text-xs font-semibold leading-7 text-white">{selectedChair.name}</span>
+                )}
+                {customOpen ? (
+                  <span className="inline-flex items-center gap-1">
+                    <input
+                      autoFocus
+                      type="text"
+                      value={customName}
+                      onChange={(e) => setCustomName(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") handlePickCustomChair();
+                        if (e.key === "Escape") setCustomOpen(false);
+                      }}
+                      placeholder="예: 상담실"
+                      className="h-7 w-24 rounded-lg border border-slate-200 px-2 text-xs text-slate-800 focus:border-sky-400 focus:outline-none"
+                    />
+                    <button
+                      type="button"
+                      onClick={handlePickCustomChair}
+                      disabled={isCreatingChair || !customName.trim()}
+                      className="h-7 rounded-lg border border-sky-200 bg-sky-50 px-2 text-xs font-semibold text-sky-700 disabled:opacity-50"
+                    >
+                      {isCreatingChair ? "…" : "추가"}
+                    </button>
+                  </span>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => setCustomOpen(true)}
+                    className="h-7 rounded-lg border border-dashed border-slate-300 px-2 text-xs font-semibold text-slate-500 hover:border-sky-300 hover:text-sky-700"
+                    title="목록에 없는 자리 직접 입력"
+                  >
+                    ＋
+                  </button>
+                )}
               </div>
-              <div className="flex gap-2">
-                <input
-                  type="text"
-                  value={customName}
-                  onChange={(e) => setCustomName(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") handlePickCustomChair();
-                  }}
-                  placeholder="직접 입력 (예: 상담실)"
-                  className="flex-1 rounded-lg border border-slate-200 px-3 py-1.5 text-xs text-slate-800 focus:border-sky-400 focus:outline-none"
-                />
-                <button
-                  type="button"
-                  onClick={handlePickCustomChair}
-                  disabled={isCreatingChair || !customName.trim()}
-                  className="rounded-lg border border-sky-200 bg-sky-50 px-3 py-1.5 text-xs font-semibold text-sky-700 transition hover:bg-sky-100 disabled:opacity-50"
-                >
-                  {isCreatingChair ? "…" : "추가"}
-                </button>
+              <div className="flex items-center gap-1.5">
+                <span className="text-xs font-semibold text-slate-500">참여자</span>
+                <ParticipantPicker compact members={members} recent={recent} me={me} value={participants} onChange={setParticipants} />
               </div>
-              {selectedChair && !chairs.some((c) => c.id === selectedChair.id) && (
-                <p className="text-xs text-sky-600">선택: {selectedChair.name}</p>
-              )}
             </div>
-
-            {/* 참여자 */}
-            <div className="space-y-2">
-              <p className="text-xs font-medium text-slate-500">참여자 (선택)</p>
-              <ParticipantPicker
-                members={members}
-                recent={recent}
-                me={me}
-                value={participants}
-                onChange={setParticipants}
-              />
-            </div>
-
-            {/* 처방 */}
-            <PrescriptionPicker
-              value={prescriptions}
-              onChange={setPrescriptions}
-              onOpenInterdentalChart={() => setShowInterdental(true)}
-            />
           </div>
 
           {/* 저장 */}
-          <div className="border-t border-slate-100 px-5 py-3">
+          <div className="border-t border-slate-100 px-4 py-2.5 sm:px-5">
             {saveMsg && (
               <p className={`mb-2 text-xs ${saveMsg.includes("✓") ? "text-green-600" : "text-red-500"}`}>
                 {saveMsg}

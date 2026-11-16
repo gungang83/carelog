@@ -11,11 +11,14 @@ export function PrescriptionPicker({
   value,
   onChange,
   onOpenInterdentalChart,
+  bare,
 }: {
   value: string[];
   onChange: (v: string[]) => void;
   /** spec 036 — 치간칫솔 사이즈 차트 열기(없으면 버튼 숨김) */
   onOpenInterdentalChart?: () => void;
+  /** 제목 없이 칩만(상담보드 도구 줄 옆) */
+  bare?: boolean;
 }) {
   const toggle = (name: string) =>
     onChange(
@@ -24,7 +27,7 @@ export function PrescriptionPicker({
 
   return (
     <div className="flex flex-col gap-2">
-      <p className="text-xs font-medium text-slate-500">처방 제품 선택</p>
+      {!bare && <p className="text-xs font-medium text-slate-500">처방 제품 선택</p>}
       <div className="flex flex-wrap gap-2">
         {PRODUCTS.map((p) => {
           const selected = value.includes(p.name);

@@ -392,6 +392,19 @@ export const UPDATE_FEED: UpdateFeedEntry[] = [
     ],
     internal: "spec 040 §13~15 · 치아 엔진 범용화(chart.ts·dental-chart·toothFrames3D)",
   },
+  {
+    id: "2026-11-16-board-layout",
+    date: "2026-11-16",
+    emoji: "🗂️",
+    title: "상담보드를 크게, 도구를 앞으로",
+    items: [
+      "상담보드가 화면을 넓게 쓰도록 커졌습니다(폰은 전체 화면). 상담 내용을 정리하는 본문도 훨씬 길어졌습니다.",
+      "이미지·자료·견적·치아 그림·잇몸 기록·치간칫솔 사이즈 차트를 본문 위 큰 버튼으로 바로 열 수 있고, 처방 제품도 바로 아래에서 고릅니다.",
+      "체어·참여자는 아래 한 줄로 정리했습니다. 참여자는 [＋ 사람]을 눌러 이름·초성으로 찾습니다.",
+      "홈의 '녹음 없이 기록만' 버튼 이름을 '녹음 없이 상담 먼저'로 바꿨습니다.",
+    ],
+    internal: "spec 027 상담보드 레이아웃 · RichTextEditor openImage/openAssets/openEstimate·fill·hideInsertTools · ParticipantPicker compact",
+  },
 ];
 
 // ── 결정 상태 (DB update_feed_decisions) ──────────────────────────────

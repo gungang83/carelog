@@ -404,16 +404,24 @@ export type RichTextEditorHandle = {
   setHTML: (html: string) => void;
   /** 현재 에디터 내용을 HTML로 즉시 읽는다(자동저장 — React 상태 갱신 대기 없이 동기 캡처). */
   getHTML: () => string;
+  /** 바깥 도구 줄(상담보드)에서 여는 삽입 도구 — 이미지 파일 선택 · 상담 자료 · 치료비 견적 */
+  openImage: () => void;
+  openAssets: () => void;
+  openEstimate: () => void;
 };
 
 type Props = {
   value: string;
   onChange: (html: string) => void;
   placeholder?: string;
+  /** 이미지·자료·견적 버튼을 도구 줄에서 숨김(바깥에서 크게 보여 줄 때) */
+  hideInsertTools?: boolean;
+  /** 부모 높이를 채우며 본문만 스크롤(상담보드) */
+  fill?: boolean;
 };
 
 export const RichTextEditor = forwardRef<RichTextEditorHandle, Props>(
-function RichTextEditor({ value, onChange, placeholder }, ref) {
+function RichTextEditor({ value, onChange, placeholder, hideInsertTools, fill }, ref) {
   const [annotateFile, setAnnotateFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
   const [showPicker, setShowPicker] = useState(false); // spec 025 자료 픽커
@@ -471,6 +479,15 @@ function RichTextEditor({ value, onChange, placeholder }, ref) {
     getHTML() {
       const html = editorRef.current?.getHTML() ?? "";
       return html === "<p></p>" ? "" : html;
+    },
+    openImage() {
+      fileInputRef.current?.click();
+    },
+    openAssets() {
+      setShowPicker(true);
+    },
+    openEstimate() {
+      setShowEstimate(true);
     },
   }));
 
@@ -581,7 +598,7 @@ function RichTextEditor({ value, onChange, placeholder }, ref) {
       className={
         fullscreen
           ? "fixed inset-0 z-[100] flex flex-col overflow-hidden bg-white"
-          : "mt-3 overflow-hidden rounded-xl border border-sky-200 bg-white focus-within:border-sky-400 focus-within:ring-2 focus-within:ring-sky-400/30"
+          : `${fill ? "flex min-h-0 flex-1 flex-col" : "mt-3"} overflow-hidden rounded-xl border border-sky-200 bg-white focus-within:border-sky-400 focus-within:ring-2 focus-within:ring-sky-400/30`
       }
     >
       {/* Toolbar */}
@@ -685,6 +702,7 @@ function RichTextEditor({ value, onChange, placeholder }, ref) {
         <span className="mx-1 h-4 w-px bg-slate-200" />
 
         {/* Image insert */}
+        {!hideInsertTools && (<>
         <button
           type="button"
           title="이미지 삽입 (파일 선택 → 주석 → 에디터 삽입)"
@@ -714,6 +732,7 @@ function RichTextEditor({ value, onChange, placeholder }, ref) {
         </button>
 
         <span className="mx-1 h-4 w-px bg-slate-200" />
+        </>)}
 
         <button
           type="button"
@@ -760,11 +779,11 @@ function RichTextEditor({ value, onChange, placeholder }, ref) {
 
       {/* Hint */}
       <div className="border-b border-sky-50 px-4 py-1 text-[11px] text-slate-400">
-        이미지·📚자료·드래그·Ctrl+V로 삽입 — 모서리 드래그 크기조절, 이미지 클릭 후 글감싸기/가운데 배치(왼쪽 2장이면 나란히)
+        {hideInsertTools ? "드래그·Ctrl+V로도 이미지 삽입" : "이미지·📚자료·드래그·Ctrl+V로 삽입"} — 모서리 드래그 크기조절, 이미지 클릭 후 글감싸기/가운데 배치(왼쪽 2장이면 나란히)
       </div>
 
       {/* Editor */}
-      <div className={fullscreen ? "min-h-0 flex-1 overflow-y-auto" : ""}>
+      <div className={fullscreen || fill ? "min-h-0 flex-1 overflow-y-auto" : ""}>
         <EditorContent editor={editor} />
       </div>
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { matchesQuery } from "@/lib/hangul";
 import type { ClinicMemberRow, Participant } from "@/lib/types/database";
 
@@ -32,14 +32,27 @@ export function ParticipantPicker({
   me,
   value,
   onChange,
+  compact,
 }: {
   members: ClinicMemberRow[];
   recent: Participant[];
   me: Participant | null;
   value: Participant[];
   onChange: (next: Participant[]) => void;
+  /** 접힌 모양 — 고른 사람 + [＋]만 보이고, 누르면 위로 작은 검색 창(최근 몇 명 + 검색 결과)이 열린다(상담보드) */
+  compact?: boolean;
 }) {
   const [query, setQuery] = useState("");
+  const [open, setOpen] = useState(false);
+  const boxRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const fn = (e: PointerEvent) => {
+      if (boxRef.current && !boxRef.current.contains(e.target as Node)) setOpen(false);
+    };
+    window.addEventListener("pointerdown", fn);
+    return () => window.removeEventListener("pointerdown", fn);
+  }, [open]);
 
   const isSelected = (name: string) => value.some((v) => v.name === name);
 
@@ -97,6 +110,69 @@ export function ParticipantPicker({
     // isSelected는 value 의존 — value 변경 시 재계산되도록 포함
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sections, q, value]);
+
+  if (compact) {
+    // 검색어가 없으면 나·최근만 몇 명, 있으면 전체에서 찾은 사람 — 26명을 한꺼번에 펼치지 않는다
+    const quick = filtered.filter((s) => s.key !== "all").flatMap((s) => s.items);
+    const pool = q ? filtered.flatMap((s) => s.items) : quick.length ? quick : filtered.flatMap((s) => s.items); // 최근이 없으면 앞쪽(진료 인원) 몇 명
+    const shown = pool.slice(0, q ? 12 : 6);
+    return (
+      <div ref={boxRef} className="relative flex flex-wrap items-center gap-1.5">
+        {value.map((p) => (
+          <button
+            key={p.name}
+            type="button"
+            onClick={() => toggle(p)}
+            className="inline-flex items-center gap-1 rounded-lg bg-sky-600 px-2 py-1 text-xs font-semibold text-white"
+            title="빼기"
+          >
+            {p.name}
+            <span className="text-sky-100">×</span>
+          </button>
+        ))}
+        <button
+          type="button"
+          onClick={() => setOpen((o) => !o)}
+          className="inline-flex h-7 items-center rounded-lg border border-dashed border-slate-300 px-2 text-xs font-semibold text-slate-500 transition hover:border-sky-300 hover:text-sky-700"
+          aria-expanded={open}
+        >
+          ＋ 사람
+        </button>
+        {open && (
+          <div className="absolute bottom-full left-0 z-20 mb-2 w-72 rounded-2xl border border-slate-200 bg-white p-2.5 shadow-xl">
+            <input
+              autoFocus
+              type="text"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="이름·초성 (예: ㄱㄷㅇ)"
+              className="w-full rounded-lg border border-slate-200 px-2.5 py-1.5 text-sm text-slate-800 focus:border-sky-400 focus:outline-none"
+            />
+            <div className="mt-2 flex max-h-40 flex-wrap gap-1.5 overflow-y-auto">
+              {shown.length === 0 ? (
+                <p className="px-1 py-1 text-xs text-slate-400">{members.length === 0 ? "설정 → 멤버 관리에서 등록하세요." : q ? "검색 결과가 없어요." : "이름을 입력해 찾아요."}</p>
+              ) : (
+                shown.map((c) => (
+                  <button
+                    key={`${c.id}-${c.name}`}
+                    type="button"
+                    onClick={() => {
+                      toggle(c);
+                      setQuery("");
+                    }}
+                    className="rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs font-medium text-slate-600 transition hover:border-sky-300 hover:bg-sky-50 hover:text-sky-700"
+                  >
+                    {c.name}
+                    {c.role ? <span className="text-slate-400"> · {c.role}</span> : null}
+                  </button>
+                ))
+              )}
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col gap-2">

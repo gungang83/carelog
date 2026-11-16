@@ -50,7 +50,7 @@ export function ConsultHero() {
       </p>
 
       {/* spec 032 — 엔진 선택 UI 제거(실사용 93%가 기본). 파이프라인은 자동:
-          용어 보정 상시 + 3분↑ 서버 위임. 실험실 엔진 실험은 보드 idle 픽커('녹음 없이 기록만' 경유)로. */}
+          용어 보정 상시 + 3분↑ 서버 위임. 실험실 엔진 실험은 보드 idle 픽커('녹음 없이 상담 먼저' 경유)로. */}
       {creditBalance <= 0 ? (
         <p className="mt-5 rounded-xl bg-red-50 px-3 py-2 text-xs font-medium text-red-600 break-keep">
           크레딧이 소진되었습니다 — 상담 기록은 계속 남길 수 있지만, 관리자에게 충전을 요청해 주세요.
@@ -70,14 +70,14 @@ export function ConsultHero() {
           <MicIcon className="size-5 shrink-0" />
           상담 기록 시작
         </button>
-        {/* spec 027 ③ — 녹음 없이 기록만: 보드를 idle로 연다(마이크 미사용). */}
+        {/* spec 027 ③ — 녹음 없이 상담 먼저: 보드를 idle로 연다(마이크 미사용, 보드 안에서 언제든 녹음 시작). */}
         <button
           type="button"
           onClick={() => openOverlay(DRAFT_CHAIR_KEY)}
           className="w-full rounded-2xl border border-slate-200 bg-white px-5 py-4 text-sm font-medium text-slate-600 transition hover:bg-slate-50 sm:w-auto sm:py-3.5"
           title="마이크 없이 상담보드만 열어 기록·자료·견적을 작성합니다 (보드 안에서 '녹음 시작'도 가능)"
         >
-          ✏️ 녹음 없이 기록만
+          ✏️ 녹음 없이 상담 먼저
         </button>
         {/* spec 035 — 기공지 진입(위생사 동선: 진료 중 바로) */}
         <Link
