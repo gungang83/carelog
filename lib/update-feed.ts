@@ -413,6 +413,7 @@ export const UPDATE_FEED: UpdateFeedEntry[] = [
     items: [
       "설정 → 환자 문자 · 알림톡에서 문자를 보내는 번호를 고를 수 있습니다(케어로그 기본 번호 / 우리 병원 번호).",
       "우리 병원 번호는 테스트 문자를 받아 확인한 뒤부터 쓰입니다. 문자 발신번호는 미리 등록한 번호만 쓸 수 있어, 등록이 필요하면 안내해 드립니다.",
+      "케어로그 기본 번호가 몇 번인지, 넣은 병원 번호가 발신번호로 등록돼 있는지 화면에서 바로 확인할 수 있습니다.",
     ],
     internal: "spec 038 · institutions.sms_sender_verified_at · SQL 20261116000001 · app/actions/sms-sender.ts",
   },

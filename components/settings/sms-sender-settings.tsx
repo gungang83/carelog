@@ -2,10 +2,20 @@
 
 // /settings '환자 문자 · 알림톡' — 보내는 번호(발신번호) 고르기.
 //   기본 = 케어로그 기본 번호. 우리 병원 번호를 쓰려면 번호 입력 → 테스트 문자 받기 → 나가면 저장(솔라피 등록 번호만 나간다).
-import { useState, useTransition } from "react";
-import { clearSmsSender, verifySmsSender, type SmsSenderState } from "@/app/actions/sms-sender";
+import { useEffect, useState, useTransition } from "react";
+import { checkSmsSender, clearSmsSender, verifySmsSender, type SmsSenderState } from "@/app/actions/sms-sender";
 
-const fmt = (d: string) => d.replace(/^(02|0\d{2})(\d{3,4})(\d{4})$/, "$1-$2-$3");
+const fmt = (d: string) => d.replace(/\D/g, "").replace(/^(02|0\d{2})(\d{3,4})(\d{4})$/, "$1-$2-$3").replace(/^(1\d{3})(\d{4})$/, "$1-$2");
+
+/** 등록 상태 한 줄 */
+function RegBadge({ registered }: { registered: boolean | null | "checking" }) {
+  if (registered === "checking") return <span className="text-xs text-slate-400">등록 확인 중…</span>;
+  if (registered === true)
+    return <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-semibold text-emerald-700">✓ 솔라피에 등록된 발신번호</span>;
+  if (registered === false)
+    return <span className="rounded-full bg-amber-50 px-2 py-0.5 text-xs font-semibold text-amber-800">아직 등록되지 않은 번호 — 운영팀에 등록 요청</span>;
+  return <span className="text-xs text-slate-400">등록 여부를 확인하지 못했어요(테스트 문자로 확인)</span>;
+}
 
 export function SmsSenderSettings({ initial }: { initial: SmsSenderState }) {
   const [state, setState] = useState(initial);
@@ -14,6 +24,24 @@ export function SmsSenderSettings({ initial }: { initial: SmsSenderState }) {
   const [testTo, setTestTo] = useState("");
   const [msg, setMsg] = useState<{ tone: "ok" | "err" | "help"; text: string } | null>(null);
   const [isPending, startTransition] = useTransition();
+  // 넣은 번호의 등록 여부 — 입력이 멈추면 확인(저장된 번호면 처음 값 그대로)
+  const [reg, setReg] = useState<boolean | null | "checking">(initial.registered);
+  const typed = phone.replace(/\D/g, "");
+  useEffect(() => {
+    if (typed.length < 8) return;
+    if (typed === state.phone.replace(/\D/g, "") && reg !== "checking") return;
+    let alive = true;
+    const t = setTimeout(async () => {
+      setReg("checking");
+      const r = await checkSmsSender(typed);
+      if (alive) setReg(r.registered);
+    }, 600);
+    return () => {
+      alive = false;
+      clearTimeout(t);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [typed]);
 
   if (!state.columnsReady) {
     return (
@@ -63,7 +91,7 @@ export function SmsSenderSettings({ initial }: { initial: SmsSenderState }) {
           className={`rounded-xl border px-3 py-2 text-left text-sm transition ${mode === "default" ? "border-sky-500 bg-sky-50 text-sky-800" : "border-slate-200 text-slate-600 hover:bg-slate-50"}`}
         >
           <span className="font-semibold">케어로그 기본 번호</span>
-          <span className="block text-xs opacity-70">따로 준비할 것 없음</span>
+          <span className="block text-xs opacity-70">{state.defaultPhone ? fmt(state.defaultPhone) : "설정 안 됨"} · 준비할 것 없음</span>
         </button>
         <button
           type="button"
@@ -88,7 +116,13 @@ export function SmsSenderSettings({ initial }: { initial: SmsSenderState }) {
               placeholder="02-000-0000"
               className="w-40 rounded-lg border border-slate-300 bg-white px-2 py-1.5 text-sm outline-none focus:border-sky-500"
             />
+            {typed.length >= 8 && <RegBadge registered={reg} />}
           </label>
+          {state.verifiedAt && typed === state.phone.replace(/\D/g, "") && (
+            <p className="text-xs text-emerald-700">
+              지금 이 번호로 보내고 있어요 · {new Date(state.verifiedAt).toLocaleDateString("ko-KR")} 테스트 문자 확인
+            </p>
+          )}
           <label className="flex flex-wrap items-center gap-2 text-sm text-slate-700">
             테스트 받을 내 휴대폰
             <input
