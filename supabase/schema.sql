@@ -400,6 +400,8 @@ alter table public.patient_invitations add column if not exists share_id uuid
   references public.patient_shares(id) on delete set null;
 -- migration: 20261025000002_institution_sms_sender.sql — 병원별 문자 발신번호(솔라피 등록 번호)
 alter table public.institutions add column if not exists sms_sender_phone text;
+-- migration: 20261116000001_institution_sms_sender_verify.sql — 발신번호 테스트 문자 확인 시각(있을 때만 그 번호로 발신)
+alter table public.institutions add column if not exists sms_sender_verified_at timestamptz;
 
 -- spec 041 (migration: 20261114000001_ai_routing.sql) — AI 작업별 모델 순서 + 호출별 사용량
 create table if not exists public.ai_settings (

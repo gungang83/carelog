@@ -405,6 +405,17 @@ export const UPDATE_FEED: UpdateFeedEntry[] = [
     ],
     internal: "spec 027 상담보드 레이아웃 · RichTextEditor openImage/openAssets/openEstimate·fill·hideInsertTools · ParticipantPicker compact",
   },
+  {
+    id: "2026-11-16-sms-sender",
+    date: "2026-11-16",
+    emoji: "📮",
+    title: "환자 문자 보내는 번호를 병원별로",
+    items: [
+      "설정 → 환자 문자 · 알림톡에서 문자를 보내는 번호를 고를 수 있습니다(케어로그 기본 번호 / 우리 병원 번호).",
+      "우리 병원 번호는 테스트 문자를 받아 확인한 뒤부터 쓰입니다. 문자 발신번호는 미리 등록한 번호만 쓸 수 있어, 등록이 필요하면 안내해 드립니다.",
+    ],
+    internal: "spec 038 · institutions.sms_sender_verified_at · SQL 20261116000001 · app/actions/sms-sender.ts",
+  },
 ];
 
 // ── 결정 상태 (DB update_feed_decisions) ──────────────────────────────

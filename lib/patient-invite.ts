@@ -40,15 +40,17 @@ export async function insertInvitation(
   return { ok: false, message: "링크 생성 실패(중복)" };
 }
 
-/** 병원별 문자 발신번호(솔라피에 등록된 번호) — 없으면 null(기본 발신번호 사용) */
+/** 병원별 문자 발신번호(솔라피에 등록된 번호) — 설정 화면에서 테스트 문자로 확인된 번호만. 없으면 null(기본 발신번호 사용) */
 export async function institutionSmsSender(admin: Admin, institutionId: string): Promise<string | null> {
   const { data, error } = await admin
     .from("institutions")
-    .select("sms_sender_phone")
+    .select("sms_sender_phone, sms_sender_verified_at")
     .eq("id", institutionId)
     .maybeSingle();
-  if (error || !data) return null;
-  const v = String((data as { sms_sender_phone?: string | null }).sms_sender_phone ?? "").replace(/\D/g, "");
+  if (error || !data) return null; // 칸이 없으면(SQL 실행 전) 기본 번호
+  const row = data as { sms_sender_phone?: string | null; sms_sender_verified_at?: string | null };
+  if (!row.sms_sender_verified_at) return null;
+  const v = String(row.sms_sender_phone ?? "").replace(/\D/g, "");
   return v.length >= 8 ? v : null;
 }
 

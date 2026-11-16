@@ -41,7 +41,7 @@ export function PatientMessageSettings({ initial }: { initial: ConsultSettings }
         환자에게 보낼 때 &quot;문의: 대표번호&quot;를 넣기 <span className="text-xs text-slate-400">(기본 선택 — 보낼 때마다 바꿀 수 있어요)</span>
       </label>
       <p className="text-xs text-slate-400">
-        문자·알림톡 발신은 케어로그 번호(채널)로 나가고, 본문에 병원 이름과 이 대표번호가 들어갑니다.
+        문자는 위에서 고른 보내는 번호로, 알림톡은 케어로그 채널로 나가고, 본문에 병원 이름과 이 대표번호가 들어갑니다.
       </p>
       <div className="flex items-center gap-3">
         <button

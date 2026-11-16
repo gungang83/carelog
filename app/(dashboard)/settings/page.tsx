@@ -19,6 +19,8 @@ import { TreatmentItemsManager } from "@/components/settings/treatment-items-man
 import { listTreatmentItemsForManage } from "@/app/actions/treatment-items";
 import { ConsultSafetySettings } from "@/components/settings/consult-safety-settings";
 import { PatientMessageSettings } from "@/components/settings/patient-message-settings";
+import { SmsSenderSettings } from "@/components/settings/sms-sender-settings";
+import { getSmsSender } from "@/app/actions/sms-sender";
 import { getConsultSettings } from "@/app/actions/consult-settings";
 import {
   CollapsibleSection,
@@ -62,6 +64,7 @@ export default async function SettingsPage() {
     canManageItems ? listTreatmentItemsForManage() : Promise.resolve([]),
   ]);
   const permissionRows = isOwnerOrAdmin ? await listMemberFeaturePermissions() : [];
+  const smsSender = isOwnerOrAdmin ? await getSmsSender() : null;
   const members = staffResult?.ok ? staffResult.members : [];
 
   return (
@@ -145,8 +148,9 @@ export default async function SettingsPage() {
           <CollapsibleSection
             emoji="📩"
             title="환자 문자 · 알림톡"
-            subtitle="병원 대표번호 · 보낼 때 대표번호 넣기 기본값"
+            subtitle="보내는 번호 · 병원 대표번호 · 보낼 때 대표번호 넣기 기본값"
           >
+            {smsSender && <SmsSenderSettings initial={smsSender} />}
             <PatientMessageSettings initial={consultSettings} />
           </CollapsibleSection>
           )}

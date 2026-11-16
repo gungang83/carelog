@@ -28,7 +28,7 @@
 | 솔라피 계정 | 1개(명의·소유 미확인) — EO·Carelog가 각자 Vercel 환경변수(`SOLAPI_API_KEY/SECRET`)로 같은 계정을 쓰는 것으로 보임 |
 | 발신번호 | **대표 개인 휴대폰**(`SOLAPI_SENDER_PHONE`) — EO 근로계약서 인증, Carelog 환자 안내·인증번호 모두 |
 | 카카오 채널 · 비즈니스 인증 | 없음 |
-| Carelog 코드 | 알림톡 우선 → 실패 시 문자 대체(`lib/sms/solapi.ts`), env `SOLAPI_KAKAO_PFID`·`SOLAPI_KAKAO_TPL_SHARE` 넣으면 자동 전환. 병원별 발신번호 칸(`institutions.sms_sender_phone`)은 예외용으로 보류(SQL 미실행) |
+| Carelog 코드 | 알림톡 우선 → 실패 시 문자 대체(`lib/sms/solapi.ts`), env `SOLAPI_KAKAO_PFID`·`SOLAPI_KAKAO_TPL_SHARE` 넣으면 자동 전환. 병원별 발신번호는 설정 화면에서 고름(테스트 문자 성공 시 사용, 2026-11-16 · SQL `20261116000001`) |
 | 병원별 발신번호 | 사실상 불가 — 솔라피 등록 시 그 번호로 직접 전화 확인 · 남의 번호 서류(이용증명원·위임장·사업자등록증) · **계정당 개수 상한 = 재직 인원**(신규 계정 3개) → 케어로그 번호 하나로 발신 + 본문에 병원명·대표번호로 결론(대표 동의) |
 
 ## 3. 결정할 것
