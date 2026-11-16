@@ -160,3 +160,5 @@
   - 병원 번호를 넣으면 0.6초 뒤 **솔라피 등록 여부**를 보여 줌(`✓ 솔라피에 등록된 발신번호` / `아직 등록되지 않은 번호 — 운영팀에 등록 요청` / 조회 실패 시 `테스트 문자로 확인`).
     솔라피 REST `GET /senderid/v1/numbers/active`(HMAC-SHA256 인증, `lib/sms/solapi.ts activeSenderNumbers`) — 다른 병원 번호가 보이지 않게 목록은 내보내지 않고 예/아니오만(`checkSmsSender`).
   - 사용 중인 번호는 `지금 이 번호로 보내고 있어요 · 날짜 테스트 문자 확인`.
+- **케어로그 기본 번호를 슈퍼어드민에서**(같은 날 대표): `/admin/messaging`(슈퍼어드민 → 문자 발신 →). 지금 기본 번호·출처 표시, 솔라피 활성 번호 목록에서 골라 테스트 문자 → 저장(`platform_settings` 'sms_default_sender'), `환경변수 번호로 되돌리기`.
+  기본 번호 순서: 병원 확인 번호 → 슈퍼어드민 설정 → env `SOLAPI_SENDER_PHONE`. 60초 캐시. SQL `20261116000002_platform_settings.sql`.

@@ -616,3 +616,13 @@ Supabase auth.users와 patient_accounts를 연결. Google OAuth 가입 시 생�
 - `oral_exams` — 측정 한 번(회차). `institution_id` · `patient_id`(bigint → patient cascade, 필수) · `consultation_id`(선택, set null) · `kind`('perio' — 이후 'brush' 등) · `status`(draft|done) · `data`(jsonb `{v:1, thirdMolars, entries:[{m,t,s,p,f,v,at,src,review,utt}], utterances?}` — 한 줄 = 한 위치·한 지표, m = lib/oral/perio MEASURES id — pd·rec·bop·mob·perc(타진, 2026-11-14 추가·스키마 변경 없음)·plq·state) · `summary`(jsonb — 저장 시 계산: sites·meanPd·pd4·pd6·maxPd·bopPct·pcr·meanCal·mobile·percussion·missing·implants·deep) · `recorded_by` · `recorded_at`. 인덱스 (patient_id, recorded_at desc)/(institution_id, recorded_at desc).
 - RLS: enable + 정책 0 — 서버 액션(app/actions/oral-exams.ts, 기관 멤버십 + 환자 소속 확인)만.
 - migration: `20261114000002_oral_exams.sql`
+
+
+### platform_settings (2026-11-16)
+케어로그 전체 설정(슈퍼어드민 화면에서 바꿈) — service_role 전용(RLS 켜고 정책 없음).
+| 컬럼 | 타입 | 설명 |
+|---|---|---|
+| `key` | text PK | 설정 이름 — `sms_default_sender` = `{phone, by}` 케어로그 기본 발신번호(없으면 env `SOLAPI_SENDER_PHONE`) |
+| `value` | jsonb | 값 |
+| `updated_by` | text | 바꾼 사람 이메일 |
+| `updated_at` | timestamptz | |

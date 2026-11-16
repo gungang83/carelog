@@ -51,7 +51,7 @@ async function adminGate(): Promise<{ ok: true; institutionId: string } | { ok: 
 
 export async function getSmsSender(): Promise<SmsSenderState> {
   const g = await adminGate();
-  const defaultPhone = defaultSenderPhone();
+  const defaultPhone = await defaultSenderPhone();
   if (!g.ok) return { phone: "", verifiedAt: null, columnsReady: false, defaultPhone, registered: null };
   const admin = createAdminSupabaseClient();
   const { data, error } = await admin
@@ -105,7 +105,7 @@ export async function verifySmsSender(input: {
     .update({ sms_sender_phone: phone, sms_sender_verified_at: now })
     .eq("id", g.institutionId);
   if (error) return { ok: false, message: `테스트 문자는 나갔지만 저장하지 못했어요: ${error.message}` };
-  return { ok: true, state: { phone, verifiedAt: now, columnsReady: true, defaultPhone: defaultSenderPhone(), registered: true } };
+  return { ok: true, state: { phone, verifiedAt: now, columnsReady: true, defaultPhone: await defaultSenderPhone(), registered: true } };
 }
 
 /** 병원 발신번호를 지우고 기본 발신번호로 */

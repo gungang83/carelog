@@ -830,3 +830,13 @@ components/oral/perio-3d.tsx 잇몸 기록 3D 층 — 잇몸 띠·잇몸선·주
 lib/oral/perio-pick.ts       PerioPick — 2D·3D 공용 "가리킨 곳"(같은 입력 규칙)
 lib/svg-to-png.ts            SVG → PNG 공용
 ```
+
+
+## 문자 발신번호 (2026-11-16)
+```
+lib/sms/solapi.ts            sendSms/sendAlimtalk · defaultSenderPhone()(슈퍼어드민 설정 → env) · activeSenderNumbers()(솔라피 GET /senderid/v1/numbers/active)
+lib/platform-settings.ts     platform_settings 키/값(60초 캐시) — 케어로그 전체 설정
+lib/patient-invite.ts        institutionSmsSender — 병원 확인 번호(sms_sender_verified_at 있을 때만)
+app/actions/sms-sender.ts    워크스페이스 설정(owner/admin): 등록 여부 확인 · 테스트 문자 후 저장 · 기본으로
+app/actions/sms-admin.ts     슈퍼어드민 /admin/messaging: 기본 번호 바꾸기(활성 번호 중 + 테스트 문자) · env로 되돌리기
+```

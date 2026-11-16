@@ -1,4 +1,5 @@
 import { SolapiMessageService } from "solapi";
+import { getPlatformSetting } from "@/lib/platform-settings";
 
 function stripBom(s: string) {
   return s.charCodeAt(0) === 0xfeff ? s.slice(1) : s;
@@ -14,9 +15,19 @@ function client(): SolapiMessageService | null {
   return apiKey && apiSecret ? new SolapiMessageService(apiKey, apiSecret) : null;
 }
 
-/** 기본 발신번호(env SOLAPI_SENDER_PHONE, 숫자만) — 병원 번호를 고르지 않은 워크스페이스가 쓰는 번호 */
-export function defaultSenderPhone(): string {
+/** 환경변수 기본 발신번호(숫자만) — 슈퍼어드민 설정이 없을 때의 마지막 기본값 */
+export function envSenderPhone(): string {
   return env("SOLAPI_SENDER_PHONE").replace(/\D/g, "");
+}
+
+/**
+ * 케어로그 기본 발신번호(숫자만) — 병원 번호를 고르지 않은 워크스페이스가 쓰는 번호.
+ *   슈퍼어드민 → 문자 발신에서 고른 번호(platform_settings 'sms_default_sender') → 없으면 env SOLAPI_SENDER_PHONE.
+ */
+export async function defaultSenderPhone(): Promise<string> {
+  const v = await getPlatformSetting<{ phone?: string }>("sms_default_sender");
+  const d = String(v?.phone ?? "").replace(/\D/g, "");
+  return d.length >= 8 ? d : envSenderPhone();
 }
 
 /** 솔라피 REST 인증 헤더(HMAC-SHA256 — SDK와 같은 방식) */
@@ -68,7 +79,7 @@ export async function sendSms(
   opts?: { from?: string | null },
 ): Promise<{ ok: true } | { ok: false; message: string }> {
   const c = client();
-  const from = (opts?.from || env("SOLAPI_SENDER_PHONE")).trim();
+  const from = (opts?.from || (await defaultSenderPhone())).trim();
   if (!c || !from) {
     return { ok: false, message: "SMS 발송 환경변수가 설정되지 않았습니다." };
   }
@@ -106,7 +117,7 @@ export async function sendAlimtalk(
   const pfId = env("SOLAPI_KAKAO_PFID");
   const templateId = env(TEMPLATE_ENV[template]);
   if (!c || !pfId || !templateId) return { ok: false, message: "알림톡 설정이 없습니다." };
-  const from = (opts?.from || env("SOLAPI_SENDER_PHONE")).trim();
+  const from = (opts?.from || (await defaultSenderPhone())).trim();
   try {
     await c.send({
       to,

@@ -842,3 +842,12 @@ alter table public.patient_push_subscriptions enable row level security;
 --   · lib/lab-order-sender.ts(전송기 — 액션·cron 공용) · /api/cron/process-lab-orders(10분 재전송)
 --   · /lab-orders + components/lab/*(치식도 FDI·SketchPad·컴포저) · 보드 [🦷 기공지] 진입.
 -- ───────────────────────────────────────────────────────────────────────────
+
+-- migration: 20261116000002_platform_settings.sql — 케어로그 전체 설정(슈퍼어드민): sms_default_sender 등
+create table if not exists public.platform_settings (
+  key text primary key,
+  value jsonb not null default '{}'::jsonb,
+  updated_by text,
+  updated_at timestamptz not null default now()
+);
+alter table public.platform_settings enable row level security;
