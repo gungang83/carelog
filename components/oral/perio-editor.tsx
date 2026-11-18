@@ -37,12 +37,22 @@ import {
 } from "@/lib/oral/perio";
 import { PerioChart, bopDropY, plaqueSurface } from "@/components/oral/perio-chart";
 import { pickFromHit, type PerioPick } from "@/lib/oral/perio-pick";
-import { describeCtx, parsePerioUtterance, type VoiceAction } from "@/lib/oral/perio-voice";
+import { describeCtx, parsePerioUtterance, previewActions, type VoiceAction } from "@/lib/oral/perio-voice";
 import { interpretPerioUtterance } from "@/app/actions/perio-voice";
 import { usePerioVoice } from "@/components/oral/use-perio-voice";
 
 /** 말로 입력 한 문장의 결과(화면 아래 목록) */
-type VoiceLine = { id: string; text: string; summary: string; filled: number; ai?: boolean; pending?: boolean; note?: string };
+type VoiceLine = {
+  id: string;
+  text: string;
+  summary: string;
+  filled: number;
+  ai?: boolean;
+  pending?: boolean;
+  note?: string;
+  /** 길거나 수상해서 보류한 해석 — [그래도 적용]으로 넣는다 */
+  held?: VoiceAction[];
+};
 
 /** bop = 2D에서 부위의 출혈 점(토글)을 가리킴 */
 type EditorHover = { pick: PerioPick; value: MeasureValue | null; hit?: ChartHit; bop?: boolean } | null;
@@ -277,7 +287,8 @@ export function PerioEditor({ patient, examId, initialData, consultationId, onCl
   useLayoutEffect(() => {
     latest.current = { cursor, dir, mode, data, missing };
   });
-  const applyVoice = (acts: VoiceAction[], utt: { id: string; text: string }): { summary: string; filled: number; note?: string } => {
+  /** dry = 미리보기(말하는 중) — 어디에 들어갈지만 계산하고 기록하지 않는다 */
+  const applyVoice = (acts: VoiceAction[], utt: { id: string; text: string }, dry = false): { summary: string; filled: number; note?: string } => {
     const L = latest.current;
     let cur: Cursor | null = L.cursor;
     let d: 1 | -1 = L.dir;
@@ -367,6 +378,7 @@ export function PerioEditor({ patient, examId, initialData, consultationId, onCl
       }
     }
     if (!parts.length) return { summary: "", filled: 0, note };
+    if (dry) return { summary: parts.join(" · "), filled: added.length, note };
     setData((prev) => {
       history.current.push(prev);
       if (history.current.length > 200) history.current.shift();
@@ -388,6 +400,16 @@ export function PerioEditor({ patient, examId, initialData, consultationId, onCl
     const id = `u${Date.now().toString(36)}${Math.random().toString(36).slice(2, 5)}`;
     let acts = parsePerioUtterance(text);
     let ai = false;
+    // ★안전장치: 긴 문장(잘못 알아들은 문장일 가능성)·값이 너무 많음·긴 문장 속 "결손"은 바로 넣지 않고 보류
+    const values = acts.filter((a) => a.k === "val").length;
+    const compact = text.replace(/\s/g, "");
+    if (compact.length > 45 || values > 18 || (acts.some((a) => a.k === "missing") && compact.length > 12)) {
+      setVoiceLog((l) => [
+        ...l.slice(-30),
+        { id, text, summary: previewActions(acts).join(" · ") || "해석 없음", filled: 0, note: "길거나 애매해서 넣지 않았어요", held: acts },
+      ]);
+      return;
+    }
     if (!acts.length && text.replace(/\s/g, "").length >= 4) {
       setVoiceLog((l) => [...l.slice(-30), { id, text, summary: "해석 중…", filled: 0, pending: true }]);
       acts = await interpretPerioUtterance(text);
@@ -403,8 +425,16 @@ export function PerioEditor({ patient, examId, initialData, consultationId, onCl
   // 개발 중 자동 점검용 — 말 대신 문장을 넣어 본다(배포 빌드에선 빠짐)
   useEffect(() => {
     if (process.env.NODE_ENV === "production") return;
-    (window as unknown as { __perioSay?: (t: string) => Promise<void> }).__perioSay = onVoiceText;
+    const w = window as unknown as { __perioSay?: (t: string) => Promise<void>; __perioPartial?: (t: string) => void };
+    w.__perioSay = onVoiceText;
+    w.__perioPartial = voice.simulate;
   });
+  /** 보류한 해석을 그래도 넣기 */
+  const applyHeld = (line: VoiceLine) => {
+    if (!line.held) return;
+    const r = applyVoice(line.held, { id: line.id, text: line.text });
+    setVoiceLog((l) => l.map((x) => (x.id === line.id ? { ...x, summary: r.summary || x.summary, filled: r.filled, note: r.note, held: undefined } : x)));
+  };
   /** 한 문장이 넣은 값 되돌리기 */
   const undoUtterance = (uid: string) => {
     setData((prev) => {
@@ -696,65 +726,128 @@ export function PerioEditor({ patient, examId, initialData, consultationId, onCl
       )}
       </div>
 
-      {/* 말로 기록 — 듣는 중·방금 알아들은 말·문장별 결과(되돌리기) */}
-      {(voice.status !== "off" || voiceLog.length > 0 || voice.error) && !exporting && (
-        <div className="border-t border-slate-200/70 bg-slate-950 px-3 py-2 text-xs text-slate-200">
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="flex items-center gap-1.5 font-bold">
-              <span
-                className={`inline-block size-2.5 rounded-full ${
-                  voice.status === "live" ? "animate-pulse bg-red-500" : voice.status === "connecting" ? "animate-pulse bg-amber-400" : "bg-slate-500"
-                }`}
-              />
-              {voice.status === "live" ? "듣는 중" : voice.status === "connecting" ? "연결 중…" : voice.status === "error" ? "멈춤" : "말로 기록"}
-            </span>
-            <span className="rounded-full bg-white/10 px-2 py-0.5">
-              {mode === "rec" ? "퇴축" : "깊이"} · <b className="text-sky-300">{cursor.t}</b> {cursor.s === "B" ? "바깥" : "안쪽"} {cursor.p}{" "}
-              {dir === mesialDir(cursor.t) ? "→근심" : "→원심"}
-            </span>
-            {voice.partial && <span className="italic text-slate-400">“{voice.partial}”</span>}
-            {voice.error && <span className="text-amber-300">{voice.error}</span>}
-            <span className="ml-auto flex items-center gap-1.5">
-              {reviewCount > 0 && (
-                <button type="button" onClick={finishReview} className="rounded-lg bg-white/10 px-2 py-1 font-semibold text-white hover:bg-white/20" title="말로 넣은 값을 확인했으면 확정">
-                  검토 끝 ({reviewCount})
-                </button>
+      {/* 말로 기록 — ①지금 말하는 것(실시간 자막 + 해석 미리보기) ②방금 기록된 문장(해석 결과) ③지난 문장들 */}
+      {(voice.status !== "off" || voiceLog.length > 0 || voice.error) && !exporting && (() => {
+        const lastLine = voiceLog[voiceLog.length - 1];
+        // 말하는 중 미리보기 — 실제로 어느 칸에 들어갈지(기록은 문장이 끝나야)
+        const liveActs = voice.partial ? parsePerioUtterance(voice.partial) : [];
+        const liveDry = liveActs.length ? applyVoice(liveActs, { id: "preview", text: voice.partial }, true) : null;
+        const livePreview = liveDry?.summary ? liveDry.summary.split(" · ") : previewActions(liveActs);
+        return (
+          <div className="border-t border-slate-800 bg-slate-950 px-3 py-2.5 text-slate-200 sm:px-4">
+            {/* 상태 줄 */}
+            <div className="flex flex-wrap items-center gap-2 text-xs">
+              <span className="flex items-center gap-1.5 font-bold">
+                <span
+                  className={`inline-block size-2.5 rounded-full ${
+                    voice.status === "live" ? "animate-pulse bg-red-500" : voice.status === "connecting" ? "animate-pulse bg-amber-400" : "bg-slate-500"
+                  }`}
+                />
+                {voice.status === "live" ? "듣는 중" : voice.status === "connecting" ? "연결 중…" : voice.status === "error" ? "멈춤" : "말로 기록"}
+              </span>
+              {voice.status === "live" && (
+                <span className="flex h-2 w-20 overflow-hidden rounded-full bg-white/10" title="마이크 소리 크기">
+                  <span className="h-full rounded-full bg-emerald-400 transition-[width] duration-100" style={{ width: `${Math.round(voice.level * 100)}%` }} />
+                </span>
               )}
-              {voice.status === "off" && voiceLog.length > 0 && (
-                <button type="button" onClick={() => setVoiceLog([])} className="rounded-lg px-2 py-1 text-slate-400 hover:text-white">
-                  목록 닫기
-                </button>
-              )}
-            </span>
-          </div>
-          {voiceLog.length > 0 && (
-            <ul className="mt-1.5 flex max-h-24 flex-col-reverse gap-1 overflow-y-auto">
-              {[...voiceLog].reverse().map((l) => (
-                <li key={l.id} className="flex items-center gap-2">
-                  <span className="max-w-[45%] truncate text-slate-400" title={l.text}>
-                    “{l.text}”
-                  </span>
-                  <span className={l.pending ? "text-slate-500" : l.filled ? "text-emerald-300" : "text-slate-400"}>
-                    {l.ai && !l.pending ? "AI · " : ""}
-                    {l.summary}
-                  </span>
-                  {l.note && <span className="text-amber-300">· {l.note}</span>}
-                  {l.filled > 0 && (
-                    <button type="button" onClick={() => undoUtterance(l.id)} className="ml-auto shrink-0 rounded px-1.5 text-slate-400 hover:bg-white/10 hover:text-white">
+              <span className="rounded-full bg-white/10 px-2 py-0.5">
+                다음 칸 · {mode === "rec" ? "퇴축" : "깊이"} · <b className="text-sky-300">{cursor.t}</b> {cursor.s === "B" ? "바깥" : "안쪽"} {cursor.p}{" "}
+                {dir === mesialDir(cursor.t) ? "→근심" : "→원심"}
+              </span>
+              {voice.error && <span className="text-amber-300">{voice.error}</span>}
+              <span className="ml-auto flex items-center gap-1.5">
+                {reviewCount > 0 && (
+                  <button type="button" onClick={finishReview} className="rounded-lg bg-white/10 px-2 py-1 font-semibold text-white hover:bg-white/20" title="말로 넣은 값을 확인했으면 확정">
+                    검토 끝 ({reviewCount})
+                  </button>
+                )}
+                {voice.status === "off" && voiceLog.length > 0 && (
+                  <button type="button" onClick={() => setVoiceLog([])} className="rounded-lg px-2 py-1 text-slate-400 hover:text-white">
+                    목록 닫기
+                  </button>
+                )}
+              </span>
+            </div>
+
+            {/* ① 지금 말하는 것 — 크게, 해석 미리보기와 함께 */}
+            {voice.status === "live" && (
+              <div className="mt-2 rounded-xl bg-white/5 px-3 py-2">
+                <p className={`min-h-7 text-lg font-semibold leading-7 ${voice.partial ? "text-white" : "text-slate-500"}`}>
+                  {voice.partial ? `“${voice.partial}”` : "말씀하세요… (예: 17번 바깥 원심부터 근심 방향 깊이 → 3 2 3)"}
+                </p>
+                {livePreview.length > 0 && (
+                  <p className="mt-0.5 flex flex-wrap gap-1 text-xs">
+                    <span className="text-slate-400">이렇게 알아듣는 중 →</span>
+                    {livePreview.map((x, i) => (
+                      <span key={i} className="rounded bg-sky-500/20 px-1.5 text-sky-200">
+                        {x}
+                      </span>
+                    ))}
+                  </p>
+                )}
+              </div>
+            )}
+
+            {/* ② 방금 기록된 문장 — 들은 말 그대로 + 실제로 넣은 것 */}
+            {lastLine && (
+              <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 rounded-xl border border-white/10 px-3 py-2">
+                <span className="text-sm text-slate-300">“{lastLine.text}”</span>
+                <span className="text-slate-500">→</span>
+                <span className={`text-sm font-semibold ${lastLine.pending ? "text-slate-400" : lastLine.filled ? "text-emerald-300" : lastLine.held ? "text-amber-200" : "text-slate-400"}`}>
+                  {lastLine.ai && !lastLine.pending ? "AI · " : ""}
+                  {lastLine.summary}
+                </span>
+                {lastLine.note && <span className="text-xs text-amber-300">· {lastLine.note}</span>}
+                <span className="ml-auto flex gap-1">
+                  {lastLine.held && (
+                    <button type="button" onClick={() => applyHeld(lastLine)} className="rounded-lg bg-amber-500/20 px-2 py-1 text-xs font-semibold text-amber-200 hover:bg-amber-500/30">
+                      그래도 넣기
+                    </button>
+                  )}
+                  {lastLine.filled > 0 && (
+                    <button type="button" onClick={() => undoUtterance(lastLine.id)} className="rounded-lg bg-white/10 px-2 py-1 text-xs font-semibold text-white hover:bg-white/20">
                       되돌리기
                     </button>
                   )}
-                </li>
-              ))}
-            </ul>
-          )}
-          {voice.status === "live" && voiceLog.length === 0 && (
-            <p className="mt-1 text-slate-400">
-              예: “17번 바깥 원심부터 근심 방향으로 깊이” → “3 2 3, 4 3 5…” · “출혈” · “퇴축 2” · “동요 투플러스” · “타진 플러스” · “결손” · “취소” · “건너뛰기”
-            </p>
-          )}
-        </div>
-      )}
+                </span>
+              </div>
+            )}
+
+            {/* ③ 지난 문장들 */}
+            {voiceLog.length > 1 && (
+              <ul className="mt-1.5 flex max-h-20 flex-col gap-0.5 overflow-y-auto text-xs">
+                {voiceLog
+                  .slice(0, -1)
+                  .reverse()
+                  .map((l) => (
+                    <li key={l.id} className="flex items-center gap-2">
+                      <span className="max-w-[45%] truncate text-slate-500" title={l.text}>
+                        “{l.text}”
+                      </span>
+                      <span className={l.filled ? "text-emerald-400/80" : l.held ? "text-amber-300/80" : "text-slate-500"}>
+                        {l.ai && !l.pending ? "AI · " : ""}
+                        {l.summary}
+                      </span>
+                      {l.note && <span className="text-amber-300/80">· {l.note}</span>}
+                      <span className="ml-auto flex shrink-0 gap-1">
+                        {l.held && (
+                          <button type="button" onClick={() => applyHeld(l)} className="rounded px-1.5 text-amber-200 hover:bg-white/10">
+                            그래도 넣기
+                          </button>
+                        )}
+                        {l.filled > 0 && (
+                          <button type="button" onClick={() => undoUtterance(l.id)} className="rounded px-1.5 text-slate-400 hover:bg-white/10 hover:text-white">
+                            되돌리기
+                          </button>
+                        )}
+                      </span>
+                    </li>
+                  ))}
+              </ul>
+            )}
+          </div>
+        );
+      })()}
 
       {/* 아래 막대 — 보기 도구 + 요약(숫자만) */}
       <div className="flex flex-wrap items-center gap-2 border-t border-slate-200/70 bg-white px-3 py-2 text-xs">

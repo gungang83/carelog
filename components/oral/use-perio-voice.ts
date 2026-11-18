@@ -8,10 +8,17 @@ import { recordPerioVoiceUsage } from "@/app/actions/perio-voice";
 
 export type VoiceStatus = "off" | "connecting" | "live" | "error";
 
+/** 조용할 때·잡음에 전사 모델이 지어내는 흔한 문장(무시) — 영상 자막투·힌트 되풀이 */
+const HALLUCINATION = /시청해\s*주셔서|구독|좋아요|MBC|KBS|SBS|뉴스입니다|자막|치주 검사 기록|11~48|예:\s*\d/;
+
 export function usePerioVoice(onFinal: (text: string) => void) {
   const [status, setStatus] = useState<VoiceStatus>("off");
   const [partial, setPartial] = useState("");
   const [error, setError] = useState("");
+  /** 마이크 소리 크기 0~1(말하고 있는지 눈으로 확인) */
+  const [level, setLevel] = useState(0);
+  const levelRef = useRef(0);
+  const meter = useRef<ReturnType<typeof setInterval> | null>(null);
   const onFinalRef = useRef(onFinal);
   useEffect(() => {
     onFinalRef.current = onFinal;
@@ -41,6 +48,10 @@ export function usePerioVoice(onFinal: (text: string) => void) {
       ws.current?.close();
     } catch {}
     mic.current?.getTracks().forEach((t) => t.stop());
+    if (meter.current) clearInterval(meter.current);
+    meter.current = null;
+    levelRef.current = 0;
+    setLevel(0);
     proc.current = src.current = ctx.current = ws.current = mic.current = null;
     if (started.current) {
       const sec = (Date.now() - started.current) / 1000;
@@ -88,6 +99,7 @@ export function usePerioVoice(onFinal: (text: string) => void) {
       if (!alive.current || !mic.current) return;
       started.current = Date.now();
       setStatus("live");
+      meter.current = setInterval(() => setLevel(levelRef.current), 120);
       try {
         const ac = new AudioContext({ sampleRate: 24000 });
         ctx.current = ac;
@@ -99,10 +111,13 @@ export function usePerioVoice(onFinal: (text: string) => void) {
           if (sock.readyState !== WebSocket.OPEN) return;
           const input = ev.inputBuffer.getChannelData(0);
           const pcm = new Int16Array(input.length);
+          let sum = 0;
           for (let i = 0; i < input.length; i++) {
             const s = Math.max(-1, Math.min(1, input[i]));
             pcm[i] = s < 0 ? s * 0x8000 : s * 0x7fff;
+            sum += s * s;
           }
+          levelRef.current = Math.min(1, Math.sqrt(sum / input.length) * 6);
           let bin = "";
           const bytes = new Uint8Array(pcm.buffer);
           for (let i = 0; i < bytes.length; i += 8192) bin += String.fromCharCode(...bytes.subarray(i, i + 8192));
@@ -126,7 +141,7 @@ export function usePerioVoice(onFinal: (text: string) => void) {
       else if (t.endsWith("input_audio_transcription.completed")) {
         setPartial("");
         const text = (e.transcript ?? "").trim();
-        if (text) onFinalRef.current(text);
+        if (text && !HALLUCINATION.test(text)) onFinalRef.current(text);
       } else if (t === "error") fail(e.error?.message ?? "실시간 연결 오류");
     };
     sock.onerror = () => {
@@ -142,5 +157,14 @@ export function usePerioVoice(onFinal: (text: string) => void) {
 
   useEffect(() => () => teardown(), [teardown]);
 
-  return { status, partial, error, start, stop };
+  /** 개발 중 점검용 — 연결 없이 "듣는 중·자막"을 흉내(배포 빌드에선 쓰지 않음) */
+  const simulate = useCallback((text: string) => {
+    if (process.env.NODE_ENV === "production") return;
+    setStatus("live");
+    setPartial(text);
+    levelRef.current = 0.5;
+    setLevel(0.5);
+  }, []);
+
+  return { status, partial, error, level, start, stop, simulate };
 }

@@ -272,3 +272,29 @@ export function sanitizeActions(raw: unknown): VoiceAction[] {
   }
   return out;
 }
+
+/** 해석 미리보기(말하는 중 화면에) — "17 바깥 D부터 →근심 깊이 · 3 2 3 · 출혈" */
+export function previewActions(acts: VoiceAction[]): string[] {
+  const out: string[] = [];
+  let vals: string[] = [];
+  const flushVals = () => {
+    if (vals.length) out.push(vals.join(" "));
+    vals = [];
+  };
+  for (const a of acts) {
+    if (a.k === "val") {
+      vals.push(String(a.v));
+      continue;
+    }
+    flushVals();
+    if (a.k === "ctx") out.push(describeCtx(a));
+    else if (a.k === "bop") out.push("출혈");
+    else if (a.k === "mob") out.push(`동요 ${["−", "+", "++", "+++"][a.v]}`);
+    else if (a.k === "perc") out.push(`타진 ${["−", "+", "++", "+++"][a.v]}`);
+    else if (a.k === "missing") out.push("결손");
+    else if (a.k === "undo") out.push("취소");
+    else if (a.k === "skip") out.push("건너뛰기");
+  }
+  flushVals();
+  return out;
+}
