@@ -840,3 +840,13 @@ lib/patient-invite.ts        institutionSmsSender — 병원 확인 번호(sms_s
 app/actions/sms-sender.ts    워크스페이스 설정(owner/admin): 등록 여부 확인 · 테스트 문자 후 저장 · 기본으로
 app/actions/sms-admin.ts     슈퍼어드민 /admin/messaging: 기본 번호 바꾸기(활성 번호 중 + 테스트 문자) · env로 되돌리기
 ```
+
+
+## 잇몸 기록 말로 입력 (2026-11-18, spec 040 §17)
+```
+app/api/realtime/perio-token/route.ts  OpenAI Realtime 전사 세션 단기 시크릿(로그인 멤버) — gpt-4o-transcribe·ko·치과 힌트·VAD 450ms
+components/oral/use-perio-voice.ts      마이크 → PCM16 24kHz → WebSocket, 문장 확정마다 onFinal
+lib/oral/perio-voice.ts                 parsePerioUtterance(규칙) · sanitizeActions(AI 결과 검증) · describeCtx
+app/actions/perio-voice.ts              interpretPerioUtterance(askAI chart_parse) · recordPerioVoiceUsage(ai_usage perio_voice)
+components/oral/perio-editor.tsx        applyVoice — 문장 단위 일괄 기록(review·utt) · 검토 끝 · 문장별 되돌리기 · 3D focusRequest
+```

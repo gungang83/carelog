@@ -237,7 +237,19 @@ export const PerioChart = forwardRef<SVGSVGElement, Props>(function PerioChart(
                 return (
                   <g key={p}>
                     {pdv !== undefined && (
-                      <text key={`${kPd}-${String(pdv)}`} className={live && flash === kPd ? "perio-pop" : undefined} x={x} y={pdY} textAnchor="middle" fontSize={10.5} fontWeight={800} fill={pdColor(pdNum(pdv))}>
+                      <text
+                        key={`${kPd}-${String(pdv)}`}
+                        className={live && flash === kPd ? "perio-pop" : undefined}
+                        x={x}
+                        y={pdY}
+                        textAnchor="middle"
+                        fontSize={10.5}
+                        fontWeight={800}
+                        fill={pdColor(pdNum(pdv))}
+                        // 말로 넣어 검토 전 — 연하고 기울게(칸을 눌러 고치거나 [검토 끝]으로 확정)
+                        opacity={live && ix.get(kPd)?.review ? 0.5 : 1}
+                        fontStyle={live && ix.get(kPd)?.review ? "italic" : undefined}
+                      >
                         {String(pdv)}
                       </text>
                     )}

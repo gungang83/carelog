@@ -6,7 +6,7 @@
 //   면(B/P/L)은 줄이 곧 면 — 상악 협측·구개측, 하악 설측·협측 4줄.
 //   키보드: 0~9, Shift+0/1/2 = 10~12, F, B(방금 칸 출혈), ←→, ↑↓(면), Backspace, Ctrl+Z.
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import { readViewMode, writeViewMode, type ViewMode } from "@/lib/dental/view-mode";
 import { isUpper, type Fdi } from "@/lib/dental/teeth";
@@ -37,6 +37,12 @@ import {
 } from "@/lib/oral/perio";
 import { PerioChart, bopDropY, plaqueSurface } from "@/components/oral/perio-chart";
 import { pickFromHit, type PerioPick } from "@/lib/oral/perio-pick";
+import { describeCtx, parsePerioUtterance, type VoiceAction } from "@/lib/oral/perio-voice";
+import { interpretPerioUtterance } from "@/app/actions/perio-voice";
+import { usePerioVoice } from "@/components/oral/use-perio-voice";
+
+/** 말로 입력 한 문장의 결과(화면 아래 목록) */
+type VoiceLine = { id: string; text: string; summary: string; filled: number; ai?: boolean; pending?: boolean; note?: string };
 
 /** bop = 2D에서 부위의 출혈 점(토글)을 가리킴 */
 type EditorHover = { pick: PerioPick; value: MeasureValue | null; hit?: ChartHit; bop?: boolean } | null;
@@ -166,6 +172,9 @@ export function PerioEditor({ patient, examId, initialData, consultationId, onCl
   const [cardTooth, setCardTooth] = useState<Fdi | null>(null);
   const history = useRef<PerioData[]>([]);
   const lastSite = useRef<Cursor | null>(null);
+  /** 말로 입력 — 문장 결과 목록 · 3D가 그 치아로 옮겨 가라는 요청 */
+  const [voiceLog, setVoiceLog] = useState<VoiceLine[]>([]);
+  const [focusReq, setFocusReq] = useState<{ t: Fdi; s: Side; n: number } | null>(null);
   const scrub = useRef(false);
   const chartRef = useRef<SVGSVGElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -261,6 +270,155 @@ export function PerioEditor({ patient, examId, initialData, consultationId, onCl
   const toggleBop = (t: Fdi, s: Side, p: Pos) => setEntry({ m: "bop", t, s, p }, siteVal(ix, "bop", t, s, p) === true ? undefined : true);
   /** 동요·타진 — 같은 값을 다시 누르면 지움(− 음성도 기록으로 남는다) */
   const setTooth = (m: "mob" | "perc", t: Fdi, v: number) => setEntry({ m, t }, toothVal(ix, m, t) === v ? undefined : v);
+
+  // ── 말로 입력(spec 040 §5-3) ── 문장마다: 해석 → 한 번에 기록(되돌리기·[검토] 단위) → 커서·방향·지표 갱신
+  //   ★막지 않고 받아 적는다: 말로 넣은 값은 "검토 전"(review) — 칸을 눌러 고치면 그 값이 확정, [검토 끝]으로 모두 확정.
+  const latest = useRef({ cursor, dir, mode, data, missing });
+  useLayoutEffect(() => {
+    latest.current = { cursor, dir, mode, data, missing };
+  });
+  const applyVoice = (acts: VoiceAction[], utt: { id: string; text: string }): { summary: string; filled: number; note?: string } => {
+    const L = latest.current;
+    let cur: Cursor | null = L.cursor;
+    let d: 1 | -1 = L.dir;
+    let m: "pd" | "rec" = L.mode === "rec" ? "rec" : "pd";
+    let entries = [...L.data.entries];
+    const miss = new Set(L.missing);
+    const at = new Date().toISOString();
+    const added: Entry[] = [];
+    const parts: string[] = [];
+    let last: Cursor | null = null;
+    let note: string | undefined;
+    let moved = false;
+    const put = (loc: Omit<Entry, "v" | "at" | "src">, v: MeasureValue) => {
+      const key = entryKey(loc);
+      entries = entries.filter((e) => entryKey(e) !== key);
+      const e: Entry = { ...loc, v, at, src: "voice", review: true, utt: utt.id };
+      entries.push(e);
+      added.push(e);
+    };
+    const nextTooth = (c: Cursor): Cursor | null => {
+      let n: Cursor | null = c;
+      while (n && n.t === c.t) n = stepCursor(n, d, L.data.thirdMolars, miss);
+      return n;
+    };
+    for (const a of acts) {
+      if (a.k === "ctx") {
+        const prevCur: Cursor | null = cur;
+        const t: Fdi = a.t ?? prevCur?.t ?? L.cursor.t;
+        const side: Side = a.s ?? prevCur?.s ?? "B";
+        if (a.toward) d = a.toward === "M" ? mesialDir(t) : (-mesialDir(t) as 1 | -1);
+        else if (a.p === "D") d = mesialDir(t);
+        else if (a.p === "M") d = -mesialDir(t) as 1 | -1;
+        else if (a.t) d = mesialDir(t);
+        const p: Pos = a.p ?? (a.t ? (d === mesialDir(t) ? "D" : "M") : prevCur?.p ?? "D");
+        if (a.mode) m = a.mode;
+        cur = miss.has(t) ? null : { t, s: side, p };
+        if (!cur) note = `${t}은 결손으로 표시돼 있어요`;
+        moved = true;
+        parts.push(describeCtx(a));
+      } else if (a.k === "val") {
+        if (!cur) {
+          note ??= "줄 끝 — 다음 위치를 말해 주세요";
+          continue;
+        }
+        const v = a.v;
+        const ok = m === "pd" ? v === "F" || (typeof v === "number" && v >= 0 && v <= 15) : typeof v === "number" && v >= -3 && v <= 10;
+        if (!ok) {
+          note = `${v}은 ${m === "pd" ? "깊이" : "퇴축"} 값이 아니에요`;
+          continue;
+        }
+        put({ m, t: cur.t, s: cur.s, p: cur.p }, v);
+        parts.push(`${cur.t}${cur.p} ${v}`);
+        last = cur;
+        cur = stepCursor(cur, d, L.data.thirdMolars, miss);
+      } else if (a.k === "bop") {
+        // 출혈·동요·타진은 "방금 잰 곳"에 — 문장이 따로 와도(“3 2 3” → “출혈”) 직전에 기록한 칸
+        const site = last ?? lastSite.current ?? cur;
+        if (site) {
+          put({ m: "bop", t: site.t, s: site.s, p: site.p }, true);
+          parts.push(`${site.t}${site.p} 출혈`);
+        }
+      } else if (a.k === "mob" || a.k === "perc") {
+        const t = (last ?? lastSite.current ?? cur)?.t;
+        if (t) {
+          put({ m: a.k, t }, a.v);
+          parts.push(`${t} ${a.k === "mob" ? "동요" : "타진"} ${MOB_LABEL[a.v]}`);
+        }
+      } else if (a.k === "missing") {
+        const c = cur ?? last;
+        if (c) {
+          const n = nextTooth(c);
+          put({ m: "state", t: c.t }, "missing");
+          miss.add(c.t);
+          parts.push(`${c.t} 결손`);
+          cur = n && { ...n, p: d === mesialDir(n.t) ? "D" : "M" };
+        }
+      } else if (a.k === "undo") {
+        const gone = added.pop() ?? [...entries].filter((e) => e.src === "voice").sort((x, y) => (x.at ?? "").localeCompare(y.at ?? "")).pop();
+        if (gone) {
+          entries = entries.filter((e) => e !== gone && entryKey(e) !== entryKey(gone));
+          if (gone.s && gone.p) cur = { t: gone.t, s: gone.s, p: gone.p };
+          parts.push("취소");
+        }
+      } else if (a.k === "skip") {
+        if (cur) cur = stepCursor(cur, d, L.data.thirdMolars, miss);
+        parts.push("건너뛰기");
+      }
+    }
+    if (!parts.length) return { summary: "", filled: 0, note };
+    setData((prev) => {
+      history.current.push(prev);
+      if (history.current.length > 200) history.current.shift();
+      return { ...prev, entries, utterances: [...(prev.utterances ?? []), { id: utt.id, text: utt.text, at }].slice(-300) };
+    });
+    setDirty(true);
+    if (last) {
+      lastSite.current = last;
+      setFlash(entryKey({ m, t: last.t, s: last.s, p: last.p }));
+    }
+    const pos = cur ?? last;
+    if (pos) setCursor(pos);
+    setDir(d);
+    if (m !== L.mode) setMode(m);
+    if (moved && pos) setFocusReq({ t: pos.t, s: pos.s, n: Date.now() });
+    return { summary: parts.join(" · "), filled: added.length, note };
+  };
+  const onVoiceText = async (text: string) => {
+    const id = `u${Date.now().toString(36)}${Math.random().toString(36).slice(2, 5)}`;
+    let acts = parsePerioUtterance(text);
+    let ai = false;
+    if (!acts.length && text.replace(/\s/g, "").length >= 4) {
+      setVoiceLog((l) => [...l.slice(-30), { id, text, summary: "해석 중…", filled: 0, pending: true }]);
+      acts = await interpretPerioUtterance(text);
+      ai = true;
+    }
+    const r = applyVoice(acts, { id, text });
+    setVoiceLog((l) => {
+      const line: VoiceLine = { id, text, summary: r.summary || "기록할 말이 없었어요", filled: r.filled, ai, note: r.note };
+      return l.some((x) => x.id === id) ? l.map((x) => (x.id === id ? line : x)) : [...l.slice(-30), line];
+    });
+  };
+  const voice = usePerioVoice(onVoiceText);
+  // 개발 중 자동 점검용 — 말 대신 문장을 넣어 본다(배포 빌드에선 빠짐)
+  useEffect(() => {
+    if (process.env.NODE_ENV === "production") return;
+    (window as unknown as { __perioSay?: (t: string) => Promise<void> }).__perioSay = onVoiceText;
+  });
+  /** 한 문장이 넣은 값 되돌리기 */
+  const undoUtterance = (uid: string) => {
+    setData((prev) => {
+      history.current.push(prev);
+      return { ...prev, entries: prev.entries.filter((e) => e.utt !== uid) };
+    });
+    setVoiceLog((l) => l.map((x) => (x.id === uid ? { ...x, summary: `${x.summary} → 되돌림`, filled: 0 } : x)));
+    setDirty(true);
+  };
+  const reviewCount = useMemo(() => data.entries.filter((e) => e.review).length, [data]);
+  const finishReview = () => {
+    setData((prev) => ({ ...prev, entries: prev.entries.map((e) => (e.review ? { ...e, review: undefined } : e)) }));
+    setDirty(true);
+  };
 
   /** 포인터 공용 처리 — 마우스: 올리면 미리보기·누르면 기록 / 손가락·펜: 짚고 끌어 떼면 기록 */
   const handlePick = (type: "move" | "down" | "up" | "leave", pointerType: string, pk: PerioPick | null, hit?: ChartHit | null) => {
@@ -392,6 +550,7 @@ export function PerioEditor({ patient, examId, initialData, consultationId, onCl
 
   const close = () => {
     if (dirty && !confirm("저장하지 않은 입력이 있습니다. 닫을까요?")) return;
+    voice.stop();
     onClose();
   };
 
@@ -482,6 +641,7 @@ export function PerioEditor({ patient, examId, initialData, consultationId, onCl
           <span className="mr-4">🖱 부위 위에서 위아래로 움직여 깊이 → 누르면 기록</span>
           <span className="mr-4">👆 짚고 끌었다 떼면 기록 · 옆으로 밀면 이동</span>
           <span className="mr-4">⌨ 0–9 · ⇧0/1/2=10–12 · F · B 출혈 · ←→ · ↑↓ 면 · ⌫</span>
+          <span className="mr-4 text-rose-200">🎙 “17번 바깥 원심부터 근심 방향 깊이” → “3 2 3 …” · 출혈 · 퇴축 2 · 동요 투플러스 · 취소 (연한 숫자 = 말로 넣어 검토 전)</span>
           <span className="mr-2 text-pink-200">▒ 잇몸(윗변 = 잇몸선)</span>
           <span className="text-slate-300">┅ CEJ</span>
         </div>
@@ -511,6 +671,7 @@ export function PerioEditor({ patient, examId, initialData, consultationId, onCl
             onTap={(pk) => act(pk, valueFor(pk))}
             onFocus={setCardTooth}
             onBop={toggleBop}
+            focusRequest={focusReq}
             className="h-full w-full"
           />
         </div>
@@ -535,8 +696,78 @@ export function PerioEditor({ patient, examId, initialData, consultationId, onCl
       )}
       </div>
 
+      {/* 말로 기록 — 듣는 중·방금 알아들은 말·문장별 결과(되돌리기) */}
+      {(voice.status !== "off" || voiceLog.length > 0 || voice.error) && !exporting && (
+        <div className="border-t border-slate-200/70 bg-slate-950 px-3 py-2 text-xs text-slate-200">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="flex items-center gap-1.5 font-bold">
+              <span
+                className={`inline-block size-2.5 rounded-full ${
+                  voice.status === "live" ? "animate-pulse bg-red-500" : voice.status === "connecting" ? "animate-pulse bg-amber-400" : "bg-slate-500"
+                }`}
+              />
+              {voice.status === "live" ? "듣는 중" : voice.status === "connecting" ? "연결 중…" : voice.status === "error" ? "멈춤" : "말로 기록"}
+            </span>
+            <span className="rounded-full bg-white/10 px-2 py-0.5">
+              {mode === "rec" ? "퇴축" : "깊이"} · <b className="text-sky-300">{cursor.t}</b> {cursor.s === "B" ? "바깥" : "안쪽"} {cursor.p}{" "}
+              {dir === mesialDir(cursor.t) ? "→근심" : "→원심"}
+            </span>
+            {voice.partial && <span className="italic text-slate-400">“{voice.partial}”</span>}
+            {voice.error && <span className="text-amber-300">{voice.error}</span>}
+            <span className="ml-auto flex items-center gap-1.5">
+              {reviewCount > 0 && (
+                <button type="button" onClick={finishReview} className="rounded-lg bg-white/10 px-2 py-1 font-semibold text-white hover:bg-white/20" title="말로 넣은 값을 확인했으면 확정">
+                  검토 끝 ({reviewCount})
+                </button>
+              )}
+              {voice.status === "off" && voiceLog.length > 0 && (
+                <button type="button" onClick={() => setVoiceLog([])} className="rounded-lg px-2 py-1 text-slate-400 hover:text-white">
+                  목록 닫기
+                </button>
+              )}
+            </span>
+          </div>
+          {voiceLog.length > 0 && (
+            <ul className="mt-1.5 flex max-h-24 flex-col-reverse gap-1 overflow-y-auto">
+              {[...voiceLog].reverse().map((l) => (
+                <li key={l.id} className="flex items-center gap-2">
+                  <span className="max-w-[45%] truncate text-slate-400" title={l.text}>
+                    “{l.text}”
+                  </span>
+                  <span className={l.pending ? "text-slate-500" : l.filled ? "text-emerald-300" : "text-slate-400"}>
+                    {l.ai && !l.pending ? "AI · " : ""}
+                    {l.summary}
+                  </span>
+                  {l.note && <span className="text-amber-300">· {l.note}</span>}
+                  {l.filled > 0 && (
+                    <button type="button" onClick={() => undoUtterance(l.id)} className="ml-auto shrink-0 rounded px-1.5 text-slate-400 hover:bg-white/10 hover:text-white">
+                      되돌리기
+                    </button>
+                  )}
+                </li>
+              ))}
+            </ul>
+          )}
+          {voice.status === "live" && voiceLog.length === 0 && (
+            <p className="mt-1 text-slate-400">
+              예: “17번 바깥 원심부터 근심 방향으로 깊이” → “3 2 3, 4 3 5…” · “출혈” · “퇴축 2” · “동요 투플러스” · “타진 플러스” · “결손” · “취소” · “건너뛰기”
+            </p>
+          )}
+        </div>
+      )}
+
       {/* 아래 막대 — 보기 도구 + 요약(숫자만) */}
       <div className="flex flex-wrap items-center gap-2 border-t border-slate-200/70 bg-white px-3 py-2 text-xs">
+        <button
+          type="button"
+          onClick={() => (voice.status === "live" || voice.status === "connecting" ? voice.stop() : void voice.start())}
+          className={`flex h-9 items-center gap-1.5 rounded-xl px-3 text-xs font-bold transition active:scale-95 ${
+            voice.status === "live" ? "bg-red-600 text-white shadow-sm" : voice.status === "connecting" ? "bg-amber-500 text-white" : "border border-sky-200 bg-sky-50 text-sky-700 hover:bg-sky-100"
+          }`}
+          title="말로 기록 — 위치·방향을 말하고 숫자를 부르면 차례로 채웁니다"
+        >
+          🎙 {voice.status === "live" ? "그만" : voice.status === "connecting" ? "연결 중…" : "말로 기록"}
+        </button>
         <div className="flex rounded-xl border border-slate-200 bg-white p-0.5">
           {(["2d", "3d"] as ViewMode[]).map((v) => (
             <button

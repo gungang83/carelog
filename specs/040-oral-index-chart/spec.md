@@ -281,3 +281,19 @@
 
 ### 16-2. 가리킨 값은 눈금 위에 크게 (2026-11-14 대표)
 - 3D 눈금의 3·6·9 숫자를 없애고, 가리킨 깊이(값 풍선)를 **눈금 위 그 깊이 자리에 크게**(52px, 흰 테두리) — 옆에 띄우지 않는다. 손가락은 가리지 않게 같은 눈금 위쪽 70px.
+
+## 17. 말로 기록 1차 구현 (2026-11-18 대표: "B로 하자" — OpenAI 실시간 전사)
+- 진입: 잇몸 기록 아래 막대 **[🎙 말로 기록]**(다시 누르면 그만). 이 화면 전용 마이크(상담 녹음과 별개).
+- 연결: `/api/realtime/perio-token`(로그인 기관 멤버, 10분 단기 시크릿) → 브라우저 WebSocket `wss://api.openai.com/v1/realtime?intent=transcription`
+  (실시간 통역 spec 030과 같은 방식). 모델 env `PERIO_STT_MODEL`(기본 `gpt-4o-transcribe`), `language: ko`, 치과 용어 힌트, 서버 VAD 450ms(쉬면 한 문장).
+  `components/oral/use-perio-voice.ts`.
+- 해석(`lib/oral/perio-voice.ts parsePerioUtterance`, 규칙): 위치 "17번/#17/일칠번/이십칠번/17 buccal" · 면 협측·바깥·buccal / 구개측·설측·안쪽·palatal·lingual ·
+  시작·방향 "원심부터"(→근심), "근심 방향/앞쪽으로", "distal to mesial" · 지표 "깊이/probing" "퇴축/recession" · 값 "3 2 3"·"323"·"삼 이 삼"·"셋 둘 셋"·"three two three"·"십이"·"에프/F"·"마이너스 1" ·
+  "출혈" "동요 투플러스" "타진 플러스" "결손" "취소" "건너뛰기". 규칙으로 못 알아들은 문장만 AI(spec 041 `chart_parse`, `interpretPerioUtterance`) — 같은 동작 모양으로.
+- 적용(`perio-editor applyVoice`): 문장 하나 = 한 번에 기록(되돌리기 단위). 값은 커서에서 진행 방향으로 차례로(결손 건너뜀, 줄 끝이면 멈추고 안내).
+  출혈·동요·타진은 **방금 잰 곳**(문장이 따로 와도). 위치를 말하면 3D가 그 치아·면 정면으로(`focusRequest`). 지표를 말하면 위 탭도 바뀜.
+- ★막지 않고 받아 적기: 말로 넣은 값 `src: voice · review: true · utt` — 2D 숫자 연하게·기울게, 3D 숫자 연하게. 칸을 눌러 고치면 확정, **[검토 끝 (N)]**으로 모두 확정.
+  전사 문장은 회차에 남김(`data.utterances`). 아래 검은 띠에 문장별 결과(“3 2 3” → 17D 3 · 17C 2 · 17M 3)와 **[되돌리기]**.
+- 사용량: 그만둘 때 `ai_usage`(task `perio_voice`, 분당 약 $0.006) — 슈퍼어드민 AI 엔진 사용량에 함께.
+- 검증(헤드리스, 말 대신 문장 주입 `window.__perioSay` — 개발 빌드만): 17 바깥 D→M 깊이 → 323 435 → 출혈(16M) → 삼이사오사육 → 퇴축 2 → 16 안쪽 → three two three → 동요 ++(16) → 취소, 3D에서 46 바깥 → 545 후 45로 따라감, 오류 0.
+  실제 마이크·OpenAI 연결은 배포 후 확인(로컬에 키 없음).

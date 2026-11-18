@@ -14,6 +14,7 @@ import { isUpper, type Fdi } from "@/lib/dental/teeth";
 import { buildProceduralTeeth, pointToSite3D, probePoint3D, sitePoint3D, toothFrames3D, type ToothFrame3D, type V3 } from "@/lib/dental/teeth-3d";
 import {
   MOB_LABEL,
+  entryKey,
   indexOf,
   pdColor,
   pdNum,
@@ -46,6 +47,8 @@ type Props = {
   onFocus?: (t: Fdi | null) => void;
   /** 고른 면의 출혈 점 토글 */
   onBop?: (t: Fdi, s: Side, p: Pos) => void;
+  /** 바깥에서 "이 치아·면으로 가라"(말로 기록에서 위치를 말했을 때) — n이 바뀔 때마다 */
+  focusRequest?: { t: Fdi; s: Side; n: number } | null;
   className?: string;
 };
 
@@ -59,7 +62,7 @@ const TOOTH = new THREE.Color("#f4ecdc");
 const SITES: Pos[] = ["M", "C", "D"];
 const v3 = (a: V3) => new THREE.Vector3(a[0], a[1], a[2]);
 
-export default function Perio3D({ data, mode, jaw, cursor, hover, follow, onPick, onTap, onFocus, onBop, className }: Props) {
+export default function Perio3D({ data, mode, jaw, cursor, hover, follow, onPick, onTap, onFocus, onBop, focusRequest, className }: Props) {
   const hostRef = useRef<HTMLDivElement>(null);
   const bubbleRef = useRef<HTMLDivElement>(null);
   const ringRef = useRef<HTMLDivElement>(null);
@@ -349,6 +352,7 @@ export default function Perio3D({ data, mode, jaw, cursor, hover, follow, onPick
             // 잰 값 숫자 — 막대 끝(깊은 쪽) 바로 너머
             if (v !== undefined && v !== null) {
               const sp = valueSprite(String(v), pdColor(pdNum(v)));
+              if (ix.get(entryKey({ m: "pd", t, s, p }))?.review) (sp.material as THREE.SpriteMaterial).opacity = 0.55; // 말로 넣어 검토 전
               sp.position.copy(v3(probePoint3D(f, s, p, rec(p) + (n ?? 0) + 1.3, 1.2)));
               lift(sp, 13);
               sp.userData.site = `${t}${s}${p}`;
@@ -841,6 +845,12 @@ export default function Perio3D({ data, mode, jaw, cursor, hover, follow, onPick
   useEffect(() => {
     api.current?.redrawHover();
   }, [hover, mode]);
+
+  // 말로 위치를 정하면 그 치아·면 정면으로
+  useEffect(() => {
+    if (focusRequest) api.current?.focusTo(focusRequest.t, focusRequest.s);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focusRequest?.n]);
 
   // 기록해서(또는 키보드로) 다음 칸이 다른 치아·면으로 넘어가면 그쪽으로 — 처음 열 때는 움직이지 않는다
   const prevCursor = useRef(cursor);
