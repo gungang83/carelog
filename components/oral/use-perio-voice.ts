@@ -11,6 +11,14 @@ export type VoiceStatus = "off" | "connecting" | "live" | "error";
 /** 조용할 때·잡음에 전사 모델이 지어내는 흔한 문장(무시) — 영상 자막투·힌트 되풀이 */
 const HALLUCINATION = /시청해\s*주셔서|구독|좋아요|MBC|KBS|SBS|뉴스입니다|자막|치주 검사 기록|11~48|예:\s*\d/;
 
+/** 용어 힌트를 그대로 되풀이한 문장인가 — 낱말 5개 이상이 거의 다 힌트 낱말이면 */
+function echoesHint(text: string, hint: string): boolean {
+  const words = text.toLowerCase().split(/[\s,.]+/).filter((w) => w.length >= 2);
+  if (words.length < 5) return false;
+  const vocab = new Set(hint.toLowerCase().split(/[\s,.]+/).filter(Boolean));
+  return words.filter((w) => vocab.has(w)).length / words.length >= 0.75;
+}
+
 export function usePerioVoice(onFinal: (text: string) => void) {
   const [status, setStatus] = useState<VoiceStatus>("off");
   const [partial, setPartial] = useState("");
@@ -31,6 +39,9 @@ export function usePerioVoice(onFinal: (text: string) => void) {
   const mic = useRef<MediaStream | null>(null);
   const started = useRef(0);
   const model = useRef("gpt-4o-transcribe");
+  const hint = useRef("");
+  /** 슈퍼어드민 보정 낱말("틀린 말 → 바른 말") — 해석 전에 바꿔 끼운다 */
+  const [corrections, setCorrections] = useState<[string, string][]>([]);
   const alive = useRef(false);
 
   const teardown = useCallback(() => {
@@ -85,10 +96,12 @@ export function usePerioVoice(onFinal: (text: string) => void) {
     let secret = "";
     try {
       const r = await fetch("/api/realtime/perio-token", { method: "POST" });
-      const d = (await r.json()) as { ok: boolean; clientSecret?: string; model?: string; message?: string };
+      const d = (await r.json()) as { ok: boolean; clientSecret?: string; model?: string; hint?: string; corrections?: [string, string][]; message?: string };
       if (!d.ok || !d.clientSecret) throw new Error(d.message ?? "연결 준비 실패");
       secret = d.clientSecret;
       if (d.model) model.current = d.model;
+      hint.current = d.hint ?? "";
+      setCorrections(Array.isArray(d.corrections) ? d.corrections : []);
     } catch (e) {
       return fail(e instanceof Error ? e.message : "연결 준비 실패");
     }
@@ -141,7 +154,7 @@ export function usePerioVoice(onFinal: (text: string) => void) {
       else if (t.endsWith("input_audio_transcription.completed")) {
         setPartial("");
         const text = (e.transcript ?? "").trim();
-        if (text && !HALLUCINATION.test(text)) onFinalRef.current(text);
+        if (text && !HALLUCINATION.test(text) && !echoesHint(text, hint.current)) onFinalRef.current(text);
       } else if (t === "error") fail(e.error?.message ?? "실시간 연결 오류");
     };
     sock.onerror = () => {
@@ -166,5 +179,5 @@ export function usePerioVoice(onFinal: (text: string) => void) {
     setLevel(0.5);
   }, []);
 
-  return { status, partial, error, level, start, stop, simulate };
+  return { status, partial, error, level, corrections, start, stop, simulate };
 }

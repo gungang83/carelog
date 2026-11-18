@@ -848,5 +848,6 @@ app/api/realtime/perio-token/route.ts  OpenAI Realtime 전사 세션 단기 시�
 components/oral/use-perio-voice.ts      마이크 → PCM16 24kHz → WebSocket, 문장 확정마다 onFinal
 lib/oral/perio-voice.ts                 parsePerioUtterance(규칙) · sanitizeActions(AI 결과 검증) · describeCtx
 app/actions/perio-voice.ts              interpretPerioUtterance(askAI chart_parse) · recordPerioVoiceUsage(ai_usage perio_voice)
+lib/oral/perio-voice-config.ts          말로 기록 보정 설정(platform_settings 'perio_voice': 모델·힌트·보정 낱말) — 슈퍼어드민 /admin/voice(app/actions/voice-admin.ts)
 components/oral/perio-editor.tsx        applyVoice — 문장 단위 일괄 기록(review·utt) · 검토 끝 · 문장별 되돌리기 · 3D focusRequest
 ```

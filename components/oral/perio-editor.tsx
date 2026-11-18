@@ -398,12 +398,12 @@ export function PerioEditor({ patient, examId, initialData, consultationId, onCl
   };
   const onVoiceText = async (text: string) => {
     const id = `u${Date.now().toString(36)}${Math.random().toString(36).slice(2, 5)}`;
-    let acts = parsePerioUtterance(text);
+    let acts = parsePerioUtterance(text, voiceFix.current);
     let ai = false;
     // ★안전장치: 긴 문장(잘못 알아들은 문장일 가능성)·값이 너무 많음·긴 문장 속 "결손"은 바로 넣지 않고 보류
     const values = acts.filter((a) => a.k === "val").length;
     const compact = text.replace(/\s/g, "");
-    if (compact.length > 45 || values > 18 || (acts.some((a) => a.k === "missing") && compact.length > 12)) {
+    if (compact.length > 90 || values > 18 || (acts.some((a) => a.k === "missing") && compact.length > 12)) {
       setVoiceLog((l) => [
         ...l.slice(-30),
         { id, text, summary: previewActions(acts).join(" · ") || "해석 없음", filled: 0, note: "길거나 애매해서 넣지 않았어요", held: acts },
@@ -422,6 +422,10 @@ export function PerioEditor({ patient, examId, initialData, consultationId, onCl
     });
   };
   const voice = usePerioVoice(onVoiceText);
+  const voiceFix = useRef<[string, string][]>([]);
+  useLayoutEffect(() => {
+    voiceFix.current = voice.corrections;
+  });
   // 개발 중 자동 점검용 — 말 대신 문장을 넣어 본다(배포 빌드에선 빠짐)
   useEffect(() => {
     if (process.env.NODE_ENV === "production") return;
@@ -730,7 +734,7 @@ export function PerioEditor({ patient, examId, initialData, consultationId, onCl
       {(voice.status !== "off" || voiceLog.length > 0 || voice.error) && !exporting && (() => {
         const lastLine = voiceLog[voiceLog.length - 1];
         // 말하는 중 미리보기 — 실제로 어느 칸에 들어갈지(기록은 문장이 끝나야)
-        const liveActs = voice.partial ? parsePerioUtterance(voice.partial) : [];
+        const liveActs = voice.partial ? parsePerioUtterance(voice.partial, voice.corrections) : [];
         const liveDry = liveActs.length ? applyVoice(liveActs, { id: "preview", text: voice.partial }, true) : null;
         const livePreview = liveDry?.summary ? liveDry.summary.split(" · ") : previewActions(liveActs);
         return (

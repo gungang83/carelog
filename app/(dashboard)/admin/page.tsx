@@ -78,6 +78,12 @@ export default async function AdminPage() {
           >
             문자 발신 →
           </Link>
+          <Link
+            href="/admin/voice"
+            className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm font-medium text-rose-700 transition hover:bg-rose-100"
+          >
+            말로 기록 보정 →
+          </Link>
         </div>
       </div>
 

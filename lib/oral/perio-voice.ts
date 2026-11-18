@@ -80,9 +80,36 @@ const RULES: [RegExp, string][] = [
   [/음성|없음|negative/g, " §L0 "],
 ];
 
-/** 전사 한 문장 → 기록 동작들. 알아들은 게 없으면 [] */
-export function parsePerioUtterance(raw: string): VoiceAction[] {
-  let s = ` ${raw.toLowerCase()} `;
+/**
+ * 자주 잘못 듣는 말 → 바른 말(내장 보정). 영어 치과 용어를 한글 소리로 적는 경우가 많다.
+ * 슈퍼어드민 보정 낱말(corrections)이 이보다 먼저 적용된다.
+ */
+const BUILTIN_FIX: [RegExp, string][] = [
+  [/메\s*[지디시]\s*[알얼어엘]|미\s*[지디시]\s*[알얼]|메셜|미셜|메디얼|미디얼|메지아|메지아르/g, " mesial "],
+  [/디\s*스\s*[탈털틀톨]|디스터|디스트럴|디스타|this\s*tall|distil|distle/g, " distal "],
+  [/[버부바뷰]\s*[칼컬클켈걸]|버컬|박컬|bucal|buckle|buccle/g, " buccal "],
+  [/[팔펠팔]\s*[라레러]\s*[탈털틀]|palatial|palette/g, " palatal "],
+  [/링\s*[구궈귀]\s*[알얼]|링궐|링걸|lingle|lingwal/g, " lingual "],
+  [/프\s*로\s*빙|프로브|probe/g, " probing "],
+  [/블\s*리\s*딩/g, " bleeding "],
+  [/모\s*빌\s*리\s*티/g, " mobility "],
+  [/리\s*세\s*션/g, " recession "],
+];
+
+function applyFixes(text: string, corrections?: [string, string][]): string {
+  let s = text;
+  for (const [from, to] of corrections ?? []) {
+    if (!from) continue;
+    s = s.split(from).join(` ${to} `);
+    s = s.split(from.toLowerCase()).join(` ${to} `);
+  }
+  for (const [re, to] of BUILTIN_FIX) s = s.replace(re, to);
+  return s;
+}
+
+/** 전사 한 문장 → 기록 동작들. 알아들은 게 없으면 [] (corrections = 슈퍼어드민 보정 낱말) */
+export function parsePerioUtterance(raw: string, corrections?: [string, string][]): VoiceAction[] {
+  let s = ` ${applyFixes(raw, corrections).toLowerCase()} `;
   // 치아 번호(번·#·tooth·치아 붙은 것) → §T17
   s = s.replace(/#\s*(\d{2})/g, (_, d) => (FDI.test(d) ? ` §T${d} ` : ` ${d} `));
   s = s.replace(/(?:tooth|치아)\s*(\d{2})/g, (_, d) => (FDI.test(d) ? ` §T${d} ` : ` ${d} `));
