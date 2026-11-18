@@ -425,6 +425,7 @@ export const UPDATE_FEED: UpdateFeedEntry[] = [
     items: [
       "잇몸 기록 아래 [🎙 말로 기록]을 누르고 \"17번 바깥 원심부터 근심 방향 깊이\"처럼 위치·방향을 말한 뒤 숫자를 부르면 차례로 채워집니다.",
       "\"출혈\", \"퇴축 2\", \"동요 투플러스\", \"타진 플러스\", \"결손\", \"취소\"도 말로 됩니다. 말로 넣은 값은 연하게 표시되니 확인 후 [검토 끝]을 눌러 주세요.",
+      "mesial·distal·buccal처럼 영어 용어를 섞어 말해도 알아듣습니다. 잘못 말했으면 \"메지알이 아니라 디스탈\"처럼 바로 고쳐 말하면 됩니다.",
     ],
     internal: "spec 040 §17 · /api/realtime/perio-token · lib/oral/perio-voice.ts · gpt-4o-transcribe(env PERIO_STT_MODEL)",
   },

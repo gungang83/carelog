@@ -51,8 +51,9 @@ function toothWord(a: string): string | null {
 // 표시 토큰(§…)으로 바꿔 끼우는 규칙 — 순서가 중요(긴 말 먼저)
 const RULES: [RegExp, string][] = [
   // 방향(부터·쪽으로)
-  [/(원심|distal|디스탈|디스틀)\s*(에서|부터|으로부터)/g, " §FROM_D "],
-  [/(근심|mesial|메지알|메시알|메지얼)\s*(에서|부터|으로부터)/g, " §FROM_M "],
+  // "distal 쪽에서부터"처럼 쪽·방향이 끼어도 '부터'(시작점)
+  [/(원심|distal|디스탈|디스틀)\s*(쪽|방향)?\s*(에서\s*부터|으로\s*부터|에서|부터)/g, " §FROM_D "],
+  [/(근심|mesial|메지알|메시알|메지얼)\s*(쪽|방향)?\s*(에서\s*부터|으로\s*부터|에서|부터)/g, " §FROM_M "],
   [/from\s*(the\s*)?distal/g, " §FROM_D "],
   [/from\s*(the\s*)?mesial/g, " §FROM_M "],
   [/(근심|mesial|메지알|메시알)\s*(방향|쪽)(으로)?|근심으로|앞쪽으로|앞으로|앞쪽|(to|toward|towards)\s*(the\s*)?mesial/g, " §TO_M "],
@@ -94,7 +95,84 @@ const BUILTIN_FIX: [RegExp, string][] = [
   [/블\s*리\s*딩/g, " bleeding "],
   [/모\s*빌\s*리\s*티/g, " mobility "],
   [/리\s*세\s*션/g, " recession "],
+  [/디지털|디지탈|디지틀/g, " distal "],
 ];
+
+// ── 비슷한 소리 맞추기(자모 비교) ─────────────────────────────
+// 전사가 영어 용어를 매번 다른 한글로 적는다(메지알·레지알·메시얼 / 디스탈·디스타 …).
+// 한 글자씩 자음·모음으로 풀어 바른 꼴과 1~2개만 다르면 같은 말로 본다.
+const SOUND_CANON: [string, string[]][] = [
+  ["mesial", ["메지알", "메시알", "메지얼", "메시얼", "미지알", "메지엘"]],
+  ["distal", ["디스탈", "디스털", "디스톨"]],
+  ["buccal", ["버칼", "부칼", "버컬", "바칼"]],
+  ["palatal", ["팔라탈", "팔라털", "펠라탈"]],
+  ["lingual", ["링구알", "링구얼", "링궐"]],
+];
+/** 낱말 뒤에 붙는 말 — 긴 것부터. 조사(이·가·을…)는 숫자로 오인되지 않게 버린다 */
+const SUFFIX_KEEP = ["쪽에서부터", "쪽으로부터", "에서부터", "으로부터", "쪽으로", "쪽에서", "방향으로", "방향", "부터", "에서", "으로", "쪽", "로"];
+const SUFFIX_DROP = ["이랑", "이고", "이요", "이", "가", "을", "를", "은", "는", "의", "에", "도", "만", "요"];
+
+function jamo(word: string): number[] {
+  const out: number[] = [];
+  for (const ch of word) {
+    const c = ch.charCodeAt(0) - 0xac00;
+    if (c < 0 || c > 11171) {
+      out.push(ch.charCodeAt(0) + 100000);
+      continue;
+    }
+    out.push(Math.floor(c / 588), 100 + Math.floor((c % 588) / 28));
+    if (c % 28) out.push(200 + (c % 28));
+  }
+  return out;
+}
+
+function editDistance(a: number[], b: number[]): number {
+  const d = Array.from({ length: b.length + 1 }, (_, j) => j);
+  for (let i = 1; i <= a.length; i++) {
+    let prev = d[0];
+    d[0] = i;
+    for (let j = 1; j <= b.length; j++) {
+      const tmp = d[j];
+      d[j] = Math.min(d[j] + 1, d[j - 1] + 1, prev + (a[i - 1] === b[j - 1] ? 0 : 1));
+      prev = tmp;
+    }
+  }
+  return d[b.length];
+}
+
+const CANON_JAMO = SOUND_CANON.map(([to, forms]) => [to, forms.map(jamo)] as const);
+
+function soundMatch(stem: string): string | null {
+  if (stem.length < 2 || /^[영공일이삼사오육륙칠팔구십]+$/.test(stem)) return null;
+  const j = jamo(stem);
+  let best: { to: string; d: number } | null = null;
+  for (const [to, forms] of CANON_JAMO) {
+    for (const f of forms) {
+      const d = editDistance(j, f);
+      const limit = f.length >= 8 ? 2 : 1; // 팔라탈·링구알처럼 긴 말은 2개까지
+      if (d <= limit && (!best || d < best.d)) best = { to, d };
+    }
+  }
+  return best?.to ?? null;
+}
+
+/** 한글 낱말 하나 → 용어면 "mesial 쪽으로"처럼, 아니면 그대로 */
+function fixSoundWord(word: string): string {
+  for (const suf of SUFFIX_KEEP) {
+    if (word.length > suf.length && word.endsWith(suf)) {
+      const to = soundMatch(word.slice(0, -suf.length));
+      if (to) return ` ${to} ${suf} `;
+    }
+  }
+  for (const suf of SUFFIX_DROP) {
+    if (word.length > suf.length && word.endsWith(suf)) {
+      const to = soundMatch(word.slice(0, -suf.length));
+      if (to) return ` ${to} `;
+    }
+  }
+  const to = soundMatch(word);
+  return to ? ` ${to} ` : word;
+}
 
 function applyFixes(text: string, corrections?: [string, string][]): string {
   let s = text;
@@ -103,7 +181,13 @@ function applyFixes(text: string, corrections?: [string, string][]): string {
     s = s.split(from).join(` ${to} `);
     s = s.split(from.toLowerCase()).join(` ${to} `);
   }
+  // 붙어 있는 조사를 먼저 떼어야("메지알이") 이·가가 숫자 2로 읽히지 않는다
+  s = s.replace(/[가-힣]+/g, fixSoundWord);
+  // 영어로 적힌 용어 뒤에 붙은 조사("mesial이")
+  s = s.replace(/(mesial|distal|buccal|palatal|lingual|labial)(이|가|을|를|은|는|의|도|만)(?=[\s,.]|$)/gi, " $1 ");
   for (const [re, to] of BUILTIN_FIX) s = s.replace(re, to);
+  // "…이 아니라 …"(말 고쳐 하기) — 앞말은 버리고 뒷말만
+  s = s.replace(/\S+\s*(이|가)?\s+아니(라|고|야)(?=[\s,.]|$)/g, " ");
   return s;
 }
 
@@ -218,6 +302,12 @@ export function parsePerioUtterance(raw: string, corrections?: [string, string][
           out.push({ k: "undo" });
           continue;
         case "SKIP":
+          // "링구알로 넘어가서" — 위치 말 바로 뒤의 '넘어가'는 건너뛰기가 아니라 이동
+          {
+            let j = i - 1;
+            while (j >= 0 && /^(로|으로|쪽|쪽으로|에|에서|면|가서)$/.test(toks[j])) j--;
+            if (j >= 0 && /^§(T\d{2}|B|L|P_|FROM_|TO_)/.test(toks[j])) continue;
+          }
           flush();
           drain();
           out.push({ k: "skip" });
