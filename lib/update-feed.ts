@@ -429,6 +429,16 @@ export const UPDATE_FEED: UpdateFeedEntry[] = [
     ],
     internal: "spec 040 §17 · /api/realtime/perio-token · lib/oral/perio-voice.ts · gpt-4o-transcribe(env PERIO_STT_MODEL)",
   },
+  {
+    id: "2026-11-21-sound-button",
+    date: "2026-11-21",
+    emoji: "🔈",
+    title: "알림 소리 버튼 정리",
+    items: [
+      "화면 위쪽의 '소리 켜기'가 휴대폰에서 세로로 길게 보이던 것을 작은 스피커 버튼으로 바꿨습니다. 한 번 누르면 새 상담 기록이 도착할 때 소리로 알려 드리고, 다시 누르면 끄고 켤 수 있습니다.",
+    ],
+    internal: "spec 007 · components/notifications/sound-arm-button.tsx",
+  },
 ];
 
 // ── 결정 상태 (DB update_feed_decisions) ──────────────────────────────
