@@ -15,6 +15,7 @@
 - 대기(대표): Vercel 도메인 추가 · 가비아 CNAME(carelog) · `NEXT_PUBLIC_SITE_URL` · Supabase URL 설정 · EO `CARELOG_APP_URL`. EO 카드(suwant 링크) 채번 요청.
 - 확인됨: eo.ai.kr DNS = 가비아, EO는 이미 eo.ai.kr.
 - **연결 완료**: 대표가 Vercel 도메인·가비아 CNAME·환경변수·Supabase·EO CARELOG_APP_URL 반영 → carelog.eo.ai.kr 정상(https·로그인 화면·환자 링크·빌드 값 확인). 로그인·EO 이동·안내 띠는 대표 실사용 확인 대기. 2단계(옛 주소 넘기기)는 직원 기기 이전 후.
+- **2단계 완료**(대표 "남은 것도 하자"): 옛 주소 직원 화면 → 새 주소 308(기본 켜짐, `CARELOG_REDIRECT_OLD_HOST=0`으로 끔). 환자 화면(/p·/portal)·/api·sw.js는 옛 주소 유지. 새 주소에서 알림 허용 시 옛 주소 구독 정리(알림 두 번 방지). EO suwant 링크는 EO 카드로(다온 쓰기 금지).
 
 ## 2026-11-21 세션 68k (fix) — 헤더 "소리 켜기" 버튼 정리
 

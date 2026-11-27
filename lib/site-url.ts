@@ -21,3 +21,14 @@ export function isOldHost(host: string | null | undefined): boolean {
   const canonical = new URL(siteUrl()).host;
   return canonical !== new URL(OLD_SITE_URL).host && host === new URL(OLD_SITE_URL).host;
 }
+
+/** 새 주소가 열린 시각(인증서 발급 2026-11-27 14:47Z 직전) — 이 전에 만든 직원 푸시 구독은 옛 주소 것 */
+export const SITE_MOVED_AT = "2026-11-27T14:40:00Z";
+
+/** 지금 접속한 호스트가 정식(새) 주소인가 */
+export function isCanonicalHost(host: string | null | undefined): boolean {
+  return !!host && host === new URL(siteUrl()).host && !isOldHost(host);
+}
+
+/** 옛 주소 → 새 주소 넘기기에서 빼는 경로 — 환자 화면은 로그인(인증)이 주소별이라 옛 링크는 옛 주소에서 그대로 */
+export const KEEP_ON_OLD_HOST = /^\/(api|p|portal)(\/|$)/;

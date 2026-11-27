@@ -3,6 +3,8 @@
 import webpush from "web-push";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { createClient } from "@supabase/supabase-js";
+import { headers } from "next/headers";
+import { isCanonicalHost, SITE_MOVED_AT } from "@/lib/site-url";
 
 // VAPID 설정은 지연 초기화한다. 모듈 로드 시점에 setVapidDetails를 호출하면
 // 환경변수가 없는 환경(예: Vercel Preview 빌드)에서 빌드 자체가 깨진다.
@@ -62,6 +64,18 @@ export async function subscribePush(
   );
 
   if (error) return { ok: false, message: error.message };
+
+  // spec 042 — 새 주소에서 알림을 허용하면, 옛 주소 시절 구독(이 사람의 다른 기기 포함)은 지운다.
+  //   같은 기기에서 옛·새 주소가 둘 다 구독돼 알림이 두 번 오는 것을 막는다(옛 주소 화면은 이제 새 주소로 넘어감).
+  const h = await headers();
+  if (isCanonicalHost(h.get("x-forwarded-host") ?? h.get("host"))) {
+    await supabase
+      .from("push_subscriptions")
+      .delete()
+      .eq("user_id", user.id)
+      .lt("created_at", SITE_MOVED_AT)
+      .neq("endpoint", sub.endpoint);
+  }
   return { ok: true };
 }
 

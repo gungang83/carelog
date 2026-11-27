@@ -492,7 +492,8 @@ handleSave()  — "상담 종료"(전사만) 후 수동 저장
 
 > **주소(spec 042)**: 케어로그 = `carelog.eo.ai.kr`(EO 하위 도메인, 옛 carelog-tau.vercel.app 유지) · EO = `eo.ai.kr`.
 > 케어로그 주소는 `lib/site-url.ts siteUrl()`, EO 주소는 `lib/eo/app-url.ts EO_APP_URL` 한 곳에서. 경로 방식(eo.ai.kr/carelog)은 EO 장애가 케어로그 접속까지 막아 채택 안 함.
-> 옛 주소 접속 시 `components/layout/old-host-banner.tsx` 안내, `proxy.ts` 308 넘기기는 `CARELOG_REDIRECT_OLD_HOST=1`일 때만.
+> 옛 주소 직원 화면은 `proxy.ts`가 새 주소로 308(기본 켜짐, `CARELOG_REDIRECT_OLD_HOST=0`으로 끔). 환자 화면 `/p`·`/portal`과 `/api`·`sw.js`는 옛 주소 유지(`KEEP_ON_OLD_HOST`).
+> 새 주소에서 직원이 알림을 허용하면 `subscribePush`가 옛 주소 시절 구독(`SITE_MOVED_AT` 이전)을 지워 알림 중복을 막는다. 안내 띠(`old-host-banner`)는 넘기기를 끌 때의 대비.
 
 > 원칙: **EO = 직원·클리닉 마스터의 SSOT.** Carelog는 받아 캐시(읽기 사본). 강결합 금지(HTTP만).
 > **의료데이터(상담)는 게이트웨이로 절대 나가지 않는다** — 상담 EO API는 만들지 않음(계약 §4).
