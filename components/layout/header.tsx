@@ -5,6 +5,7 @@ import { RefreshButton } from "@/components/layout/refresh-button";
 import { SoundArmButton } from "@/components/notifications/sound-arm-button";
 import { NotificationBell } from "@/components/notifications/notification-bell";
 import type { InstitutionWithRole } from "@/lib/auth/institution";
+import { EO_APP_URL } from "@/lib/eo/app-url";
 
 interface HeaderProps {
   institutions: InstitutionWithRole[];
@@ -60,7 +61,7 @@ export function Header({
         {/* 오른쪽: EO 복귀 + 새로고침 + 프로필 */}
         <div className="ml-auto flex items-center gap-2">
           <a
-            href={process.env.EO_APP_URL || "https://eo-ten.vercel.app"}
+            href={EO_APP_URL}
             className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-indigo-200 bg-indigo-50 text-indigo-700 text-xs font-semibold hover:bg-indigo-100 transition-colors"
           >
             EO로 돌아가기

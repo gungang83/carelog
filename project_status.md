@@ -7,6 +7,14 @@
 
 ---
 
+## 2026-11-27 세션 68l (feat) — 케어로그 주소 carelog.eo.ai.kr 준비 (spec 042)
+
+- 결정: 하위 도메인 carelog.eo.ai.kr(경로 eo.ai.kr/carelog는 EO 장애가 케어로그 접속까지 막아 안 함). EO 연동은 창구(API)·공용 부품으로.
+- 코드: `lib/site-url.ts`(환자 문자·가입·초대 메일 링크 한 곳) · `lib/eo/app-url.ts`(EO 기본 eo.ai.kr — 옛 eo-ten 308 한 번 거치던 것 제거) ·
+  옛 주소 안내 띠(새 주소 설정 후에만) · 옛 주소 308 넘기기(`CARELOG_REDIRECT_OLD_HOST=1`, 기본 꺼짐). 직원 초대 메일 주소가 비면 상대 주소가 되던 것 수정.
+- 대기(대표): Vercel 도메인 추가 · 가비아 CNAME(carelog) · `NEXT_PUBLIC_SITE_URL` · Supabase URL 설정 · EO `CARELOG_APP_URL`. EO 카드(suwant 링크) 채번 요청.
+- 확인됨: eo.ai.kr DNS = 가비아, EO는 이미 eo.ai.kr.
+
 ## 2026-11-21 세션 68k (fix) — 헤더 "소리 켜기" 버튼 정리
 
 - 폰 폭에서 "🔔 소리 켜기" 글자가 한 글자씩 세로로 쪼개지던 문제(대표 캡처). 헤더 새로고침 버튼과 같은 크기의 **스피커 아이콘**으로 교체.

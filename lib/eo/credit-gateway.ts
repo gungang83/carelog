@@ -9,10 +9,10 @@
  * ★never-block(계약 §5.5): 이 모듈은 절대 throw 하지 않는다 — 실패는 {ok:false}로
  *   반환하고 호출측(deductCredit)이 로컬 폴백(fail-open, 계약 §6 degraded)한다.
  */
+import { EO_APP_URL } from "@/lib/eo/app-url";
 
 const stripBom = (s: string) => (s.charCodeAt(0) === 0xfeff ? s.slice(1) : s);
 
-const EO_APP_URL = stripBom(process.env.EO_APP_URL ?? "https://eo-ten.vercel.app");
 
 function secret(): string {
   return stripBom(process.env.CARELOG_GATEWAY_SECRET ?? "");

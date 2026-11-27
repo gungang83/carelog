@@ -77,7 +77,9 @@ GitHub `main` 브랜치 push 시 Vercel 자동 배포.
 | `NEXT_PUBLIC_SUPABASE_URL` | ✅ | Supabase 프로젝트 URL |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | ✅ | 브라우저 공개 키 |
 | `SUPABASE_SERVICE_ROLE_KEY` | ✅ | Service Role 키 (서버 전용, RLS 우회) |
-| `NEXT_PUBLIC_SITE_URL` | ✅ | 사이트 기준 URL (예: https://carelog-tau.vercel.app) |
+| `NEXT_PUBLIC_SITE_URL` | ✅ | 사이트 기준 URL — 새 주소 `https://carelog.eo.ai.kr`(spec 042). 비면 옛 주소 carelog-tau.vercel.app. `lib/site-url.ts` |
+| `EO_APP_URL` | 선택 | EO 주소(기본 `https://eo.ai.kr`, `lib/eo/app-url.ts`) |
+| `CARELOG_REDIRECT_OLD_HOST` | 선택 | `1`이면 옛 주소 → 새 주소 308(spec 042 2단계, 기본 꺼짐) |
 | `OPENAI_API_KEY` | ✅ | 음성 전사(Whisper) + 요약(GPT) |
 | `SOLAPI_API_KEY` | 선택 | SMS 발송 (환자 초대·OTP) |
 | `SOLAPI_API_SECRET` | 선택 | Solapi 인증 |

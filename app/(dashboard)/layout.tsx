@@ -20,6 +20,7 @@ import { ConsultationBoard } from "@/components/chair/consultation-board";
 import { LiveAlertsProvider } from "@/components/notifications/live-alerts-provider";
 import { RouteTracker } from "@/components/usage/route-tracker";
 import type { Participant } from "@/lib/types/database";
+import { OldHostBanner } from "@/components/layout/old-host-banner";
 
 export default async function DashboardLayout({
   children,
@@ -98,6 +99,7 @@ export default async function DashboardLayout({
         userAvatarUrl={userAvatarUrl}
         isSuperAdmin={superAdmin}
       />
+      <OldHostBanner />
       <RouteTracker />
       <main className="flex-1">{children}</main>
       <Footer />

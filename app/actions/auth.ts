@@ -3,6 +3,7 @@
 import { redirect } from "next/navigation";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { createAdminSupabaseClient } from "@/lib/supabase/admin";
+import { siteUrl } from "@/lib/site-url";
 
 export async function signUp(formData: FormData): Promise<
   | { ok: true; needsConfirmation: boolean }
@@ -37,11 +38,10 @@ export async function signUp(formData: FormData): Promise<
     };
   }
 
-  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "https://carelog-tau.vercel.app";
   const { data, error } = await supabase.auth.signUp({
     email,
     password,
-    options: { emailRedirectTo: `${siteUrl}/auth/callback` },
+    options: { emailRedirectTo: `${siteUrl()}/auth/callback` },
   });
 
   if (error) {

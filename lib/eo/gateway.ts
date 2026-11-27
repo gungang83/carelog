@@ -7,12 +7,10 @@
  *
  * 강결합 금지(헤임달 §3): EO 코드를 import하지 않고 HTTP로만 통신한다.
  */
+import { EO_APP_URL } from "@/lib/eo/app-url";
 
 const stripBom = (s: string) => (s.charCodeAt(0) === 0xfeff ? s.slice(1) : s);
 
-const EO_APP_URL = stripBom(
-  process.env.EO_APP_URL ?? "https://eo-ten.vercel.app",
-);
 
 /** 게이트웨이 응답의 직원 마스터(안전 필드만 — 계약 §1). */
 export type EoMasterMember = {

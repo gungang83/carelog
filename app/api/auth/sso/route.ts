@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminSupabaseClient } from "@/lib/supabase/admin";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
+import { EO_APP_URL } from "@/lib/eo/app-url";
 
 /**
  * EO eo_role → Carelog institution_members.role 매핑.
@@ -12,9 +13,6 @@ function mapEoRole(eoRole?: string): "admin" | "staff" {
 }
 
 const stripBom = (s: string) => (s.charCodeAt(0) === 0xfeff ? s.slice(1) : s);
-const EO_APP_URL = stripBom(
-  process.env.EO_APP_URL ?? "https://eo-ten.vercel.app",
-);
 
 async function verifyJwt(
   token: string,

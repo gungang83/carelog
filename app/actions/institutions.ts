@@ -3,6 +3,7 @@
 import { redirect } from "next/navigation";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { createAdminSupabaseClient } from "@/lib/supabase/admin";
+import { siteUrl } from "@/lib/site-url";
 import type {
   InstitutionRow,
   InstitutionInvitationRow,
@@ -154,8 +155,7 @@ export async function inviteStaff(formData: FormData): Promise<
       };
     }
 
-    const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "";
-    const redirectTo = `${siteUrl}/invite/${invitation.token}`;
+    const redirectTo = `${siteUrl()}/invite/${invitation.token}`;
     const { error: emailErr } = await admin.auth.admin.inviteUserByEmail(email, {
       redirectTo,
     });

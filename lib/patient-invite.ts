@@ -2,6 +2,7 @@
 //   링크만으로는 열리지 않고(등록 번호 인증번호 필요) 30일 뒤 만료되므로 10자리(62진수, 약 59비트)로 충분하다.
 import { randomBytes } from "node:crypto";
 import { createAdminSupabaseClient } from "@/lib/supabase/admin";
+import { siteUrl } from "@/lib/site-url";
 
 type Admin = ReturnType<typeof createAdminSupabaseClient>;
 
@@ -18,7 +19,7 @@ export function newShortToken(len = 10): string {
 }
 
 export function patientLinkUrl(token: string): string {
-  const site = (process.env.NEXT_PUBLIC_SITE_URL ?? "https://carelog-tau.vercel.app").replace(/\/$/, "");
+  const site = siteUrl();
   return `${site}/p/${token}`;
 }
 

@@ -4,10 +4,10 @@
 //   cron 재전송이 발효 시점에 자동으로 흘려보낸다(fail-safe).
 
 import type { EoLab } from "@/lib/lab-orders";
+import { EO_APP_URL } from "@/lib/eo/app-url";
 
 const stripBom = (s: string) => (s.charCodeAt(0) === 0xfeff ? s.slice(1) : s);
 
-const EO_APP_URL = stripBom(process.env.EO_APP_URL ?? "https://eo-ten.vercel.app");
 
 function secret(): string {
   return stripBom(process.env.CARELOG_GATEWAY_SECRET ?? "");
