@@ -439,6 +439,18 @@ export const UPDATE_FEED: UpdateFeedEntry[] = [
     ],
     internal: "spec 007 · components/notifications/sound-arm-button.tsx",
   },
+  {
+    id: "2026-11-27-new-address",
+    date: "2026-11-27",
+    emoji: "🏠",
+    title: "케어로그 새 주소 carelog.eo.ai.kr",
+    items: [
+      "케어로그 주소가 carelog.eo.ai.kr 로 바뀌었습니다. 즐겨찾기를 새 주소로 바꿔 주세요.",
+      "새 주소에서 한 번 다시 로그인해 주세요. 휴대폰·태블릿 홈 화면에 케어로그를 설치해 두셨다면 새 주소에서 다시 설치하고, 알림도 다시 허용해 주세요.",
+      "옛 주소도 당분간 그대로 열립니다. 환자분께 이미 보낸 상담 기록 링크도 계속 열립니다.",
+    ],
+    internal: "spec 042 · NEXT_PUBLIC_SITE_URL · lib/site-url.ts · 옛 주소 넘기기 CARELOG_REDIRECT_OLD_HOST(꺼짐)",
+  },
 ];
 
 // ── 결정 상태 (DB update_feed_decisions) ──────────────────────────────

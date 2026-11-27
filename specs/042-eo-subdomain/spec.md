@@ -1,6 +1,6 @@
 # spec 042 — 케어로그 주소를 EO 하위 도메인으로 (carelog.eo.ai.kr) + EO 연동 방향
 
-- 상태: 1단계 코드 준비 완료(2026-11-27) · 도메인 연결은 대표 작업 대기
+- 상태: **1단계 연결 완료(2026-11-27)** — carelog.eo.ai.kr 열림 · 2단계(옛 주소 넘기기) 대표 결정 대기
 - 요청(2026-11-23 대표): "carelog 주소가 vercel 주소 형식인데 eo.ai.kr 하위 주소로 — eo.ai.kr/carelog 또는 carelog.eo.ai.kr"
   → 추가(대표): "EO와 다른 레포지만 엮고 싶다 — EO 개발이 케어로그에 영향 주도록" → "응 진행하자"
 
@@ -35,6 +35,12 @@
 ### 주의
 - **옛 주소(carelog-tau.vercel.app)는 끄지 않는다.** 이미 보낸 환자 문자 링크, 홈 화면에 설치한 앱, 푸시 구독이 그 주소(origin)에 묶여 있음.
 - 로그인 상태·설치 앱·알림 허용은 주소별 → 새 주소에서 한 번씩 다시(직원 안내 필요).
+
+### 1단계 확인 기록(2026-11-27, 다온 — 바깥에서 볼 수 있는 것)
+- 가비아 CNAME `carelog → 37674f9127109d3f.vercel-dns-017.com.` · Vercel Valid Configuration · 인증서 `*.eo.ai.kr`.
+- 새 주소 `/`→/about, `/login`, `/p/…`(환자 링크), `manifest`, `sw.js` 정상. 배포된 빌드에 `NEXT_PUBLIC_SITE_URL=https://carelog.eo.ai.kr` 들어감(번들 확인).
+- 옛 주소는 그대로 열림(넘기기 꺼짐).
+- 바깥에서 확인 불가 → 대표 실사용 확인: 새 주소 구글 로그인(Supabase Redirect URLs) · EO→케어로그 이동 주소(EO CARELOG_APP_URL) · 옛 주소 로그인 상태에서 안내 띠.
 
 ## 3. 2단계 — 옛 주소 넘기기 (대표 결정 후)
 - 예미안치과 직원 기기를 새 주소로 옮긴 뒤(로그인·앱 설치·알림 허용) Vercel 환경변수 `CARELOG_REDIRECT_OLD_HOST=1` → 옛 주소 화면 요청을 새 주소로 308.

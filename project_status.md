@@ -14,6 +14,7 @@
   옛 주소 안내 띠(새 주소 설정 후에만) · 옛 주소 308 넘기기(`CARELOG_REDIRECT_OLD_HOST=1`, 기본 꺼짐). 직원 초대 메일 주소가 비면 상대 주소가 되던 것 수정.
 - 대기(대표): Vercel 도메인 추가 · 가비아 CNAME(carelog) · `NEXT_PUBLIC_SITE_URL` · Supabase URL 설정 · EO `CARELOG_APP_URL`. EO 카드(suwant 링크) 채번 요청.
 - 확인됨: eo.ai.kr DNS = 가비아, EO는 이미 eo.ai.kr.
+- **연결 완료**: 대표가 Vercel 도메인·가비아 CNAME·환경변수·Supabase·EO CARELOG_APP_URL 반영 → carelog.eo.ai.kr 정상(https·로그인 화면·환자 링크·빌드 값 확인). 로그인·EO 이동·안내 띠는 대표 실사용 확인 대기. 2단계(옛 주소 넘기기)는 직원 기기 이전 후.
 
 ## 2026-11-21 세션 68k (fix) — 헤더 "소리 켜기" 버튼 정리
 
