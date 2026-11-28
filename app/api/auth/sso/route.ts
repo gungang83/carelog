@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createAdminSupabaseClient } from "@/lib/supabase/admin";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { EO_APP_URL } from "@/lib/eo/app-url";
+import { NO_AUTO_COOKIE, safeNextPath, SSO_NEXT_COOKIE } from "@/lib/eo/session-relay";
 
 /**
  * EO eo_role → Carelog institution_members.role 매핑.
@@ -210,8 +211,13 @@ export async function GET(req: NextRequest) {
       console.error("[SSO] verifyOtp error:", otpError.message);
       return NextResponse.redirect(`${EO_APP_URL}?sso_error=verify`);
     }
-    console.log("[SSO] session set, redirecting to /");
-    return NextResponse.redirect(`${req.nextUrl.origin}/`);
+    // spec 043 — "EO로 로그인"으로 왔으면 원래 보려던 화면으로. 로그아웃 후 자동 막기 표시는 지운다.
+    const next = safeNextPath(req.cookies.get(SSO_NEXT_COOKIE)?.value);
+    console.log("[SSO] session set, redirecting to", next);
+    const done = NextResponse.redirect(`${req.nextUrl.origin}${next}`);
+    done.cookies.delete(SSO_NEXT_COOKIE);
+    done.cookies.delete(NO_AUTO_COOKIE);
+    return done;
   } catch (e) {
     console.error("[SSO] unhandled error:", e);
     return NextResponse.redirect(`${EO_APP_URL}?sso_error=unexpected`);

@@ -58,4 +58,4 @@
 - 다음에 정할 것(대표): 무엇을 함께 쓸지 — 로그인 통합(eo.ai.kr 쿠키) · 알림 한곳 · 디자인 통일 · 환자·병원 정보 공유.
 
 ## 5. EO 핸드오프
-- `specs/000-backlog/card-eo-carelog-subdomain.md` — EO 소개 페이지(suwant) 케어로그 링크 하드코딩 교체 요청 + `CARELOG_APP_URL` 안내.
+- 카드 **3109** ✅(2026-11-28 테오 회신 · EO main@d412e679) — suwant 링크 새 주소, EO 레포 옛 주소 잔존 0. `specs/000-backlog/card-3109-eo-carelog-subdomain.md`.

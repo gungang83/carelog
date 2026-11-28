@@ -449,7 +449,18 @@ export const UPDATE_FEED: UpdateFeedEntry[] = [
       "새 주소에서 한 번 다시 로그인해 주세요. 휴대폰·태블릿 홈 화면에 케어로그를 설치해 두셨다면 새 주소에서 다시 설치하고, 알림도 다시 허용해 주세요.",
       "옛 주소로 들어가면 새 주소로 자동으로 넘어갑니다. 환자분께 이미 보낸 상담 기록 링크는 그대로 열립니다.",
     ],
-    internal: "spec 042 · NEXT_PUBLIC_SITE_URL · lib/site-url.ts · 옛 주소 넘기기 CARELOG_REDIRECT_OLD_HOST(꺼짐)",
+    internal: "spec 042 · NEXT_PUBLIC_SITE_URL · lib/site-url.ts · 옛 주소 넘기기 CARELOG_REDIRECT_OLD_HOST(기본 켜짐)",
+  },
+  {
+    id: "2026-11-28-eo-login",
+    date: "2026-11-28",
+    emoji: "🔑",
+    title: "EO 계정으로 케어로그 로그인",
+    items: [
+      "EO에 로그인돼 있으면 케어로그를 열 때 따로 로그인하지 않아도 바로 들어갑니다.",
+      "로그인 화면 맨 위의 [EO 계정으로 로그인]으로도 들어올 수 있습니다. 기존 이메일·구글 로그인도 그대로 쓸 수 있습니다.",
+    ],
+    internal: "spec 043 · /api/auth/eo-login · lib/eo/session-relay.ts · EO 코드 변경 없음(.eo.ai.kr 쿠키 + sso-token 창구)",
   },
 ];
 
