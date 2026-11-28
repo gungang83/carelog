@@ -21,6 +21,8 @@ import { LiveAlertsProvider } from "@/components/notifications/live-alerts-provi
 import { RouteTracker } from "@/components/usage/route-tracker";
 import type { Participant } from "@/lib/types/database";
 import { OldHostBanner } from "@/components/layout/old-host-banner";
+import { cookies } from "next/headers";
+import { VIA_EO_COOKIE } from "@/lib/eo/session-relay";
 
 export default async function DashboardLayout({
   children,
@@ -95,9 +97,10 @@ export default async function DashboardLayout({
         institutions={institutions}
         activeInstitutionId={activeInstitutionId ?? ""}
         userEmail={userEmail}
-        userName={userName}
+        userName={meName || userName}
         userAvatarUrl={userAvatarUrl}
         isSuperAdmin={superAdmin}
+        viaEo={(await cookies()).get(VIA_EO_COOKIE)?.value === user.id}
       />
       <OldHostBanner />
       <RouteTracker />

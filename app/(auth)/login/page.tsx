@@ -10,6 +10,7 @@ const EO_MESSAGE: Record<string, string> = {
   not_linked: "이 EO 워크스페이스는 아직 케어로그와 연결돼 있지 않아요. EO 관리자에게 케어로그 연결을 요청해 주세요.",
   no_workspace: "EO에서 소속 워크스페이스를 찾지 못했어요. EO에서 워크스페이스를 고른 뒤 다시 시도해 주세요.",
   fail: "EO와 연결하지 못했어요. 잠시 뒤 다시 시도하거나 아래 방법으로 로그인해 주세요.",
+  logged_out: "EO에서 로그아웃해서 케어로그 개인 로그인도 함께 끝냈어요. 공용 계정이나 EO 계정으로 다시 로그인해 주세요.",
 };
 
 export default async function LoginPage({

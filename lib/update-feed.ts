@@ -459,6 +459,7 @@ export const UPDATE_FEED: UpdateFeedEntry[] = [
     items: [
       "EO에 로그인돼 있으면 케어로그를 열 때 따로 로그인하지 않아도 바로 들어갑니다.",
       "로그인 화면 맨 위의 [EO 계정으로 로그인]으로도 들어올 수 있습니다. 기존 이메일·구글 로그인도 그대로 쓸 수 있습니다.",
+      "화면 오른쪽 위에 지금 누구로 로그인돼 있는지 이름이 보입니다. EO 계정으로 들어온 경우 EO에서 로그아웃하면 케어로그도 함께 로그아웃됩니다(병원 공용 계정은 그대로 유지).",
     ],
     internal: "spec 043 · /api/auth/eo-login · lib/eo/session-relay.ts · EO 코드 변경 없음(.eo.ai.kr 쿠키 + sso-token 창구)",
   },

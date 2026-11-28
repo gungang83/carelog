@@ -14,6 +14,7 @@ interface HeaderProps {
   userName?: string;
   userAvatarUrl?: string;
   isSuperAdmin?: boolean;
+  viaEo?: boolean;
 }
 
 export function Header({
@@ -23,6 +24,7 @@ export function Header({
   userName,
   userAvatarUrl,
   isSuperAdmin = false,
+  viaEo = false,
 }: HeaderProps) {
   const activeInst = institutions.find(
     (i) => i.institution.id === activeInstitutionId,
@@ -74,6 +76,7 @@ export function Header({
             userName={userName}
             userAvatarUrl={userAvatarUrl}
             isSuperAdmin={isSuperAdmin}
+            viaEo={viaEo}
           />
         </div>
       </div>

@@ -496,6 +496,7 @@ handleSave()  — "상담 종료"(전사만) 후 수동 저장
 > 새 주소에서 직원이 알림을 허용하면 `subscribePush`가 옛 주소 시절 구독(`SITE_MOVED_AT` 이전)을 지워 알림 중복을 막는다. 안내 띠(`old-host-banner`)는 넘기기를 끌 때의 대비.
 > **EO 계정으로 로그인(spec 043)**: EO 로그인 쿠키(.eo.ai.kr)가 케어로그에도 온다 → `/api/auth/eo-login`이 EO 세션 쿠키만 골라 EO `POST /api/carelog/sso-token`에 서버-서버로 건네 증명서를 받고 기존 `/api/auth/sso`로 로그인.
 > 미들웨어가 로그인 안 된 직원 + EO 쿠키면 자동으로(로그아웃 직후 `carelog_no_eo_auto` 제외, `/login`·환자 화면 제외). `lib/eo/session-relay.ts`.
+> EO로 들어온 개인 로그인(`carelog_via_eo`=user id)은 EO 쿠키가 사라진 뒤 화면을 새로 열 때(document GET) 이 브라우저만 로그아웃. 공용 계정(이메일·구글)·녹음/저장(POST)·화면 안 이동엔 영향 없음.
 
 > 원칙: **EO = 직원·클리닉 마스터의 SSOT.** Carelog는 받아 캐시(읽기 사본). 강결합 금지(HTTP만).
 > **의료데이터(상담)는 게이트웨이로 절대 나가지 않는다** — 상담 EO API는 만들지 않음(계약 §4).

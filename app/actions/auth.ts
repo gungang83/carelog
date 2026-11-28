@@ -5,7 +5,7 @@ import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { createAdminSupabaseClient } from "@/lib/supabase/admin";
 import { siteUrl } from "@/lib/site-url";
 import { cookies } from "next/headers";
-import { NO_AUTO_COOKIE } from "@/lib/eo/session-relay";
+import { NO_AUTO_COOKIE, VIA_EO_COOKIE } from "@/lib/eo/session-relay";
 
 export async function signUp(formData: FormData): Promise<
   | { ok: true; needsConfirmation: boolean }
@@ -109,6 +109,7 @@ export async function signOut(_formData?: FormData): Promise<void> {
   await supabase.auth.signOut();
   // spec 043 — 로그아웃했는데 EO 로그인 때문에 곧바로 다시 들어가지지 않게(브라우저를 닫거나 다시 로그인하면 풀림)
   (await cookies()).set(NO_AUTO_COOKIE, "1", { path: "/", httpOnly: true, sameSite: "lax", secure: process.env.NODE_ENV === "production" });
+  (await cookies()).delete(VIA_EO_COOKIE);
   redirect("/login");
 }
 

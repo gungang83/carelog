@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createAdminSupabaseClient } from "@/lib/supabase/admin";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { EO_APP_URL } from "@/lib/eo/app-url";
-import { NO_AUTO_COOKIE, safeNextPath, SSO_NEXT_COOKIE } from "@/lib/eo/session-relay";
+import { NO_AUTO_COOKIE, safeNextPath, SSO_NEXT_COOKIE, VIA_EO_COOKIE } from "@/lib/eo/session-relay";
 
 /**
  * EO eo_role → Carelog institution_members.role 매핑.
@@ -217,6 +217,8 @@ export async function GET(req: NextRequest) {
     const done = NextResponse.redirect(`${req.nextUrl.origin}${next}`);
     done.cookies.delete(SSO_NEXT_COOKIE);
     done.cookies.delete(NO_AUTO_COOKIE);
+    // spec 043 §7 — EO로 들어온 개인 로그인 표시(EO에서 로그아웃하면 이 로그인도 끝낸다). 공용 계정(이메일·구글 로그인)엔 안 붙음.
+    done.cookies.set(VIA_EO_COOKIE, userId, { path: "/", httpOnly: true, sameSite: "lax", secure: req.nextUrl.protocol === "https:", maxAge: 60 * 60 * 24 * 60 });
     return done;
   } catch (e) {
     console.error("[SSO] unhandled error:", e);

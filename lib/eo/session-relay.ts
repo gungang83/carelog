@@ -9,6 +9,8 @@ const EO_SESSION_COOKIE = /^(__Secure-)?(authjs|next-auth)\.session-token(\.\d+)
 
 /** 로그아웃 직후 자동 로그인 막기(브라우저 닫으면 사라짐) */
 export const NO_AUTO_COOKIE = "carelog_no_eo_auto";
+/** 이 케어로그 로그인이 'EO로 들어온 개인 로그인'인가 — 값 = 케어로그 user id(다른 계정으로 바꿔 로그인하면 자동 무효) */
+export const VIA_EO_COOKIE = "carelog_via_eo";
 /** EO로 로그인 후 돌아갈 화면(5분) */
 export const SSO_NEXT_COOKIE = "carelog_sso_next";
 

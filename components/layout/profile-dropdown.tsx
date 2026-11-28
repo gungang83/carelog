@@ -10,6 +10,8 @@ interface ProfileDropdownProps {
   userName?: string;
   userAvatarUrl?: string;
   isSuperAdmin?: boolean;
+  /** spec 043 §7 — EO 계정으로 들어온 개인 로그인(EO에서 로그아웃하면 함께 끝남) */
+  viaEo?: boolean;
 }
 
 export function ProfileDropdown({
@@ -17,6 +19,7 @@ export function ProfileDropdown({
   userName,
   userAvatarUrl,
   isSuperAdmin = false,
+  viaEo = false,
 }: ProfileDropdownProps) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -68,6 +71,15 @@ export function ProfileDropdown({
             </span>
           )}
         </span>
+        {/* 지금 누구로 로그인돼 있는지 — 같이 쓰는 PC에서 한눈에(넓은 화면) */}
+        <span className="hidden max-w-[8rem] items-center gap-1 sm:flex">
+          <span className="truncate text-sm font-semibold text-slate-700">{displayName}</span>
+          {viaEo && (
+            <span className="shrink-0 rounded bg-indigo-100 px-1 text-[10px] font-bold text-indigo-700" title="EO 계정으로 로그인 — EO에서 로그아웃하면 함께 로그아웃돼요">
+              EO
+            </span>
+          )}
+        </span>
         {/* 드롭다운 화살표 */}
         <svg
           className={`size-3.5 shrink-0 text-slate-400 transition-transform ${open ? "rotate-180" : ""}`}
@@ -92,6 +104,9 @@ export function ProfileDropdown({
               {displayName}
             </p>
             <p className="truncate text-xs text-slate-500">{userEmail}</p>
+            <p className={`mt-1 text-[11px] font-medium ${viaEo ? "text-indigo-600" : "text-slate-400"}`}>
+              {viaEo ? "EO 계정으로 로그인 · EO 로그아웃 시 함께 로그아웃" : "케어로그 계정으로 로그인"}
+            </p>
           </div>
 
           {/* 슈퍼어드민 — 서비스 전체 총괄(최고 관리자만 노출) */}
